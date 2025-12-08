@@ -1436,9 +1436,11 @@ const App = () => {
     const initApp = async () => {
       // Load user from storage
       const savedUser = localStorage.getItem(STORAGE_KEY_USER);
+      let parsedUser: User | null = null;
       if (savedUser) {
         try {
-          setUser(JSON.parse(savedUser));
+          parsedUser = JSON.parse(savedUser);
+          setUser(parsedUser);
         } catch (e) {
           localStorage.removeItem(STORAGE_KEY_USER);
         }
@@ -1497,9 +1499,9 @@ const App = () => {
       
       setLoading(false);
 
-      // Sync with backend
+      // Sync with backend - pass userId directly since state may not be updated yet
       if (navigator.onLine) {
-        syncData();
+        syncData(true, parsedUser?.idNumber);
       }
     };
 
@@ -1560,7 +1562,7 @@ const App = () => {
   }, []);
 
   // --- Cache Management - Notify on new version ---
-  const APP_VERSION = '1.3.2'; // Increment this to trigger update notification
+  const APP_VERSION = '1.3.3'; // Increment this to trigger update notification
   
   useEffect(() => {
     const storedVersion = localStorage.getItem('flashmaster_version');
@@ -1712,7 +1714,7 @@ const App = () => {
     }
   };
 
-  const syncData = async (showToast = true) => {
+  const syncData = async (showToast = true, userIdOverride?: string) => {
     let toastId: number | null = null;
     
     if (showToast) {
@@ -1723,7 +1725,9 @@ const App = () => {
       if (toastId) updateToast(toastId, 'Connecting to server...', 'loading', 20);
       
       // Include userId to check server-side announcement dismissals
-      const userIdParam = user?.idNumber ? `&userId=${encodeURIComponent(user.idNumber)}` : '';
+      // Use override if provided (for initial load when state isn't set yet)
+      const userId = userIdOverride || user?.idNumber;
+      const userIdParam = userId ? `&userId=${encodeURIComponent(userId)}` : '';
       const response = await fetch(`${GAS_URL}?action=getAll${userIdParam}`, {
         redirect: 'follow'
       });
