@@ -80,6 +80,16 @@ type Exam = {
   status: 'upcoming' | 'ongoing' | 'done';
 };
 
+type Announcement = {
+  id: string;
+  type: 'custom' | 'congratulations' | 'post-final' | 'exam-ongoing';
+  title: string;
+  message: string;
+  emoji?: string;
+  exam?: Exam;
+  dismissedAt?: number;
+};
+
 type SubjectInfo = {
   code: string;
   name: string;
@@ -681,6 +691,172 @@ const ConfirmModal = ({
   );
 };
 
+// Exam Detail Modal Component
+const ExamDetailModal = ({
+  exam,
+  onClose,
+  onEdit,
+  user,
+  getExamStatus,
+  getTimeUntilExam,
+  formatCountdown,
+  formatExamDate,
+  formatExamTime
+}: {
+  exam: Exam | null;
+  onClose: () => void;
+  onEdit: (exam: Exam) => void;
+  user: User | null;
+  getExamStatus: (exam: Exam) => 'upcoming' | 'ongoing' | 'completed';
+  getTimeUntilExam: (exam: Exam) => { days: number; hours: number; minutes: number; seconds: number } | null;
+  formatCountdown: (exam: Exam) => string;
+  formatExamDate: (dateStr: string) => string;
+  formatExamTime: (timeStr: string) => string;
+}) => {
+  if (!exam) return null;
+
+  const status = getExamStatus(exam);
+  const timeUntil = getTimeUntilExam(exam);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
+        {/* Header with status color */}
+        <div className={`p-6 ${
+          status === 'ongoing' ? 'bg-green-500' :
+          status === 'upcoming' ? 'bg-amber-500' : 'bg-stone-500'
+        } text-white rounded-t-2xl`}>
+          <div className="flex items-start justify-between">
+            <div>
+              <span className="px-2 py-1 bg-white/20 text-xs rounded-full font-medium">
+                {exam.examType}
+              </span>
+              <h2 className="text-2xl font-bold mt-2">{exam.courseCode}</h2>
+              {exam.courseName && <p className="text-white/80">{exam.courseName}</p>}
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition-colors">
+              <Icon name="close" />
+            </button>
+          </div>
+          <div className="mt-4 flex items-center gap-4 text-sm flex-wrap">
+            <span className="px-3 py-1 bg-white/20 rounded-full font-medium capitalize">
+              {status === 'ongoing' ? '🟢 In Progress' :
+               status === 'upcoming' ? '🟡 Upcoming' : '✓ Completed'}
+            </span>
+            {status === 'upcoming' && timeUntil && (
+              <span className="px-3 py-1 bg-white/30 rounded-full font-medium">⏱️ {formatCountdown(exam)}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Countdown Banner for upcoming exams */}
+        {status === 'upcoming' && timeUntil && (
+          <div className="bg-amber-50 border-b border-amber-200 px-6 py-3">
+            <div className="flex items-center justify-center gap-4">
+              <div className="text-center">
+                <span className="text-2xl font-bold text-amber-700">{timeUntil.days}</span>
+                <p className="text-xs text-amber-600">days</p>
+              </div>
+              <span className="text-amber-400">:</span>
+              <div className="text-center">
+                <span className="text-2xl font-bold text-amber-700">{timeUntil.hours.toString().padStart(2, '0')}</span>
+                <p className="text-xs text-amber-600">hours</p>
+              </div>
+              <span className="text-amber-400">:</span>
+              <div className="text-center">
+                <span className="text-2xl font-bold text-amber-700">{timeUntil.minutes.toString().padStart(2, '0')}</span>
+                <p className="text-xs text-amber-600">mins</p>
+              </div>
+              <span className="text-amber-400">:</span>
+              <div className="text-center">
+                <span className="text-2xl font-bold text-amber-700">{timeUntil.seconds.toString().padStart(2, '0')}</span>
+                <p className="text-xs text-amber-600">secs</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Details */}
+        <div className="p-6 space-y-4">
+          {/* Date & Time */}
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+              <Icon name="event" />
+            </div>
+            <div>
+              <p className="text-sm text-stone-500">Date & Time</p>
+              <p className="font-semibold text-stone-800">{formatExamDate(exam.date)}</p>
+              <p className="text-stone-600">{formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)}</p>
+            </div>
+          </div>
+
+          {/* Room */}
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+              <Icon name="meeting_room" />
+            </div>
+            <div>
+              <p className="text-sm text-stone-500">Room</p>
+              <p className="font-semibold text-stone-800">{exam.room}</p>
+            </div>
+          </div>
+
+          {/* Proctor */}
+          {exam.proctor && (
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                <Icon name="person" />
+              </div>
+              <div>
+                <p className="text-sm text-stone-500">Proctor</p>
+                <p className="font-semibold text-stone-800">{exam.proctor}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Notes - with preserved line breaks */}
+          {exam.notes && (
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                <Icon name="notes" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm text-stone-500">Notes</p>
+                <p className="text-stone-700 whitespace-pre-wrap bg-amber-50 p-3 rounded-xl mt-1 text-sm">{exam.notes}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Added by */}
+          {exam.createdByName && (
+            <div className="pt-4 border-t border-stone-200">
+              <p className="text-xs text-stone-400">Added by {exam.createdByName}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="p-4 border-t border-stone-200 flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 py-3 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200 transition-colors"
+          >
+            Close
+          </button>
+          {user && user.idNumber === exam.createdBy && status !== 'completed' && (
+            <button
+              onClick={() => { onEdit(exam); onClose(); }}
+              className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors flex items-center justify-center gap-2"
+            >
+              <Icon name="edit" /> Edit
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Add Exam Modal Component
 const AddExamModal = ({ 
   isOpen, 
@@ -1178,6 +1354,20 @@ const App = () => {
   const [examToEdit, setExamToEdit] = useState<Exam | null>(null); // For editing exam
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null); // For exam detail view
   
+  // Admin Announcement State
+  const [showAnnouncementPanel, setShowAnnouncementPanel] = useState(false);
+  const [activeAnnouncement, setActiveAnnouncement] = useState<Announcement | null>(null);
+  const [customAnnouncementTitle, setCustomAnnouncementTitle] = useState('');
+  const [customAnnouncementMessage, setCustomAnnouncementMessage] = useState('');
+  const [customAnnouncementEmoji, setCustomAnnouncementEmoji] = useState('🎉');
+  
+  // Ongoing Exam Alert State
+  const [ongoingExamAlert, setOngoingExamAlert] = useState<Exam | null>(null);
+  const [previousExamStatuses, setPreviousExamStatuses] = useState<Record<string, string>>({});
+  
+  // Post-Exam Celebration State
+  const [completedExamAlert, setCompletedExamAlert] = useState<Exam | null>(null);
+  
   // Generic Modal States
   const [alertModal, setAlertModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'info' | 'warning' | 'error' | 'success' }>({ isOpen: false, title: '', message: '', type: 'info' });
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; confirmText: string; confirmColor: 'red' | 'green' | 'stone'; onConfirm: () => void }>({ isOpen: false, title: '', message: '', confirmText: 'Confirm', confirmColor: 'red', onConfirm: () => {} });
@@ -1213,11 +1403,11 @@ const App = () => {
     localStorage.setItem('flashmaster_lastTab', activeTab);
   }, [activeTab]);
 
-  // Real-time exam status updates - refresh every 30 seconds
+  // Real-time exam countdown - refresh every second
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(new Date());
-    }, 30000); // Update every 30 seconds
+    }, 1000); // Update every second for countdown
     return () => clearInterval(interval);
   }, []);
 
@@ -1370,7 +1560,7 @@ const App = () => {
   }, []);
 
   // --- Cache Management - Notify on new version ---
-  const APP_VERSION = '1.2.1'; // Increment this to trigger update notification
+  const APP_VERSION = '1.3.1'; // Increment this to trigger update notification
   
   useEffect(() => {
     const storedVersion = localStorage.getItem('flashmaster_version');
@@ -1618,6 +1808,23 @@ const App = () => {
         localStorage.setItem('flashmaster_exams', JSON.stringify(data.exams));
       }
 
+      // Process active announcement from backend
+      if (data.activeAnnouncement) {
+        const dismissedKey = `announcement_dismissed_${data.activeAnnouncement.id}`;
+        const dismissedAt = localStorage.getItem(dismissedKey);
+        
+        // Only show if user hasn't dismissed this announcement
+        if (!dismissedAt) {
+          setActiveAnnouncement({
+            id: data.activeAnnouncement.id,
+            type: data.activeAnnouncement.type,
+            title: data.activeAnnouncement.title,
+            message: data.activeAnnouncement.message,
+            emoji: data.activeAnnouncement.emoji
+          });
+        }
+      }
+
       if (toastId) updateToast(toastId, 'Finalizing...', 'loading', 95);
       
       if (toastId) {
@@ -1727,6 +1934,127 @@ const App = () => {
       updateToast(toastId, `Failed: ${error.message}`, 'error');
       setTimeout(() => removeToast(toastId), 4000);
     }
+  };
+
+  // Admin Announcement Functions
+  const showPresetAnnouncement = async (type: 'congratulations' | 'post-final') => {
+    const presets: Record<string, { title: string; message: string; emoji: string }> = {
+      'congratulations': {
+        title: 'Congratulations! 🎉',
+        message: 'You did great! Keep up the excellent work and continue striving for success!',
+        emoji: '🎉'
+      },
+      'post-final': {
+        title: 'Post-Final Congratulations! 🎓',
+        message: 'You made it through finals! Take a well-deserved break and celebrate your hard work. You\'ve earned it!',
+        emoji: '🎓'
+      }
+    };
+    
+    const preset = presets[type];
+    const toastId = addToast('Publishing announcement...', 'loading');
+    
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'createAnnouncement',
+          userId: user?.idNumber,
+          userName: user?.name,
+          type,
+          title: preset.title,
+          message: preset.message,
+          emoji: preset.emoji
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.error) {
+        updateToast(toastId, `Error: ${result.error}`, 'error');
+        setTimeout(() => removeToast(toastId), 4000);
+        return;
+      }
+      
+      // Show locally
+      setActiveAnnouncement({
+        id: result.announcement?.id || `preset-${type}-${Date.now()}`,
+        type,
+        title: preset.title,
+        message: preset.message,
+        emoji: preset.emoji
+      });
+      
+      updateToast(toastId, '✓ Announcement published to all users!', 'success');
+      setTimeout(() => removeToast(toastId), 3000);
+    } catch (error: any) {
+      updateToast(toastId, `Failed: ${error.message}`, 'error');
+      setTimeout(() => removeToast(toastId), 4000);
+    }
+    
+    setShowAnnouncementPanel(false);
+  };
+
+  const showCustomAnnouncement = async () => {
+    if (!customAnnouncementTitle.trim() || !customAnnouncementMessage.trim()) {
+      addToast('Please fill in title and message', 'error');
+      return;
+    }
+    
+    const toastId = addToast('Publishing announcement...', 'loading');
+    
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'createAnnouncement',
+          userId: user?.idNumber,
+          userName: user?.name,
+          type: 'custom',
+          title: customAnnouncementTitle,
+          message: customAnnouncementMessage,
+          emoji: customAnnouncementEmoji
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.error) {
+        updateToast(toastId, `Error: ${result.error}`, 'error');
+        setTimeout(() => removeToast(toastId), 4000);
+        return;
+      }
+      
+      // Show locally
+      setActiveAnnouncement({
+        id: result.announcement?.id || `custom-${Date.now()}`,
+        type: 'custom',
+        title: customAnnouncementTitle,
+        message: customAnnouncementMessage,
+        emoji: customAnnouncementEmoji
+      });
+      
+      updateToast(toastId, '✓ Announcement published to all users!', 'success');
+      setTimeout(() => removeToast(toastId), 3000);
+      
+      // Clear form
+      setCustomAnnouncementTitle('');
+      setCustomAnnouncementMessage('');
+      setCustomAnnouncementEmoji('🎉');
+    } catch (error: any) {
+      updateToast(toastId, `Failed: ${error.message}`, 'error');
+      setTimeout(() => removeToast(toastId), 4000);
+    }
+    
+    setShowAnnouncementPanel(false);
+  };
+
+  const dismissOngoingExamAlert = () => {
+    if (ongoingExamAlert) {
+      // Store dismissal time
+      localStorage.setItem(`exam_alert_dismissed_${ongoingExamAlert.examId}`, String(Date.now()));
+    }
+    setOngoingExamAlert(null);
   };
 
   const openSubject = (subject: string) => {
@@ -1937,6 +2265,101 @@ const App = () => {
     if (now < startDateTime) return 'upcoming';
     if (now >= startDateTime && now <= endDateTime) return 'ongoing';
     return 'completed';
+  };
+
+  // Calculate time remaining until exam starts
+  const getTimeUntilExam = (exam: Exam): { days: number; hours: number; minutes: number; seconds: number; total: number } | null => {
+    const now = currentTime;
+    
+    // Parse date
+    const dateStr = String(exam.date);
+    let examDate: Date;
+    if (dateStr.includes('-')) {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      examDate = new Date(year, month - 1, day);
+    } else {
+      examDate = new Date(dateStr);
+    }
+    
+    const { hour: startHour, min: startMin } = parseTimeString(exam.startTime);
+    const startDateTime = new Date(examDate);
+    startDateTime.setHours(startHour, startMin, 0, 0);
+    
+    const diff = startDateTime.getTime() - now.getTime();
+    if (diff <= 0) return null;
+    
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    
+    return { days, hours, minutes, seconds, total: diff };
+  };
+
+  // Format countdown display
+  const formatCountdown = (exam: Exam): string => {
+    const time = getTimeUntilExam(exam);
+    if (!time) return '';
+    
+    if (time.days > 0) {
+      return `${time.days}d ${time.hours}h left`;
+    } else if (time.hours > 0) {
+      return `${time.hours}h ${time.minutes}m left`;
+    } else if (time.minutes > 0) {
+      return `${time.minutes}m ${time.seconds}s left`;
+    } else {
+      return `${time.seconds}s left`;
+    }
+  };
+
+  // Detect when exams transition to ongoing or completed status
+  useEffect(() => {
+    if (exams.length === 0) return;
+    
+    const currentStatuses: Record<string, string> = {};
+    exams.forEach(exam => {
+      currentStatuses[exam.examId] = getExamStatus(exam);
+    });
+    
+    // Check for any exam that just became ongoing or completed
+    exams.forEach(exam => {
+      const prevStatus = previousExamStatuses[exam.examId];
+      const currentStatus = currentStatuses[exam.examId];
+      
+      // If status changed from upcoming to ongoing, show alert
+      if (prevStatus === 'upcoming' && currentStatus === 'ongoing') {
+        // Check if this alert was already dismissed recently (within 1 hour)
+        const dismissKey = `exam_alert_dismissed_${exam.examId}`;
+        const dismissedAt = localStorage.getItem(dismissKey);
+        const oneHourAgo = Date.now() - (60 * 60 * 1000);
+        
+        if (!dismissedAt || parseInt(dismissedAt) < oneHourAgo) {
+          setOngoingExamAlert(exam);
+        }
+      }
+      
+      // If status changed from ongoing to completed, show celebration
+      if (prevStatus === 'ongoing' && currentStatus === 'completed') {
+        // Check if this celebration was already shown recently (within 1 hour)
+        const celebrationKey = `exam_celebration_shown_${exam.examId}`;
+        const shownAt = localStorage.getItem(celebrationKey);
+        const oneHourAgo = Date.now() - (60 * 60 * 1000);
+        
+        if (!shownAt || parseInt(shownAt) < oneHourAgo) {
+          setCompletedExamAlert(exam);
+        }
+      }
+    });
+    
+    setPreviousExamStatuses(currentStatuses);
+  }, [currentTime, exams]);
+  
+  // Dismiss completed exam celebration
+  const dismissCompletedExamAlert = () => {
+    if (completedExamAlert) {
+      localStorage.setItem(`exam_celebration_shown_${completedExamAlert.examId}`, String(Date.now()));
+    }
+    setCompletedExamAlert(null);
   };
   
   const getSubjectExams = (subjectCode: string): Exam[] => {
@@ -2301,6 +2724,241 @@ const App = () => {
           updateToast={updateToast}
           removeToast={removeToast}
         />
+
+        {/* Admin Announcement Panel */}
+        {showAnnouncementPanel && user?.idNumber === ADMIN_USER_ID && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
+              <div className="bg-gradient-to-r from-amber-500 to-amber-400 p-4 text-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Icon name="campaign" className="text-2xl" />
+                    <h2 className="text-lg font-bold">Admin Announcements</h2>
+                  </div>
+                  <button onClick={() => setShowAnnouncementPanel(false)} className="p-1 hover:bg-white/20 rounded-lg">
+                    <Icon name="close" />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-4 space-y-4">
+                {/* Preset Announcements */}
+                <div>
+                  <h3 className="text-sm font-semibold text-stone-600 mb-2">Quick Presets</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => showPresetAnnouncement('congratulations')}
+                      className="p-3 bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl text-left hover:shadow-md transition-all"
+                    >
+                      <span className="text-2xl">🎉</span>
+                      <p className="font-semibold text-emerald-800 text-sm mt-1">Congratulations!</p>
+                      <p className="text-xs text-emerald-600">General celebration</p>
+                    </button>
+                    <button
+                      onClick={() => showPresetAnnouncement('post-final')}
+                      className="p-3 bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-xl text-left hover:shadow-md transition-all"
+                    >
+                      <span className="text-2xl">🎓</span>
+                      <p className="font-semibold text-purple-800 text-sm mt-1">Post-Final!</p>
+                      <p className="text-xs text-purple-600">End of finals celebration</p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Custom Announcement */}
+                <div>
+                  <h3 className="text-sm font-semibold text-stone-600 mb-2">Custom Announcement</h3>
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <select
+                        value={customAnnouncementEmoji}
+                        onChange={(e) => setCustomAnnouncementEmoji(e.target.value)}
+                        className="w-16 p-2 border border-stone-200 rounded-lg text-xl"
+                      >
+                        <option value="🎉">🎉</option>
+                        <option value="🎓">🎓</option>
+                        <option value="📢">📢</option>
+                        <option value="⚠️">⚠️</option>
+                        <option value="💪">💪</option>
+                        <option value="🌟">🌟</option>
+                        <option value="📚">📚</option>
+                        <option value="🔔">🔔</option>
+                      </select>
+                      <input
+                        type="text"
+                        placeholder="Title"
+                        value={customAnnouncementTitle}
+                        onChange={(e) => setCustomAnnouncementTitle(e.target.value)}
+                        className="flex-1 p-2 border border-stone-200 rounded-lg text-sm"
+                      />
+                    </div>
+                    <textarea
+                      placeholder="Your announcement message..."
+                      value={customAnnouncementMessage}
+                      onChange={(e) => setCustomAnnouncementMessage(e.target.value)}
+                      className="w-full p-3 border border-stone-200 rounded-lg text-sm h-24 resize-none"
+                    />
+                    <button
+                      onClick={showCustomAnnouncement}
+                      className="w-full py-2 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-colors"
+                    >
+                      Show Announcement
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active Announcement Modal */}
+        {activeAnnouncement && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+            <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden animate-slide-up">
+              {/* Header */}
+              <div className={`relative p-8 text-center overflow-hidden ${
+                activeAnnouncement.type === 'congratulations' ? 'bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600' :
+                activeAnnouncement.type === 'post-final' ? 'bg-gradient-to-br from-violet-400 via-purple-500 to-indigo-600' :
+                'bg-gradient-to-br from-amber-400 via-orange-500 to-red-500'
+              } text-white`}>
+                {/* Floating particles */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                  <div className="absolute top-4 left-6 w-2 h-2 bg-white/40 rounded-full animate-ping" style={{ animationDuration: '2s' }} />
+                  <div className="absolute top-8 right-8 w-3 h-3 bg-white/30 rounded-full animate-ping" style={{ animationDuration: '2.5s', animationDelay: '0.5s' }} />
+                  <div className="absolute bottom-6 left-10 w-2 h-2 bg-white/35 rounded-full animate-ping" style={{ animationDuration: '3s', animationDelay: '1s' }} />
+                  <div className="absolute bottom-10 right-12 w-2 h-2 bg-white/40 rounded-full animate-ping" style={{ animationDuration: '2.2s', animationDelay: '0.3s' }} />
+                </div>
+                
+                {/* Glow effect */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-white/20 rounded-full blur-2xl" />
+                
+                {/* Main emoji with bounce */}
+                <div className="relative">
+                  <span className="text-6xl block mb-3 drop-shadow-lg animate-bounce" style={{ animationDuration: '2s' }}>
+                    {activeAnnouncement.emoji}
+                  </span>
+                  <h2 className="text-xl font-bold drop-shadow">
+                    {activeAnnouncement.title}
+                  </h2>
+                </div>
+              </div>
+              
+              {/* Content */}
+              <div className="p-6 text-center">
+                <p className="text-stone-600 leading-relaxed whitespace-pre-line">
+                  {activeAnnouncement.message}
+                </p>
+                
+                {/* Action button */}
+                <button
+                  onClick={() => {
+                    if (activeAnnouncement.id) {
+                      localStorage.setItem(`announcement_dismissed_${activeAnnouncement.id}`, String(Date.now()));
+                    }
+                    setActiveAnnouncement(null);
+                  }}
+                  className={`mt-6 w-full py-3.5 rounded-2xl font-semibold transition-all duration-200 active:scale-95 hover:shadow-lg ${
+                    activeAnnouncement.type === 'congratulations' 
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white' 
+                      : activeAnnouncement.type === 'post-final'
+                      ? 'bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 text-white'
+                      : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white'
+                  }`}
+                >
+                  Got it! 👍
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Ongoing Exam Alert Modal */}
+        {ongoingExamAlert && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-slide-up">
+              <div className="bg-gradient-to-r from-green-500 to-emerald-500 p-4 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center animate-pulse">
+                    <Icon name="notifications_active" className="text-2xl" />
+                  </div>
+                  <div>
+                    <p className="text-sm opacity-80">Exam Starting Now!</p>
+                    <h2 className="text-xl font-bold">{ongoingExamAlert.courseCode}</h2>
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="bg-stone-50 rounded-xl p-3">
+                  <p className="font-semibold text-stone-800">{ongoingExamAlert.courseName}</p>
+                  <p className="text-sm text-stone-500">{ongoingExamAlert.examType}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="bg-stone-50 rounded-lg p-2">
+                    <p className="text-stone-400 text-xs">Time</p>
+                    <p className="font-semibold text-stone-800">{ongoingExamAlert.startTime} - {ongoingExamAlert.endTime}</p>
+                  </div>
+                  <div className="bg-stone-50 rounded-lg p-2">
+                    <p className="text-stone-400 text-xs">Room</p>
+                    <p className="font-semibold text-stone-800">{ongoingExamAlert.room}</p>
+                  </div>
+                </div>
+                {ongoingExamAlert.proctor && (
+                  <div className="bg-stone-50 rounded-lg p-2 text-sm">
+                    <p className="text-stone-400 text-xs">Proctor</p>
+                    <p className="font-semibold text-stone-800">{ongoingExamAlert.proctor}</p>
+                  </div>
+                )}
+                {ongoingExamAlert.notes && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-sm">
+                    <p className="text-amber-600 italic">"{ongoingExamAlert.notes}"</p>
+                  </div>
+                )}
+                <button
+                  onClick={dismissOngoingExamAlert}
+                  className="w-full py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Icon name="check" /> Got it, good luck!
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Completed Exam Celebration Modal */}
+        {completedExamAlert && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
+            <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden animate-slide-up">
+              <div className="bg-gradient-to-br from-purple-500 via-pink-500 to-amber-500 p-8 text-white text-center relative overflow-hidden">
+                {/* Confetti effect */}
+                <div className="absolute inset-0 opacity-20">
+                  <div className="absolute top-4 left-8 text-4xl animate-bounce" style={{ animationDelay: '0s' }}>🎊</div>
+                  <div className="absolute top-8 right-12 text-3xl animate-bounce" style={{ animationDelay: '0.2s' }}>✨</div>
+                  <div className="absolute bottom-12 left-12 text-3xl animate-bounce" style={{ animationDelay: '0.4s' }}>🌟</div>
+                  <div className="absolute bottom-8 right-8 text-4xl animate-bounce" style={{ animationDelay: '0.6s' }}>🎉</div>
+                </div>
+                <span className="text-6xl block mb-4 animate-bounce">🎉</span>
+                <h2 className="text-2xl font-bold mb-2">Exam Complete!</h2>
+                <p className="text-white/80">You finished your exam!</p>
+              </div>
+              <div className="p-6 text-center space-y-4">
+                <div className="bg-purple-50 rounded-xl p-4">
+                  <p className="font-bold text-purple-800 text-lg">{completedExamAlert.courseCode}</p>
+                  <p className="text-purple-600 text-sm">{completedExamAlert.courseName}</p>
+                  <p className="text-purple-500 text-xs mt-1">{completedExamAlert.examType}</p>
+                </div>
+                <p className="text-stone-600 text-sm">
+                  Great job getting through it! Take a moment to relax and celebrate. 💪
+                </p>
+                <button
+                  onClick={dismissCompletedExamAlert}
+                  className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 transition-all"
+                >
+                  Thanks! 🙌
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* Header */}
         <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
@@ -2359,14 +3017,24 @@ const App = () => {
                   <p className="text-xs opacity-60 mt-1">ID: {user.idNumber}</p>
                 </div>
                 {user.idNumber === ADMIN_USER_ID && (
-                  <button
-                    onClick={() => setShowAdminCacheConfirm(true)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-200 text-xs rounded-lg transition-colors"
-                    title="Admin: Clear all users cache"
-                  >
-                    <Icon name="delete_sweep" className="text-sm" />
-                    <span>Clear All Cache</span>
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => setShowAnnouncementPanel(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-amber-500/30 hover:bg-amber-500/50 text-amber-200 text-xs rounded-lg transition-colors"
+                      title="Admin: Make Announcement"
+                    >
+                      <Icon name="campaign" className="text-sm" />
+                      <span>Announce</span>
+                    </button>
+                    <button
+                      onClick={() => setShowAdminCacheConfirm(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-200 text-xs rounded-lg transition-colors"
+                      title="Admin: Clear all users cache"
+                    >
+                      <Icon name="delete_sweep" className="text-sm" />
+                      <span>Clear Cache</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -2525,8 +3193,12 @@ const App = () => {
                           {isOngoing ? `Now until ${formatExamTime(exam.endTime)}` : `${formatExamDate(exam.date)} • ${formatExamTime(exam.startTime)}`} • Room: {exam.room}
                         </p>
                       </div>
-                      {isOngoing && (
+                      {isOngoing ? (
                         <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-medium animate-pulse">NOW</span>
+                      ) : (
+                        <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full font-medium whitespace-nowrap">
+                          {formatCountdown(exam)}
+                        </span>
                       )}
                     </div>
                   );
@@ -2560,113 +3232,17 @@ const App = () => {
         />
 
         {/* Exam Detail Modal */}
-        {selectedExam && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedExam(null)}>
-            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
-              {/* Header with status color */}
-              <div className={`p-6 ${
-                getExamStatus(selectedExam) === 'ongoing' ? 'bg-green-500' :
-                getExamStatus(selectedExam) === 'upcoming' ? 'bg-amber-500' : 'bg-stone-500'
-              } text-white rounded-t-2xl`}>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="px-2 py-1 bg-white/20 text-xs rounded-full font-medium">
-                      {selectedExam.examType}
-                    </span>
-                    <h2 className="text-2xl font-bold mt-2">{selectedExam.courseCode}</h2>
-                    {selectedExam.courseName && <p className="text-white/80">{selectedExam.courseName}</p>}
-                  </div>
-                  <button onClick={() => setSelectedExam(null)} className="p-2 hover:bg-white/20 rounded-full transition-colors">
-                    <Icon name="close" />
-                  </button>
-                </div>
-                <div className="mt-4 flex items-center gap-4 text-sm">
-                  <span className="px-3 py-1 bg-white/20 rounded-full font-medium capitalize">
-                    {getExamStatus(selectedExam) === 'ongoing' ? '🟢 In Progress' :
-                     getExamStatus(selectedExam) === 'upcoming' ? '🟡 Upcoming' : '✓ Completed'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Details */}
-              <div className="p-6 space-y-4">
-                {/* Date & Time */}
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
-                    <Icon name="event" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-stone-500">Date & Time</p>
-                    <p className="font-semibold text-stone-800">{formatExamDate(selectedExam.date)}</p>
-                    <p className="text-stone-600">{formatExamTime(selectedExam.startTime)} - {formatExamTime(selectedExam.endTime)}</p>
-                  </div>
-                </div>
-
-                {/* Room */}
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
-                    <Icon name="meeting_room" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-stone-500">Room</p>
-                    <p className="font-semibold text-stone-800">{selectedExam.room}</p>
-                  </div>
-                </div>
-
-                {/* Proctor */}
-                {selectedExam.proctor && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
-                      <Icon name="person" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-stone-500">Proctor</p>
-                      <p className="font-semibold text-stone-800">{selectedExam.proctor}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Notes - with preserved line breaks */}
-                {selectedExam.notes && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
-                      <Icon name="notes" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-stone-500">Notes</p>
-                      <p className="text-stone-700 whitespace-pre-wrap bg-amber-50 p-3 rounded-xl mt-1 text-sm">{selectedExam.notes}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Added by */}
-                {selectedExam.createdByName && (
-                  <div className="pt-4 border-t border-stone-200">
-                    <p className="text-xs text-stone-400">Added by {selectedExam.createdByName}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="p-4 border-t border-stone-200 flex gap-2">
-                <button
-                  onClick={() => setSelectedExam(null)}
-                  className="flex-1 py-3 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200 transition-colors"
-                >
-                  Close
-                </button>
-                {user && user.idNumber === selectedExam.createdBy && getExamStatus(selectedExam) !== 'done' && (
-                  <button
-                    onClick={() => { setExamToEdit(selectedExam); setSelectedExam(null); }}
-                    className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Icon name="edit" /> Edit
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        <ExamDetailModal
+          exam={selectedExam}
+          onClose={() => setSelectedExam(null)}
+          onEdit={(exam) => setExamToEdit(exam)}
+          user={user}
+          getExamStatus={getExamStatus}
+          getTimeUntilExam={getTimeUntilExam}
+          formatCountdown={formatCountdown}
+          formatExamDate={formatExamDate}
+          formatExamTime={formatExamTime}
+        />
       </div>
     );
   }
@@ -3309,113 +3885,17 @@ const App = () => {
         />
 
         {/* Exam Detail Modal */}
-        {selectedExam && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedExam(null)}>
-            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
-              {/* Header with status color */}
-              <div className={`p-6 ${
-                getExamStatus(selectedExam) === 'ongoing' ? 'bg-green-500' :
-                getExamStatus(selectedExam) === 'upcoming' ? 'bg-amber-500' : 'bg-stone-500'
-              } text-white rounded-t-2xl`}>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="px-2 py-1 bg-white/20 text-xs rounded-full font-medium">
-                      {selectedExam.examType}
-                    </span>
-                    <h2 className="text-2xl font-bold mt-2">{selectedExam.courseCode}</h2>
-                    {selectedExam.courseName && <p className="text-white/80">{selectedExam.courseName}</p>}
-                  </div>
-                  <button onClick={() => setSelectedExam(null)} className="p-2 hover:bg-white/20 rounded-full transition-colors">
-                    <Icon name="close" />
-                  </button>
-                </div>
-                <div className="mt-4 flex items-center gap-4 text-sm">
-                  <span className="px-3 py-1 bg-white/20 rounded-full font-medium capitalize">
-                    {getExamStatus(selectedExam) === 'ongoing' ? '🟢 In Progress' :
-                     getExamStatus(selectedExam) === 'upcoming' ? '🟡 Upcoming' : '✓ Completed'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Details */}
-              <div className="p-6 space-y-4">
-                {/* Date & Time */}
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
-                    <Icon name="event" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-stone-500">Date & Time</p>
-                    <p className="font-semibold text-stone-800">{formatExamDate(selectedExam.date)}</p>
-                    <p className="text-stone-600">{formatExamTime(selectedExam.startTime)} - {formatExamTime(selectedExam.endTime)}</p>
-                  </div>
-                </div>
-
-                {/* Room */}
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
-                    <Icon name="meeting_room" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-stone-500">Room</p>
-                    <p className="font-semibold text-stone-800">{selectedExam.room}</p>
-                  </div>
-                </div>
-
-                {/* Proctor */}
-                {selectedExam.proctor && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
-                      <Icon name="person" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-stone-500">Proctor</p>
-                      <p className="font-semibold text-stone-800">{selectedExam.proctor}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Notes - with preserved line breaks */}
-                {selectedExam.notes && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
-                      <Icon name="notes" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-stone-500">Notes</p>
-                      <p className="text-stone-700 whitespace-pre-wrap bg-amber-50 p-3 rounded-xl mt-1 text-sm">{selectedExam.notes}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Added by */}
-                {selectedExam.createdByName && (
-                  <div className="pt-4 border-t border-stone-200">
-                    <p className="text-xs text-stone-400">Added by {selectedExam.createdByName}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="p-4 border-t border-stone-200 flex gap-2">
-                <button
-                  onClick={() => setSelectedExam(null)}
-                  className="flex-1 py-3 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200 transition-colors"
-                >
-                  Close
-                </button>
-                {user && user.idNumber === selectedExam.createdBy && getExamStatus(selectedExam) !== 'done' && (
-                  <button
-                    onClick={() => { setExamToEdit(selectedExam); setSelectedExam(null); }}
-                    className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Icon name="edit" /> Edit
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        <ExamDetailModal
+          exam={selectedExam}
+          onClose={() => setSelectedExam(null)}
+          onEdit={(exam) => setExamToEdit(exam)}
+          user={user}
+          getExamStatus={getExamStatus}
+          getTimeUntilExam={getTimeUntilExam}
+          formatCountdown={formatCountdown}
+          formatExamDate={formatExamDate}
+          formatExamTime={formatExamTime}
+        />
       </div>
     );
   }
@@ -4669,113 +5149,17 @@ const App = () => {
         )}
 
         {/* Exam Detail Modal */}
-        {selectedExam && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedExam(null)}>
-            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
-              {/* Header with status color */}
-              <div className={`p-6 ${
-                getExamStatus(selectedExam) === 'ongoing' ? 'bg-green-500' :
-                getExamStatus(selectedExam) === 'upcoming' ? 'bg-amber-500' : 'bg-stone-500'
-              } text-white rounded-t-2xl`}>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="px-2 py-1 bg-white/20 text-xs rounded-full font-medium">
-                      {selectedExam.examType}
-                    </span>
-                    <h2 className="text-2xl font-bold mt-2">{selectedExam.courseCode}</h2>
-                    {selectedExam.courseName && <p className="text-white/80">{selectedExam.courseName}</p>}
-                  </div>
-                  <button onClick={() => setSelectedExam(null)} className="p-2 hover:bg-white/20 rounded-full transition-colors">
-                    <Icon name="close" />
-                  </button>
-                </div>
-                <div className="mt-4 flex items-center gap-4 text-sm">
-                  <span className="px-3 py-1 bg-white/20 rounded-full font-medium capitalize">
-                    {getExamStatus(selectedExam) === 'ongoing' ? '🟢 In Progress' :
-                     getExamStatus(selectedExam) === 'upcoming' ? '🟡 Upcoming' : '✓ Completed'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Details */}
-              <div className="p-6 space-y-4">
-                {/* Date & Time */}
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
-                    <Icon name="event" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-stone-500">Date & Time</p>
-                    <p className="font-semibold text-stone-800">{formatExamDate(selectedExam.date)}</p>
-                    <p className="text-stone-600">{formatExamTime(selectedExam.startTime)} - {formatExamTime(selectedExam.endTime)}</p>
-                  </div>
-                </div>
-
-                {/* Room */}
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
-                    <Icon name="meeting_room" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-stone-500">Room</p>
-                    <p className="font-semibold text-stone-800">{selectedExam.room}</p>
-                  </div>
-                </div>
-
-                {/* Proctor */}
-                {selectedExam.proctor && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
-                      <Icon name="person" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-stone-500">Proctor</p>
-                      <p className="font-semibold text-stone-800">{selectedExam.proctor}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Notes - with preserved line breaks */}
-                {selectedExam.notes && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
-                      <Icon name="notes" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-stone-500">Notes</p>
-                      <p className="text-stone-700 whitespace-pre-wrap bg-amber-50 p-3 rounded-xl mt-1 text-sm">{selectedExam.notes}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Added by */}
-                {selectedExam.createdByName && (
-                  <div className="pt-4 border-t border-stone-200">
-                    <p className="text-xs text-stone-400">Added by {selectedExam.createdByName}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="p-4 border-t border-stone-200 flex gap-2">
-                <button
-                  onClick={() => setSelectedExam(null)}
-                  className="flex-1 py-3 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200 transition-colors"
-                >
-                  Close
-                </button>
-                {user && user.idNumber === selectedExam.createdBy && getExamStatus(selectedExam) !== 'done' && (
-                  <button
-                    onClick={() => { setExamToEdit(selectedExam); setSelectedExam(null); }}
-                    className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Icon name="edit" /> Edit
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        <ExamDetailModal
+          exam={selectedExam}
+          onClose={() => setSelectedExam(null)}
+          onEdit={(exam) => setExamToEdit(exam)}
+          user={user}
+          getExamStatus={getExamStatus}
+          getTimeUntilExam={getTimeUntilExam}
+          formatCountdown={formatCountdown}
+          formatExamDate={formatExamDate}
+          formatExamTime={formatExamTime}
+        />
       </div>
     );
   }
@@ -4785,3 +5169,5 @@ const App = () => {
 
 const root = createRoot(document.getElementById('root')!);
 root.render(<App />);
+
+

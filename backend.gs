@@ -108,6 +108,12 @@ function doPost(e) {
         return jsonResponse(getCacheVersion());
       case 'bumpCacheVersion':
         return jsonResponse(bumpCacheVersion(data.userId));
+      case 'createAnnouncement':
+        return jsonResponse(createAnnouncement(data));
+      case 'dismissAnnouncement':
+        return jsonResponse(dismissAnnouncement(data.announcementId, data.userId));
+      case 'deactivateAnnouncement':
+        return jsonResponse(deactivateAnnouncement(data.announcementId, data.userId));
       default:
         return jsonResponse({ error: 'Unknown action' });
     }
@@ -210,6 +216,17 @@ function setupSheets() {
     results.push('ExamSchedule sheet already exists');
   }
   
+  // 7. Setup Announcements sheet
+  let announcementSheet = ss.getSheetByName('Announcements');
+  if (!announcementSheet) {
+    announcementSheet = ss.insertSheet('Announcements');
+    announcementSheet.appendRow(['AnnouncementID', 'Type', 'Title', 'Message', 'Emoji', 'IsActive', 'CreatedBy', 'CreatedByName', 'CreatedAt', 'ExpiresAt']);
+    announcementSheet.setFrozenRows(1);
+    results.push('Created Announcements sheet');
+  } else {
+    results.push('Announcements sheet already exists');
+  }
+  
   return { 
     success: true, 
     message: 'Setup complete', 
@@ -224,6 +241,7 @@ function getAllData() {
   const examsResult = getExams();
   const subjects = getSubjects();
   const cacheVersionResult = getCacheVersion();
+  const announcementResult = getActiveAnnouncement();
   
   // Build subjectInfo map for quick lookup
   const subjectInfo = {};
@@ -238,7 +256,8 @@ function getAllData() {
     subjects: subjects, // Array of {code, name} objects
     subjectInfo: subjectInfo, // Map of code -> {code, name}
     exams: examsResult.success ? examsResult.exams : [],
-    cacheVersion: cacheVersionResult.version || 1
+    cacheVersion: cacheVersionResult.version || 1,
+    activeAnnouncement: announcementResult.success ? announcementResult.announcement : null
   };
 }
 
@@ -1666,4 +1685,163 @@ function bumpCacheVersion(userId) {
   } catch (error) {
     return { error: 'Failed to bump cache version: ' + error.message };
   }
+}
+
+// ==================== ANNOUNCEMENT FUNCTIONS ====================
+
+/**
+ * Create a new announcement (admin only)
+ * @param {object} data - Announcement data
+ */
+function createAnnouncement(data) {
+  try {
+    // Only allow admin user
+    if (String(data.userId) !== ADMIN_USER_ID) {
+      return { error: 'Unauthorized. Only admin can create announcements.' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('Announcements');
+    
+    if (!sheet) {
+      sheet = ss.insertSheet('Announcements');
+      sheet.appendRow(['AnnouncementID', 'Type', 'Title', 'Message', 'Emoji', 'IsActive', 'CreatedBy', 'CreatedByName', 'CreatedAt', 'ExpiresAt']);
+      sheet.setFrozenRows(1);
+    }
+    
+    const announcementId = 'ann_' + Date.now();
+    const now = new Date().toISOString();
+    
+    // Calculate expiry (default 24 hours from now, or custom)
+    let expiresAt = data.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    
+    // First, deactivate any existing active announcements
+    const existingData = sheet.getDataRange().getValues();
+    for (let i = 1; i < existingData.length; i++) {
+      if (existingData[i][5] === true || existingData[i][5] === 'TRUE') {
+        sheet.getRange(i + 1, 6).setValue(false);
+      }
+    }
+    
+    // Add new announcement
+    sheet.appendRow([
+      announcementId,
+      data.type || 'custom',
+      data.title,
+      data.message,
+      data.emoji || '🎉',
+      true, // IsActive
+      data.userId,
+      data.userName || 'Admin',
+      now,
+      expiresAt
+    ]);
+    
+    return { 
+      success: true, 
+      message: 'Announcement created',
+      announcement: {
+        id: announcementId,
+        type: data.type || 'custom',
+        title: data.title,
+        message: data.message,
+        emoji: data.emoji || '🎉',
+        isActive: true,
+        createdAt: now,
+        expiresAt: expiresAt
+      }
+    };
+  } catch (error) {
+    return { error: 'Failed to create announcement: ' + error.message };
+  }
+}
+
+/**
+ * Get the currently active announcement
+ */
+function getActiveAnnouncement() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Announcements');
+    
+    if (!sheet) {
+      return { success: true, announcement: null };
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    const now = new Date();
+    
+    // Find active announcement that hasn't expired
+    for (let i = 1; i < data.length; i++) {
+      const isActive = data[i][5] === true || data[i][5] === 'TRUE';
+      const expiresAt = data[i][9] ? new Date(data[i][9]) : null;
+      
+      if (isActive && (!expiresAt || expiresAt > now)) {
+        return {
+          success: true,
+          announcement: {
+            id: data[i][0],
+            type: data[i][1],
+            title: data[i][2],
+            message: data[i][3],
+            emoji: data[i][4],
+            isActive: true,
+            createdBy: data[i][6],
+            createdByName: data[i][7],
+            createdAt: data[i][8],
+            expiresAt: data[i][9]
+          }
+        };
+      }
+    }
+    
+    return { success: true, announcement: null };
+  } catch (error) {
+    return { success: false, announcement: null, error: error.message };
+  }
+}
+
+/**
+ * Deactivate an announcement (admin only)
+ * @param {string} announcementId - The announcement ID to deactivate
+ * @param {string} userId - User ID requesting the deactivation
+ */
+function deactivateAnnouncement(announcementId, userId) {
+  try {
+    // Only allow admin user
+    if (String(userId) !== ADMIN_USER_ID) {
+      return { error: 'Unauthorized. Only admin can deactivate announcements.' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Announcements');
+    
+    if (!sheet) {
+      return { error: 'Announcements sheet not found' };
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === announcementId) {
+        sheet.getRange(i + 1, 6).setValue(false); // Set IsActive to false
+        return { success: true, message: 'Announcement deactivated' };
+      }
+    }
+    
+    return { error: 'Announcement not found' };
+  } catch (error) {
+    return { error: 'Failed to deactivate announcement: ' + error.message };
+  }
+}
+
+/**
+ * Record that a user dismissed an announcement (for tracking, optional)
+ * @param {string} announcementId - The announcement ID
+ * @param {string} userId - User ID who dismissed
+ */
+function dismissAnnouncement(announcementId, userId) {
+  // This just returns success - dismissal is tracked client-side in localStorage
+  // Could be extended to track dismissals in a sheet if needed
+  return { success: true, message: 'Dismissal recorded' };
 }
