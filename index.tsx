@@ -1135,6 +1135,10 @@ const App = () => {
   const [showInstallToast, setShowInstallToast] = useState(false);
   const [isAppInstalled, setIsAppInstalled] = useState(false);
 
+  // Update Notification State
+  const [showUpdateToast, setShowUpdateToast] = useState(false);
+  const [newVersionAvailable, setNewVersionAvailable] = useState<string | null>(null);
+
   // Toast State
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastIdRef = useRef(0);
@@ -1365,44 +1369,53 @@ const App = () => {
     };
   }, []);
 
-  // --- Cache Management - Auto clear on new version ---
+  // --- Cache Management - Notify on new version ---
+  const APP_VERSION = '1.2.0'; // Increment this to trigger update notification
   
   useEffect(() => {
-    const APP_VERSION = '1.1.0'; // Increment this to trigger cache clear
     const storedVersion = localStorage.getItem('flashmaster_version');
     
-    if (storedVersion !== APP_VERSION) {
-      // New version detected - clear caches
-      const clearCaches = async () => {
-        try {
-          // Clear IndexedDB cache
-          await db.decks.clear();
-          await db.categories.clear();
-          await db.resources.clear();
-          
-          // Clear service worker caches if available
-          if ('caches' in window) {
-            const cacheNames = await caches.keys();
-            await Promise.all(cacheNames.map(name => caches.delete(name)));
-          }
-          
-          // Update stored version
-          localStorage.setItem('flashmaster_version', APP_VERSION);
-          
-          console.log('Cache cleared for new version:', APP_VERSION);
-          
-          // Reload data
-          if (navigator.onLine) {
-            syncData(true);
-          }
-        } catch (e) {
-          console.error('Error clearing cache:', e);
-        }
-      };
-      
-      clearCaches();
+    if (!storedVersion) {
+      // First time user - just set the version
+      localStorage.setItem('flashmaster_version', APP_VERSION);
+    } else if (storedVersion !== APP_VERSION) {
+      // New version detected - show update toast
+      setNewVersionAvailable(APP_VERSION);
+      setShowUpdateToast(true);
     }
   }, []);
+
+  const handleUpdateApp = async () => {
+    const loadingToast = addToast('Updating app...', 'loading');
+    
+    try {
+      // Clear IndexedDB cache
+      await db.decks.clear();
+      await db.categories.clear();
+      await db.resources.clear();
+      
+      // Clear service worker caches if available
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(name => caches.delete(name)));
+      }
+      
+      // Update stored version
+      localStorage.setItem('flashmaster_version', APP_VERSION);
+      
+      removeToast(loadingToast);
+      addToast('Update complete! Refreshing...', 'success');
+      
+      // Reload the page after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (e) {
+      console.error('Error updating app:', e);
+      removeToast(loadingToast);
+      addToast('Update failed. Please try again.', 'error');
+    }
+  };
 
   // --- Periodic Data Refresh (every hour) ---
   
@@ -1724,7 +1737,7 @@ const App = () => {
     
     setActiveDeck(deck);
     
-    // First check backend for progress if user is logged in
+    // Sync progress from backend if user is logged in
     if (user && navigator.onLine) {
       try {
         const response = await fetch(GAS_URL, {
@@ -1738,41 +1751,12 @@ const App = () => {
         const data = await response.json();
         
         if (data.success && data.progress) {
-          // Use backend progress
+          // Use backend progress - save to local storage
           const progress = data.progress as DeckProgress;
-          const hasProgress = Object.values(progress.cardStatuses).some(s => s !== 'unanswered');
-          if (hasProgress) {
-            // Save to local storage as well
-            saveDeckProgressLocal(deck.name, progress);
-            setSavedProgress(progress);
-            removeToast(loadingToast);
-            setDeckLoading(null);
-            setShowContinueModal(true);
-            return;
-          }
+          saveDeckProgressLocal(deck.name, progress);
         }
       } catch (e) {
         console.error('Failed to fetch progress from backend:', e);
-      }
-    }
-    
-    // Fall back to local storage
-    const progressKey = PROGRESS_KEY_PREFIX + deck.name;
-    const savedProgressStr = localStorage.getItem(progressKey);
-    if (savedProgressStr) {
-      try {
-        const progress: DeckProgress = JSON.parse(savedProgressStr);
-        // Check if progress has any answered cards
-        const hasProgress = Object.values(progress.cardStatuses).some(s => s !== 'unanswered');
-        if (hasProgress) {
-          setSavedProgress(progress);
-          removeToast(loadingToast);
-          setDeckLoading(null);
-          setShowContinueModal(true);
-          return;
-        }
-      } catch (e) {
-        // ignore parse error
       }
     }
     
@@ -2086,28 +2070,40 @@ const App = () => {
     let initialScores: Record<string, 'correct' | 'incorrect'> = {};
     const currentPlayMode = selectedPlayMode || playMode;
 
-    if (mode === 'continue' && savedProgress) {
-      // Continue from saved progress - get cards that haven't been answered
-      const unansweredIds = Object.entries(savedProgress.cardStatuses)
-        .filter(([_, status]) => status === 'unanswered')
-        .map(([id]) => id);
-      
-      if (savedProgress.shuffledOrder) {
-        // Keep the original shuffle order but filter to unanswered
-        newQueue = savedProgress.shuffledOrder
-          .filter(id => unansweredIds.includes(id))
-          .map(id => activeDeck.cards.find(c => c.id === id)!)
-          .filter(Boolean);
+    if (mode === 'continue') {
+      // Get progress from storage
+      const existingProgress = getDeckProgress(activeDeck.name);
+      if (!existingProgress) {
+        // No progress found, start fresh
+        if (currentPlayMode === 'shuffle') {
+          newQueue = [...activeDeck.cards].sort(() => Math.random() - 0.5);
+        } else {
+          newQueue = [...activeDeck.cards];
+        }
+        setPlayMode(currentPlayMode);
       } else {
-        newQueue = activeDeck.cards.filter(c => unansweredIds.includes(c.id));
+        // Continue from saved progress - get cards that haven't been answered
+        const unansweredIds = Object.entries(existingProgress.cardStatuses)
+          .filter(([_, status]) => status === 'unanswered')
+          .map(([id]) => id);
+        
+        if (existingProgress.shuffledOrder) {
+          // Keep the original shuffle order but filter to unanswered
+          newQueue = existingProgress.shuffledOrder
+            .filter(id => unansweredIds.includes(id))
+            .map(id => activeDeck.cards.find(c => c.id === id)!)
+            .filter(Boolean);
+        } else {
+          newQueue = activeDeck.cards.filter(c => unansweredIds.includes(c.id));
+        }
+        
+        // Convert card statuses to scores for already answered cards
+        Object.entries(existingProgress.cardStatuses).forEach(([id, status]) => {
+          if (status === 'correct') initialScores[id] = 'correct';
+          else if (status === 'incorrect') initialScores[id] = 'incorrect';
+        });
+        setPlayMode(existingProgress.mode);
       }
-      
-      // Convert card statuses to scores for already answered cards
-      Object.entries(savedProgress.cardStatuses).forEach(([id, status]) => {
-        if (status === 'correct') initialScores[id] = 'correct';
-        else if (status === 'incorrect') initialScores[id] = 'incorrect';
-      });
-      setPlayMode(savedProgress.mode);
     } else if (mode === 'new') {
       if (currentPlayMode === 'shuffle') {
         newQueue = [...activeDeck.cards].sort(() => Math.random() - 0.5);
@@ -2140,10 +2136,13 @@ const App = () => {
     }
 
     // For continue mode, preserve the existing progress, just update currentIndex
-    if (mode === 'continue' && savedProgress) {
-      // Keep existing progress, just mark we're continuing
-      const updatedProgress = { ...savedProgress, lastUpdated: Date.now() };
-      saveDeckProgress(activeDeck.name, updatedProgress);
+    if (mode === 'continue') {
+      const existingProgress = getDeckProgress(activeDeck.name);
+      if (existingProgress) {
+        // Keep existing progress, just mark we're continuing
+        const updatedProgress = { ...existingProgress, lastUpdated: Date.now() };
+        saveDeckProgress(activeDeck.name, updatedProgress);
+      }
     } else {
       // Initialize progress for this session (new, retry, smart modes)
       const newProgress: DeckProgress = {
@@ -2227,6 +2226,35 @@ const App = () => {
     return (
       <div className="min-h-screen bg-[#F5F5F4]">
         <ToastContainer toasts={toasts} removeToast={removeToast} />
+        
+        {/* Update Available Toast */}
+        {showUpdateToast && newVersionAvailable && (
+          <div className="fixed bottom-20 left-4 right-4 z-[95] animate-slide-up">
+            <div className="max-w-md mx-auto bg-gradient-to-r from-emerald-600 to-emerald-500 text-white p-4 rounded-2xl shadow-xl flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Icon name="system_update" className="text-2xl" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold">New Version Available!</p>
+                <p className="text-sm text-emerald-100">v{newVersionAvailable} • Tap update to get the latest features</p>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                <button 
+                  onClick={() => setShowUpdateToast(false)}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <Icon name="close" className="text-emerald-100" />
+                </button>
+                <button 
+                  onClick={handleUpdateApp}
+                  className="px-4 py-2 bg-white text-emerald-700 rounded-xl font-semibold hover:bg-emerald-50 transition-colors"
+                >
+                  Update
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* PWA Install Toast */}
         {showInstallToast && !isAppInstalled && (
@@ -3408,70 +3436,6 @@ const App = () => {
 
     return (
       <div className="min-h-screen bg-[#F5F5F4] flex flex-col">
-        {/* Continue Modal */}
-        {showContinueModal && savedProgress && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
-              <h2 className="text-xl font-bold text-stone-800 mb-2">Continue Progress?</h2>
-              <p className="text-stone-500 text-sm mb-4">
-                You have saved progress on this deck.
-              </p>
-              <div className="bg-stone-50 rounded-xl p-4 mb-4">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-stone-500">Progress</span>
-                  <span className="font-semibold text-stone-800">
-                    {Object.values(savedProgress.cardStatuses).filter(s => s !== 'unanswered').length} / {activeDeck.cards.length} cards
-                  </span>
-                </div>
-                <div className="h-2 bg-stone-200 rounded-full overflow-hidden mb-3">
-                  <div 
-                    className="h-full bg-stone-800 rounded-full transition-all"
-                    style={{ width: `${(Object.values(savedProgress.cardStatuses).filter(s => s !== 'unanswered').length / activeDeck.cards.length) * 100}%` }}
-                  />
-                </div>
-                <div className="flex gap-4 text-xs">
-                  <span className="text-emerald-600 flex items-center gap-1">
-                    <Icon name="check_circle" className="text-sm" />
-                    {Object.values(savedProgress.cardStatuses).filter(s => s === 'correct').length} correct
-                  </span>
-                  <span className="text-red-500 flex items-center gap-1">
-                    <Icon name="cancel" className="text-sm" />
-                    {Object.values(savedProgress.cardStatuses).filter(s => s === 'incorrect').length} missed
-                  </span>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <button
-                  onClick={() => startSession('continue')}
-                  className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold flex items-center justify-center gap-2"
-                >
-                  <Icon name="play_arrow" /> Continue
-                </button>
-                <button
-                  onClick={() => {
-                    clearDeckProgress(activeDeck.name);
-                    setSavedProgress(null);
-                    setShowContinueModal(false);
-                    setView('DECK_OVERVIEW');
-                  }}
-                  className="w-full py-3 bg-stone-100 text-stone-800 rounded-xl font-semibold"
-                >
-                  Start Fresh
-                </button>
-                <button
-                  onClick={() => {
-                    setShowContinueModal(false);
-                    setView('DECK_OVERVIEW');
-                  }}
-                  className="w-full py-2 text-stone-500 text-sm"
-                >
-                  View Deck
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         <header className="bg-white border-b border-stone-200 sticky top-0 z-10 px-4 py-3">
           <div className="max-w-5xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -3546,17 +3510,25 @@ const App = () => {
               </div>
               
               {/* Action Buttons */}
-              <div className="flex gap-2 flex-1">
+              <div className="flex gap-2 flex-1 flex-wrap">
+                {hasProgress && (activeDeck.cards.length - answeredCount) > 0 && (
+                  <button 
+                    onClick={() => startSession('continue')}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 min-w-[120px] order-1"
+                  >
+                    <Icon name="play_arrow" /> Continue ({activeDeck.cards.length - answeredCount} left)
+                  </button>
+                )}
                 <button 
                   onClick={() => startSession('new', playMode)}
-                  className="flex-1 bg-stone-800 text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+                  className={`${hasProgress && (activeDeck.cards.length - answeredCount) > 0 ? 'flex-1 min-w-[100px] order-2' : 'flex-1'} bg-stone-800 hover:bg-stone-900 text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2`}
                 >
-                  <Icon name="play_arrow" /> {hasProgress ? 'Start Over' : 'Start'}
+                  <Icon name={hasProgress ? 'restart_alt' : 'play_arrow'} /> {hasProgress ? 'Start Over' : 'Start'}
                 </button>
                 {hasProgress && incorrectCount > 0 && (
                   <button 
                     onClick={() => startSession('retry', playMode)}
-                    className="px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-semibold flex items-center gap-2"
+                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-sm font-semibold flex items-center gap-2 order-3"
                   >
                     <Icon name="refresh" /> Retry Missed ({incorrectCount})
                   </button>
