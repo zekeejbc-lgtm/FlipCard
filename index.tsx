@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
+import Dexie from 'dexie';
 
 // --- Types & Constants ---
 
@@ -12,11 +13,27 @@ type Card = {
 type Deck = {
   name: string;
   cards: Card[];
+  lastUpdated?: number;
 };
 
-type AppView = 'HOME' | 'PLAY' | 'SUMMARY' | 'SETTINGS';
+type AppView = 'HOME' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY' | 'SETTINGS';
 
 const STORAGE_KEY = 'flashcard_gas_url';
+
+// --- Database (Dexie) ---
+
+class FlashMasterDB extends Dexie {
+  decks!: Dexie.Table<Deck, string>; // name is primary key
+
+  constructor() {
+    super('FlashMasterDB');
+    this.version(1).stores({
+      decks: 'name'
+    });
+  }
+}
+
+const db = new FlashMasterDB();
 
 // --- Mock Data (Fallback) ---
 const DEMO_DECKS: Deck[] = [
@@ -25,14 +42,18 @@ const DEMO_DECKS: Deck[] = [
     cards: [
       { id: "h1", q: "Who was the first President of the USA?", a: "George Washington" },
       { id: "h2", q: "In which year did the Titanic sink?", a: "1912" },
-      { id: "h3", q: "Who painted the Mona Lisa?", a: "Leonardo da Vinci" }
+      { id: "h3", q: "Who painted the Mona Lisa?", a: "Leonardo da Vinci" },
+      { id: "h4", q: "What empire did Genghis Khan found?", a: "The Mongol Empire" },
+      { id: "h5", q: "When did the Berlin Wall fall?", a: "1989" }
     ]
   },
   {
     name: "Demo: Science",
     cards: [
       { id: "s1", q: "What is the chemical symbol for Gold?", a: "Au" },
-      { id: "s2", q: "What planet is known as the Red Planet?", a: "Mars" }
+      { id: "s2", q: "What planet is known as the Red Planet?", a: "Mars" },
+      { id: "s3", q: "What is the powerhouse of the cell?", a: "Mitochondria" },
+      { id: "s4", q: "What gas do plants absorb?", a: "Carbon Dioxide" }
     ]
   }
 ];
@@ -50,8 +71,10 @@ const Icon = ({ name, className = "" }: { name: string; className?: string }) =>
 const App = () => {
   const [view, setView] = useState<AppView>('HOME');
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [gasUrl, setGasUrl] = useState(localStorage.getItem(STORAGE_KEY) || '');
   const [decks, setDecks] = useState<Deck[]>([]);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   
   // Session State
   const [activeDeck, setActiveDeck] = useState<Deck | null>(null);
@@ -61,54 +84,84 @@ const App = () => {
   const [scores, setScores] = useState<Record<string, 'correct' | 'incorrect'>>({});
 
   useEffect(() => {
-    loadDecks();
-  }, [gasUrl]);
+    // Initial Load from DB
+    refreshDecksFromDB();
 
-  const loadDecks = async () => {
-    setLoading(true);
-    try {
-      if (!gasUrl) {
-        setDecks(DEMO_DECKS);
-      } else {
-        const response = await fetch(gasUrl);
-        const data = await response.json();
-        // Backend returns: { "Sheet1": [{q,a}, ...], "Sheet2": ... }
-        const parsedDecks: Deck[] = Object.keys(data).map(name => ({
-          name,
-          cards: data[name].map((c: any, idx: number) => ({
-            id: `${name}-${idx}`,
-            q: c.q || "Empty Question",
-            a: c.a || "Empty Answer"
-          }))
-        }));
-        setDecks(parsedDecks);
-      }
-    } catch (error) {
-      console.error(error);
-      // Quiet fail to demo for better UX if URL is bad
-      setDecks(DEMO_DECKS); 
-    } finally {
-      setLoading(false);
+    // Online Status Listeners
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Auto-sync if URL exists
+    if (gasUrl && navigator.onLine) {
+      syncDecks();
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const refreshDecksFromDB = async () => {
+    const localDecks = await db.decks.toArray();
+    if (localDecks.length > 0) {
+      setDecks(localDecks);
+    } else {
+      // First time load or empty DB
+      if (!gasUrl) setDecks(DEMO_DECKS);
     }
   };
 
-  const startSession = (deck: Deck, mode: 'new' | 'retry' | 'smart') => {
+  const syncDecks = async () => {
+    if (!gasUrl || !navigator.onLine) return;
+    setSyncing(true);
+    try {
+      const response = await fetch(gasUrl);
+      const data = await response.json();
+      
+      // Transform Data
+      const parsedDecks: Deck[] = Object.keys(data).map(name => ({
+        name,
+        cards: data[name].map((c: any, idx: number) => ({
+          id: `${name}-${idx}`,
+          q: c.q || "Empty Question",
+          a: c.a || "Empty Answer"
+        })),
+        lastUpdated: Date.now()
+      }));
+
+      // Update DB
+      await db.decks.bulkPut(parsedDecks);
+      
+      // Update State
+      setDecks(parsedDecks);
+    } catch (error) {
+      console.error("Sync failed:", error);
+      alert("Sync failed. Using local data.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const openDeck = (deck: Deck) => {
     setActiveDeck(deck);
+    setView('DECK_OVERVIEW');
+  };
+
+  const startSession = (mode: 'new' | 'retry' | 'smart') => {
+    if (!activeDeck) return;
     let newQueue: Card[] = [];
 
     if (mode === 'new') {
-      // Shuffle all
-      newQueue = [...deck.cards].sort(() => Math.random() - 0.5);
+      newQueue = [...activeDeck.cards].sort(() => Math.random() - 0.5);
       setScores({});
     } else if (mode === 'retry') {
-      // Only incorrect
-      newQueue = deck.cards.filter(c => scores[c.id] === 'incorrect');
-      // Keep existing scores for others, but reset for these so we can re-test
-      // Actually, standard spaced repetition: re-queue them.
+      newQueue = activeDeck.cards.filter(c => scores[c.id] === 'incorrect');
     } else if (mode === 'smart') {
-      // Incorrect first, then random others
-      const incorrect = deck.cards.filter(c => scores[c.id] === 'incorrect');
-      const correct = deck.cards.filter(c => scores[c.id] !== 'incorrect');
+      const incorrect = activeDeck.cards.filter(c => scores[c.id] === 'incorrect');
+      const correct = activeDeck.cards.filter(c => scores[c.id] !== 'incorrect');
       newQueue = [
         ...incorrect.sort(() => Math.random() - 0.5),
         ...correct.sort(() => Math.random() - 0.5)
@@ -129,9 +182,7 @@ const App = () => {
   const handleScore = (result: 'correct' | 'incorrect') => {
     const card = queue[currentIndex];
     setScores(prev => ({ ...prev, [card.id]: result }));
-    
     setIsFlipped(false);
-    // Short delay for better UX
     setTimeout(() => {
       if (currentIndex < queue.length - 1) {
         setCurrentIndex(prev => prev + 1);
@@ -145,15 +196,29 @@ const App = () => {
 
   if (view === 'HOME') {
     return (
-      <div className="min-h-screen p-6 max-w-md mx-auto flex flex-col">
+      <div className="min-h-screen p-6 max-w-5xl mx-auto flex flex-col">
         <header className="flex justify-between items-center mb-8 mt-2">
           <div>
             <h1 className="text-2xl font-bold text-stone-800">My Library</h1>
-            <p className="text-stone-500 text-sm">Select a deck to study</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-stone-400'}`}></span>
+              <p className="text-stone-500 text-sm">{isOnline ? 'Online' : 'Offline Mode'}</p>
+            </div>
           </div>
-          <button onClick={() => setView('SETTINGS')} className="p-2 bg-white rounded-full border border-stone-200 text-stone-600 shadow-sm hover:bg-stone-50 transition-colors">
-            <Icon name="settings" />
-          </button>
+          <div className="flex gap-2">
+            {gasUrl && (
+              <button 
+                onClick={syncDecks} 
+                disabled={syncing || !isOnline}
+                className={`p-2 bg-white rounded-full border border-stone-200 text-stone-600 shadow-sm transition-colors ${syncing ? 'animate-spin' : 'hover:bg-stone-50'}`}
+              >
+                <Icon name="sync" />
+              </button>
+            )}
+            <button onClick={() => setView('SETTINGS')} className="p-2 bg-white rounded-full border border-stone-200 text-stone-600 shadow-sm hover:bg-stone-50 transition-colors">
+              <Icon name="settings" />
+            </button>
+          </div>
         </header>
 
         {loading ? (
@@ -161,32 +226,76 @@ const App = () => {
             <span className="animate-pulse">Loading Decks...</span>
           </div>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {decks.length === 0 && (
-              <div className="text-center p-8 bg-white rounded-2xl border border-stone-200 text-stone-500">
+              <div className="col-span-full text-center p-8 bg-white rounded-2xl border border-stone-200 text-stone-500">
                 No decks found. Check settings.
               </div>
             )}
             {decks.map(deck => (
               <button 
                 key={deck.name}
-                onClick={() => startSession(deck, 'new')}
-                className="bg-white p-5 rounded-2xl border border-stone-200 shadow-sm flex items-center justify-between hover:border-stone-400 transition-all text-left group active:scale-[0.99]"
+                onClick={() => openDeck(deck)}
+                className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col items-start gap-4 hover:border-stone-400 transition-all text-left group active:scale-[0.99] h-full"
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600 group-hover:bg-stone-800 group-hover:text-white transition-colors">
-                    <Icon name="style" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-stone-800">{deck.name}</h3>
-                    <p className="text-xs text-stone-400 font-medium uppercase tracking-wider">{deck.cards.length} Cards</p>
-                  </div>
+                <div className="w-12 h-12 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600 group-hover:bg-stone-800 group-hover:text-white transition-colors">
+                  <Icon name="style" />
                 </div>
-                <Icon name="chevron_right" className="text-stone-300 group-hover:text-stone-600" />
+                <div>
+                  <h3 className="font-semibold text-lg text-stone-800">{deck.name}</h3>
+                  <p className="text-sm text-stone-400 font-medium">{deck.cards.length} Cards</p>
+                </div>
               </button>
             ))}
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (view === 'DECK_OVERVIEW') {
+    return (
+      <div className="min-h-screen bg-[#F5F5F4] flex flex-col">
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-20 bg-[#F5F5F4]/95 backdrop-blur-sm border-b border-stone-200 px-6 py-4">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setView('HOME')} className="p-2 -ml-2 text-stone-500 hover:text-stone-800 rounded-full transition-colors">
+                <Icon name="arrow_back" />
+              </button>
+              <div>
+                <h1 className="text-lg font-bold text-stone-800 leading-tight">{activeDeck?.name}</h1>
+                <p className="text-xs text-stone-500">{activeDeck?.cards.length} cards</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => startSession('new')}
+              className="bg-stone-800 text-white px-5 py-2 rounded-xl text-sm font-semibold shadow-md hover:bg-stone-900 transition-colors flex items-center gap-2"
+            >
+              <Icon name="play_arrow" className="text-lg" />
+              <span className="hidden sm:inline">Start Session</span>
+              <span className="sm:hidden">Start</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Card Grid - Responsive Layout */}
+        <div className="flex-1 p-6 overflow-y-auto">
+          <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {activeDeck?.cards.map((card, i) => (
+              <div key={i} className="bg-white rounded-xl p-5 border border-stone-200 shadow-sm flex flex-col gap-3 group hover:shadow-md transition-shadow">
+                <div className="flex justify-between items-start">
+                  <span className="text-xs font-bold text-stone-300 uppercase tracking-wider">Card {i + 1}</span>
+                </div>
+                <div className="flex-1">
+                  <p className="text-stone-800 font-medium mb-2">{card.q}</p>
+                  <div className="h-px bg-stone-100 my-2"></div>
+                  <p className="text-stone-500 text-sm">{card.a}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -199,7 +308,7 @@ const App = () => {
       <div className="min-h-screen bg-[#E7E5E4] flex flex-col relative overflow-hidden">
         {/* Top Bar */}
         <div className="px-6 py-4 flex justify-between items-center bg-[#F5F5F4] z-10 border-b border-stone-200/50">
-          <button onClick={() => setView('HOME')} className="text-stone-500 p-2 -ml-2 hover:text-stone-800">
+          <button onClick={() => setView('DECK_OVERVIEW')} className="text-stone-500 p-2 -ml-2 hover:text-stone-800">
             <Icon name="close" />
           </button>
           <div className="text-center">
@@ -315,23 +424,23 @@ const App = () => {
           <div className="space-y-3">
             {missed > 0 && (
               <button 
-                onClick={() => startSession(activeDeck!, 'retry')}
+                onClick={() => startSession('retry')}
                 className="w-full py-4 bg-stone-800 text-[#FDFBF7] rounded-2xl font-semibold shadow-md active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
               >
                 <Icon name="refresh" /> Review Missed ({missed})
               </button>
             )}
             <button 
-              onClick={() => startSession(activeDeck!, 'smart')}
+              onClick={() => startSession('smart')}
               className="w-full py-4 bg-[#F5F5F4] text-stone-800 border border-stone-200 rounded-2xl font-semibold hover:bg-stone-100 transition-colors flex items-center justify-center gap-2"
             >
               <Icon name="shuffle" /> Smart Shuffle
             </button>
             <button 
-              onClick={() => setView('HOME')}
+              onClick={() => setView('DECK_OVERVIEW')}
               className="w-full py-4 text-stone-500 font-medium hover:text-stone-800 transition-colors text-sm"
             >
-              Back to Library
+              Back to Deck
             </button>
           </div>
         </div>
@@ -368,21 +477,19 @@ const App = () => {
           <Icon name="code" className="text-stone-400" /> Backend Info
         </h3>
         <p className="text-sm text-stone-600 mb-4 leading-relaxed">
-           To connect your own data, deploy a Google Apps Script Web App that returns JSON.
+           Deploy the code from <code>backend.gs</code> as a Web App (Exec: Me, Access: Anyone).
         </p>
         <ul className="list-disc pl-4 space-y-2 text-sm text-stone-600 marker:text-stone-400">
           <li>Sheet Name = Deck Title</li>
           <li>Row 1 = Headers (Ignored)</li>
-          <li>Row 2+ = Cards</li>
-          <li>Col 1 = Question</li>
-          <li>Col 2 = Answer</li>
+          <li>Col 1 = Question, Col 2 = Answer</li>
         </ul>
       </div>
 
       <button 
         onClick={() => {
           localStorage.setItem(STORAGE_KEY, gasUrl);
-          loadDecks(); // reload logic
+          syncDecks();
           setView('HOME');
         }}
         className="w-full mt-6 py-4 bg-stone-800 text-[#FDFBF7] rounded-2xl font-bold shadow-lg active:scale-[0.98] transition-transform"
