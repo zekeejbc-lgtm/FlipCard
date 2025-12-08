@@ -1558,9 +1558,57 @@ const App = () => {
 
   // --- Actions ---
 
+  const ADMIN_USER_ID = '2025-00046';
+
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem(STORAGE_KEY_USER);
+  };
+
+  const handleAdminClearAllCache = () => {
+    if (!user || user.idNumber !== ADMIN_USER_ID) return;
+    
+    if (!confirm('Are you sure you want to clear ALL cache for ALL users? This will:\n\n• Clear all localStorage data\n• Clear all sessionStorage data\n• Unregister service workers\n• Clear browser cache\n\nUsers will need to login again.')) {
+      return;
+    }
+    
+    const toastId = addToast('Admin: Clearing all cache...', 'loading');
+    
+    try {
+      // Clear all localStorage
+      localStorage.clear();
+      
+      // Clear all sessionStorage
+      sessionStorage.clear();
+      
+      // Unregister all service workers
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          registrations.forEach(registration => {
+            registration.unregister();
+          });
+        });
+      }
+      
+      // Clear caches (Cache API)
+      if ('caches' in window) {
+        caches.keys().then(names => {
+          names.forEach(name => {
+            caches.delete(name);
+          });
+        });
+      }
+      
+      updateToast(toastId, 'Cache cleared! Reloading...', 'success');
+      
+      // Reload page after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (error) {
+      updateToast(toastId, 'Failed to clear cache', 'error');
+      setTimeout(() => removeToast(toastId), 3000);
+    }
   };
 
   const openSubject = (subject: string) => {
@@ -2171,9 +2219,23 @@ const App = () => {
         <main className="max-w-5xl mx-auto p-4">
           {user && (
             <div className="bg-gradient-to-r from-stone-800 to-stone-700 rounded-2xl p-4 mb-6 text-white">
-              <p className="text-sm opacity-80">Welcome back,</p>
-              <p className="text-xl font-bold">{user.name}</p>
-              <p className="text-xs opacity-60 mt-1">ID: {user.idNumber}</p>
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm opacity-80">Welcome back,</p>
+                  <p className="text-xl font-bold">{user.name}</p>
+                  <p className="text-xs opacity-60 mt-1">ID: {user.idNumber}</p>
+                </div>
+                {user.idNumber === ADMIN_USER_ID && (
+                  <button
+                    onClick={handleAdminClearAllCache}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-200 text-xs rounded-lg transition-colors"
+                    title="Admin: Clear all users cache"
+                  >
+                    <Icon name="delete_sweep" className="text-sm" />
+                    <span>Clear All Cache</span>
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
