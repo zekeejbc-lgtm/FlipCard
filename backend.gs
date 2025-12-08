@@ -76,10 +76,12 @@ function doPost(e) {
         return jsonResponse(loginOrCreateUser(data.idNumber, data.name));
       case 'updateRecord':
         return jsonResponse(updateUserRecord(data.idNumber, data.record));
-      case 'saveSessionResult':
-        return jsonResponse(saveSessionResult(data));
+      case 'saveAnalytics':
+        return jsonResponse(saveAnalytics(data));
       case 'getAnalytics':
-        return jsonResponse(getUserAnalytics(data.idNumber));
+        return jsonResponse(getAnalytics(data.idNumber));
+      case 'getUserAnalytics':
+        return jsonResponse(getUserAnalytics(data.idNumber, data.subject));
       case 'uploadResource':
         return jsonResponse(uploadResource(data));
       case 'deleteResource':
@@ -151,6 +153,17 @@ function setupSheets() {
     } else {
       results.push('Resources sheet already exists');
     }
+  }
+  
+  // 4. Setup Analytics sheet for tracking user progress
+  let analyticsSheet = ss.getSheetByName('Analytics');
+  if (!analyticsSheet) {
+    analyticsSheet = ss.insertSheet('Analytics');
+    analyticsSheet.appendRow(['UserID', 'Subject', 'Deck', 'TotalAttempts', 'CorrectAnswers', 'IncorrectAnswers', 'LastPlayed', 'BestScore', 'AverageScore', 'TimeSpent']);
+    analyticsSheet.setFrozenRows(1);
+    results.push('Created Analytics sheet');
+  } else {
+    results.push('Analytics sheet already exists');
   }
   
   return { 
@@ -785,7 +798,7 @@ function getAllDecks() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = ss.getSheets();
   const result = {};
-  const specialSheets = ['User', 'Category', 'Resources'];
+  const specialSheets = ['User', 'Category', 'Resources', 'Analytics'];
 
   for (let i = 0; i < sheets.length; i++) {
     const sheet = sheets[i];

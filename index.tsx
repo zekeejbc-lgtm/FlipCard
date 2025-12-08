@@ -722,7 +722,9 @@ const App = () => {
 
   const syncData = async () => {
     try {
-      const response = await fetch(`${GAS_URL}?action=getAll`);
+      const response = await fetch(`${GAS_URL}?action=getAll`, {
+        redirect: 'follow'
+      });
       const data = await response.json();
 
       if (data.error) {
