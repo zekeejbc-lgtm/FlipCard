@@ -2395,52 +2395,47 @@ const App = () => {
     const renderResourceCard = (r: Resource, i: number, icon: string, iconBg: string, iconColor: string, borderColor: string) => (
       <div
         key={i}
-        className={`bg-white p-4 rounded-xl border border-stone-200 hover:${borderColor} transition-all overflow-hidden`}
+        className={`bg-white p-4 rounded-xl border border-stone-200 hover:${borderColor} transition-all`}
       >
         <div className="flex items-start gap-3">
-          <button
-            onClick={() => openResource(r)}
-            className="flex-1 flex items-center gap-3 text-left min-w-0"
-          >
-            <div className={`w-10 h-10 flex-shrink-0 ${iconBg} rounded-lg flex items-center justify-center ${iconColor}`}>
-              <Icon name={icon} />
-            </div>
-            <div className="flex-1 min-w-0 overflow-hidden">
-              <p className="font-medium text-stone-700 truncate">{r.name || r.title}</p>
-              {r.description && <p className="text-xs text-stone-400 truncate">{r.description}</p>}
-              {r.submittedByName && (
-                <p className="text-xs text-stone-400 truncate">by {r.submittedByName}</p>
-              )}
-            </div>
-          </button>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              onClick={() => openResource(r)}
-              className="p-2 text-stone-400 hover:text-blue-500"
-              title="View in app"
-            >
-              <Icon name="visibility" className="text-sm" />
-            </button>
-            <a
-              href={r.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-2 text-stone-400 hover:text-green-500"
-              title="Open in Google Drive"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Icon name="open_in_new" className="text-sm" />
-            </a>
-            {user && r.submittedBy === user.idNumber && (
-              <button
-                onClick={() => handleDeleteResource(r)}
-                className="p-2 text-stone-400 hover:text-red-500"
-                title="Delete"
-              >
-                <Icon name="delete" className="text-sm" />
-              </button>
+          <div className={`w-10 h-10 flex-shrink-0 ${iconBg} rounded-lg flex items-center justify-center ${iconColor}`}>
+            <Icon name={icon} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-stone-700 break-words leading-tight">{r.name || r.title}</p>
+            {r.description && <p className="text-xs text-stone-400 break-words mt-1">{r.description}</p>}
+            {r.submittedByName && (
+              <p className="text-xs text-stone-400 mt-1">by {r.submittedByName}</p>
             )}
           </div>
+        </div>
+        <div className="flex items-center justify-end gap-1 mt-3 pt-3 border-t border-stone-100">
+          <button
+            onClick={() => openResource(r)}
+            className="p-2 text-stone-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+            title="View in app"
+          >
+            <Icon name="visibility" className="text-sm" />
+          </button>
+          <a
+            href={r.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 text-stone-400 hover:text-green-500 hover:bg-green-50 rounded-lg transition-colors"
+            title="Open in Google Drive"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Icon name="open_in_new" className="text-sm" />
+          </a>
+          {user && r.submittedBy === user.idNumber && (
+            <button
+              onClick={() => handleDeleteResource(r)}
+              className="p-2 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+              title="Delete"
+            >
+              <Icon name="delete" className="text-sm" />
+            </button>
+          )}
         </div>
       </div>
     );
