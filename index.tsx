@@ -1133,10 +1133,18 @@ const App = () => {
     return (
       <div className="min-h-screen bg-[#F5F5F4]">
         <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <LoginModal 
+          isOpen={showLogin} 
+          onClose={() => setShowLogin(false)} 
+          onLogin={setUser}
+          addToast={addToast}
+          updateToast={updateToast}
+          removeToast={removeToast}
+        />
         <UploadModal 
           isOpen={showUpload} 
           onClose={() => setShowUpload(false)} 
-          subject={activeSubject}
+          subject={activeSubject || ''}
           user={user}
           onUploadComplete={syncData}
           addToast={addToast}
