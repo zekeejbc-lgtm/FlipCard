@@ -13,7 +13,7 @@
  *    - Row 2+: Resource entries
  *    - Format: A=ResourceName, B=Category|URL
  * 
- * 3. Flashcard Sheets (sheets starting with "F-")
+ * 3. Flashcard Sheets (any sheet NOT named User, Category, or Resources)
  *    - Cell C1: Display name (shown in frontend)
  *    - Cell D1: Subject category (FL111, FL112, EDUC112, etc.)
  *    - Column A: Question
@@ -249,7 +249,8 @@ function getResources() {
 }
 
 /**
- * Get all decks from flashcard sheets (sheets starting with "F-")
+ * Get all decks from flashcard sheets
+ * Skips special sheets (User, Category, Resources)
  * Uses C1 as display name, D1 as subject category, A=Question, B=Answer
  */
 function getAllDecks() {
@@ -264,11 +265,6 @@ function getAllDecks() {
     
     // Skip special sheets
     if (specialSheets.includes(sheetName)) {
-      continue;
-    }
-    
-    // Only process sheets starting with "F-" (Flashcard sheets)
-    if (!sheetName.startsWith('F-')) {
       continue;
     }
     
