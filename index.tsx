@@ -188,7 +188,7 @@ const UploadModal = ({
     setUploading(true);
     setError('');
     
-    const toastId = addToast(`Uploading ${files.length} file(s)...`, 'loading', 0);
+    const toastId = addToast(`Preparing upload...`, 'loading', 0);
     
     try {
       let successCount = 0;
@@ -196,12 +196,20 @@ const UploadModal = ({
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const fileTitle = files.length > 1 ? `${title} (${i + 1})` : title;
+        const fileNum = files.length > 1 ? ` (${i + 1}/${files.length})` : '';
         
-        updateToast(toastId, `Uploading ${file.name}...`, 'loading', Math.round((i / files.length) * 100));
+        // Step 1: Reading file
+        updateToast(toastId, `Reading ${file.name}${fileNum}...`, 'loading', 10);
         
-        // Convert file to base64
+        // Convert file to base64 with progress
         const base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
+          reader.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const percent = Math.round((event.loaded / event.total) * 30) + 10;
+              updateToast(toastId, `Reading ${file.name}${fileNum} (${formatFileSize(event.loaded)}/${formatFileSize(event.total)})`, 'loading', percent);
+            }
+          };
           reader.onload = () => {
             const result = reader.result as string;
             const base64Data = result.split(',')[1];
@@ -210,6 +218,9 @@ const UploadModal = ({
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
+        
+        // Step 2: Uploading to server
+        updateToast(toastId, `Uploading ${file.name}${fileNum} to server...`, 'loading', 50);
         
         // Upload to GAS
         const response = await fetch(GAS_URL, {
@@ -228,17 +239,22 @@ const UploadModal = ({
           })
         });
         
+        // Step 3: Processing response
+        updateToast(toastId, `Saving ${file.name}${fileNum} to Drive...`, 'loading', 80);
+        
         const result = await response.json();
         
         if (result.success) {
           successCount++;
+          updateToast(toastId, `Uploaded ${file.name}${fileNum} ✓`, 'loading', 90);
         } else {
           console.error('Upload failed:', result.error);
+          updateToast(toastId, `Failed: ${result.error || 'Unknown error'}`, 'error', 0);
         }
       }
       
       if (successCount === files.length) {
-        updateToast(toastId, `Successfully uploaded ${successCount} file(s)!`, 'success');
+        updateToast(toastId, `Successfully uploaded ${successCount} file(s)!`, 'success', 100);
         setTimeout(() => removeToast(toastId), 3000);
         onUploadComplete();
         onClose();
@@ -251,7 +267,7 @@ const UploadModal = ({
       }
     } catch (err) {
       console.error('Upload error:', err);
-      updateToast(toastId, 'Upload failed. Please try again.', 'error');
+      updateToast(toastId, `Upload failed: ${err instanceof Error ? err.message : 'Network error'}`, 'error');
       setTimeout(() => removeToast(toastId), 5000);
     } finally {
       setUploading(false);
