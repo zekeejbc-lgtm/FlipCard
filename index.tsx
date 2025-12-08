@@ -1172,6 +1172,7 @@ const App = () => {
   const [currentTime, setCurrentTime] = useState(new Date()); // For real-time exam status
   const [examToDelete, setExamToDelete] = useState<string | null>(null); // For delete confirmation
   const [examToEdit, setExamToEdit] = useState<Exam | null>(null); // For editing exam
+  const [selectedExam, setSelectedExam] = useState<Exam | null>(null); // For exam detail view
   
   // Generic Modal States
   const [alertModal, setAlertModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'info' | 'warning' | 'error' | 'success' }>({ isOpen: false, title: '', message: '', type: 'info' });
@@ -2338,8 +2339,16 @@ const App = () => {
           <h2 className="text-lg font-bold text-stone-800 mb-4">Subjects</h2>
           
           {loading ? (
-            <div className="text-center py-12 text-stone-400">
-              <span className="animate-pulse">Loading...</span>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {/* Skeleton Loading Cards with Shimmer */}
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+                <div key={i} className="bg-white p-4 rounded-xl border border-stone-200">
+                  <div className="w-10 h-10 skeleton-shimmer rounded-lg mb-3"></div>
+                  <div className="h-5 skeleton-shimmer rounded w-16 mb-2"></div>
+                  <div className="h-3 skeleton-shimmer rounded w-full mb-2"></div>
+                  <div className="h-3 skeleton-shimmer rounded w-20"></div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -2465,7 +2474,8 @@ const App = () => {
                   return (
                     <div 
                       key={exam.examId} 
-                      className={`p-3 rounded-xl border ${isOngoing ? 'bg-green-50 border-green-200' : 'bg-white border-stone-200'} flex items-center gap-3`}
+                      className={`p-3 rounded-xl border ${isOngoing ? 'bg-green-50 border-green-200' : 'bg-white border-stone-200'} flex items-center gap-3 cursor-pointer hover:shadow-md transition-all`}
+                      onClick={() => setSelectedExam(exam)}
                     >
                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isOngoing ? 'bg-green-500 text-white' : 'bg-amber-100 text-amber-600'}`}>
                         <Icon name={isOngoing ? 'schedule' : 'event'} />
@@ -2489,6 +2499,138 @@ const App = () => {
             </>
           )}
         </main>
+
+        {/* Admin Cache Clear Confirmation Modal */}
+        <ConfirmModal
+          isOpen={showAdminCacheConfirm}
+          title="Clear All Users' Cache"
+          message={"Are you sure you want to clear ALL cache for ALL users?\n\nThis will force everyone to reload fresh data on their next visit."}
+          confirmText="Clear All Cache"
+          confirmColor="red"
+          onConfirm={async () => {
+            setShowAdminCacheConfirm(false);
+            await handleAdminClearAllCache();
+          }}
+          onClose={() => setShowAdminCacheConfirm(false)}
+        />
+
+        {/* Generic Alert Modal */}
+        <AlertModal
+          isOpen={alertModal.isOpen}
+          title={alertModal.title}
+          message={alertModal.message}
+          type={alertModal.type}
+          onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        />
+
+        {/* Exam Detail Modal */}
+        {selectedExam && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedExam(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
+              {/* Header with status color */}
+              <div className={`p-6 ${
+                getExamStatus(selectedExam) === 'ongoing' ? 'bg-green-500' :
+                getExamStatus(selectedExam) === 'upcoming' ? 'bg-amber-500' : 'bg-stone-500'
+              } text-white rounded-t-2xl`}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="px-2 py-1 bg-white/20 text-xs rounded-full font-medium">
+                      {selectedExam.examType}
+                    </span>
+                    <h2 className="text-2xl font-bold mt-2">{selectedExam.courseCode}</h2>
+                    {selectedExam.courseName && <p className="text-white/80">{selectedExam.courseName}</p>}
+                  </div>
+                  <button onClick={() => setSelectedExam(null)} className="p-2 hover:bg-white/20 rounded-full transition-colors">
+                    <Icon name="close" />
+                  </button>
+                </div>
+                <div className="mt-4 flex items-center gap-4 text-sm">
+                  <span className="px-3 py-1 bg-white/20 rounded-full font-medium capitalize">
+                    {getExamStatus(selectedExam) === 'ongoing' ? '🟢 In Progress' :
+                     getExamStatus(selectedExam) === 'upcoming' ? '🟡 Upcoming' : '✓ Completed'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Details */}
+              <div className="p-6 space-y-4">
+                {/* Date & Time */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                    <Icon name="event" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-stone-500">Date & Time</p>
+                    <p className="font-semibold text-stone-800">{formatExamDate(selectedExam.date)}</p>
+                    <p className="text-stone-600">{formatExamTime(selectedExam.startTime)} - {formatExamTime(selectedExam.endTime)}</p>
+                  </div>
+                </div>
+
+                {/* Room */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                    <Icon name="meeting_room" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-stone-500">Room</p>
+                    <p className="font-semibold text-stone-800">{selectedExam.room}</p>
+                  </div>
+                </div>
+
+                {/* Proctor */}
+                {selectedExam.proctor && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                      <Icon name="person" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-stone-500">Proctor</p>
+                      <p className="font-semibold text-stone-800">{selectedExam.proctor}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes - with preserved line breaks */}
+                {selectedExam.notes && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                      <Icon name="notes" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-stone-500">Notes</p>
+                      <p className="text-stone-700 whitespace-pre-wrap bg-amber-50 p-3 rounded-xl mt-1 text-sm">{selectedExam.notes}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Added by */}
+                {selectedExam.createdByName && (
+                  <div className="pt-4 border-t border-stone-200">
+                    <p className="text-xs text-stone-400">Added by {selectedExam.createdByName}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="p-4 border-t border-stone-200 flex gap-2">
+                <button
+                  onClick={() => setSelectedExam(null)}
+                  className="flex-1 py-3 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200 transition-colors"
+                >
+                  Close
+                </button>
+                {user && user.idNumber === selectedExam.createdBy && getExamStatus(selectedExam) !== 'done' && (
+                  <button
+                    onClick={() => { setExamToEdit(selectedExam); setSelectedExam(null); }}
+                    className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Icon name="edit" /> Edit
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -2872,7 +3014,11 @@ const App = () => {
                         </h3>
                         <div className="space-y-2">
                           {ongoingExams.map(exam => (
-                            <div key={exam.examId} className="bg-green-50 border border-green-200 p-4 rounded-xl">
+                            <div 
+                              key={exam.examId} 
+                              className="bg-green-50 border border-green-200 p-4 rounded-xl cursor-pointer hover:shadow-md transition-all"
+                              onClick={() => setSelectedExam(exam)}
+                            >
                               <div className="flex items-start justify-between">
                                 <div>
                                   <p className="font-semibold text-green-800">{exam.examType}</p>
@@ -2897,14 +3043,18 @@ const App = () => {
                         </h3>
                         <div className="space-y-2">
                           {upcomingExams.map(exam => (
-                            <div key={exam.examId} className="bg-white border border-stone-200 p-4 rounded-xl hover:border-amber-300 transition-all">
+                            <div 
+                              key={exam.examId} 
+                              className="bg-white border border-stone-200 p-4 rounded-xl hover:border-amber-300 hover:shadow-md transition-all cursor-pointer"
+                              onClick={() => setSelectedExam(exam)}
+                            >
                               <div className="flex items-start justify-between">
                                 <div>
                                   <p className="font-semibold text-stone-800">{exam.examType}</p>
                                   <p className="text-sm text-stone-600">{formatExamDate(exam.date)}</p>
                                   <p className="text-sm text-stone-500">{formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)}</p>
                                   <p className="text-xs text-stone-400 mt-1">Room: {exam.room} • Proctor: {exam.proctor}</p>
-                                  {exam.notes && <p className="text-xs text-stone-400 mt-1 italic">Note: {exam.notes}</p>}
+                                  {exam.notes && <p className="text-xs text-stone-400 mt-1 italic line-clamp-2">Note: {exam.notes}</p>}
                                   {exam.createdByName && <p className="text-xs text-stone-400 mt-1">Added by: {exam.createdByName}</p>}
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -2914,14 +3064,14 @@ const App = () => {
                                   {user && user.idNumber === exam.createdBy && (
                                     <div className="flex items-center gap-1">
                                       <button
-                                        onClick={() => setExamToEdit(exam)}
+                                        onClick={(e) => { e.stopPropagation(); setExamToEdit(exam); }}
                                         className="p-1 text-stone-400 hover:text-blue-500"
                                         title="Edit exam"
                                       >
                                         <Icon name="edit" className="text-sm" />
                                       </button>
                                       <button
-                                        onClick={() => setExamToDelete(exam.examId)}
+                                        onClick={(e) => { e.stopPropagation(); setExamToDelete(exam.examId); }}
                                         className="p-1 text-stone-400 hover:text-red-500"
                                         title="Delete exam"
                                       >
@@ -2945,7 +3095,11 @@ const App = () => {
                         </h3>
                         <div className="space-y-2">
                           {completedExams.map(exam => (
-                            <div key={exam.examId} className="bg-stone-50 border border-stone-200 p-4 rounded-xl opacity-70">
+                            <div 
+                              key={exam.examId} 
+                              className="bg-stone-50 border border-stone-200 p-4 rounded-xl opacity-70 cursor-pointer hover:opacity-90 hover:shadow-md transition-all"
+                              onClick={() => setSelectedExam(exam)}
+                            >
                               <div className="flex items-start justify-between">
                                 <div>
                                   <p className="font-semibold text-stone-600">{exam.examType}</p>
@@ -3117,6 +3271,115 @@ const App = () => {
           type={alertModal.type}
           onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
         />
+
+        {/* Exam Detail Modal */}
+        {selectedExam && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedExam(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
+              {/* Header with status color */}
+              <div className={`p-6 ${
+                getExamStatus(selectedExam) === 'ongoing' ? 'bg-green-500' :
+                getExamStatus(selectedExam) === 'upcoming' ? 'bg-amber-500' : 'bg-stone-500'
+              } text-white rounded-t-2xl`}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="px-2 py-1 bg-white/20 text-xs rounded-full font-medium">
+                      {selectedExam.examType}
+                    </span>
+                    <h2 className="text-2xl font-bold mt-2">{selectedExam.courseCode}</h2>
+                    {selectedExam.courseName && <p className="text-white/80">{selectedExam.courseName}</p>}
+                  </div>
+                  <button onClick={() => setSelectedExam(null)} className="p-2 hover:bg-white/20 rounded-full transition-colors">
+                    <Icon name="close" />
+                  </button>
+                </div>
+                <div className="mt-4 flex items-center gap-4 text-sm">
+                  <span className="px-3 py-1 bg-white/20 rounded-full font-medium capitalize">
+                    {getExamStatus(selectedExam) === 'ongoing' ? '🟢 In Progress' :
+                     getExamStatus(selectedExam) === 'upcoming' ? '🟡 Upcoming' : '✓ Completed'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Details */}
+              <div className="p-6 space-y-4">
+                {/* Date & Time */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                    <Icon name="event" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-stone-500">Date & Time</p>
+                    <p className="font-semibold text-stone-800">{formatExamDate(selectedExam.date)}</p>
+                    <p className="text-stone-600">{formatExamTime(selectedExam.startTime)} - {formatExamTime(selectedExam.endTime)}</p>
+                  </div>
+                </div>
+
+                {/* Room */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                    <Icon name="meeting_room" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-stone-500">Room</p>
+                    <p className="font-semibold text-stone-800">{selectedExam.room}</p>
+                  </div>
+                </div>
+
+                {/* Proctor */}
+                {selectedExam.proctor && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                      <Icon name="person" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-stone-500">Proctor</p>
+                      <p className="font-semibold text-stone-800">{selectedExam.proctor}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes - with preserved line breaks */}
+                {selectedExam.notes && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                      <Icon name="notes" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-stone-500">Notes</p>
+                      <p className="text-stone-700 whitespace-pre-wrap bg-amber-50 p-3 rounded-xl mt-1 text-sm">{selectedExam.notes}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Added by */}
+                {selectedExam.createdByName && (
+                  <div className="pt-4 border-t border-stone-200">
+                    <p className="text-xs text-stone-400">Added by {selectedExam.createdByName}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="p-4 border-t border-stone-200 flex gap-2">
+                <button
+                  onClick={() => setSelectedExam(null)}
+                  className="flex-1 py-3 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200 transition-colors"
+                >
+                  Close
+                </button>
+                {user && user.idNumber === selectedExam.createdBy && getExamStatus(selectedExam) !== 'done' && (
+                  <button
+                    onClick={() => { setExamToEdit(selectedExam); setSelectedExam(null); }}
+                    className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Icon name="edit" /> Edit
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -4167,7 +4430,11 @@ const App = () => {
                   </h2>
                   <div className="space-y-3">
                     {ongoingExams.map(exam => (
-                      <div key={exam.examId} className="bg-green-50 border border-green-200 p-4 rounded-xl">
+                      <div 
+                        key={exam.examId} 
+                        className="bg-green-50 border border-green-200 p-4 rounded-xl cursor-pointer hover:shadow-md transition-all"
+                        onClick={() => setSelectedExam(exam)}
+                      >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
                             <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center text-white">
@@ -4206,7 +4473,11 @@ const App = () => {
                   </h2>
                   <div className="space-y-3">
                     {upcomingExams.map(exam => (
-                      <div key={exam.examId} className="bg-white border border-stone-200 p-4 rounded-xl hover:border-amber-300 transition-all">
+                      <div 
+                        key={exam.examId} 
+                        className="bg-white border border-stone-200 p-4 rounded-xl hover:border-amber-300 hover:shadow-md transition-all cursor-pointer"
+                        onClick={() => setSelectedExam(exam)}
+                      >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
                             <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
@@ -4227,7 +4498,7 @@ const App = () => {
                                 {formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)} • Room: {exam.room}
                               </p>
                               {exam.proctor && <p className="text-xs text-stone-400">Proctor: {exam.proctor}</p>}
-                              {exam.notes && <p className="text-xs text-stone-400 italic mt-1">"{exam.notes}"</p>}
+                              {exam.notes && <p className="text-xs text-stone-400 italic mt-1 line-clamp-2">"{exam.notes}"</p>}
                               {exam.createdByName && <p className="text-xs text-stone-400">Added by: {exam.createdByName}</p>}
                             </div>
                           </div>
@@ -4238,14 +4509,14 @@ const App = () => {
                             {user && user.idNumber === exam.createdBy && (
                               <div className="flex items-center gap-1">
                                 <button
-                                  onClick={() => setExamToEdit(exam)}
+                                  onClick={(e) => { e.stopPropagation(); setExamToEdit(exam); }}
                                   className="p-1 text-stone-400 hover:text-blue-500"
                                   title="Edit exam"
                                 >
                                   <Icon name="edit" className="text-sm" />
                                 </button>
                                 <button
-                                  onClick={() => setExamToDelete(exam.examId)}
+                                  onClick={(e) => { e.stopPropagation(); setExamToDelete(exam.examId); }}
                                   className="p-1 text-stone-400 hover:text-red-500"
                                   title="Delete exam"
                                 >
@@ -4270,7 +4541,11 @@ const App = () => {
                   </h2>
                   <div className="space-y-3">
                     {completedExams.map(exam => (
-                      <div key={exam.examId} className="bg-stone-50 border border-stone-200 p-4 rounded-xl opacity-60">
+                      <div 
+                        key={exam.examId} 
+                        className="bg-stone-50 border border-stone-200 p-4 rounded-xl opacity-60 cursor-pointer hover:opacity-80 hover:shadow-md transition-all"
+                        onClick={() => setSelectedExam(exam)}
+                      >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
                             <div className="w-12 h-12 bg-stone-200 rounded-xl flex items-center justify-center text-stone-500">
@@ -4408,6 +4683,115 @@ const App = () => {
                     <Icon name="save" /> Save Changes
                   </button>
                 </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Exam Detail Modal */}
+        {selectedExam && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedExam(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
+              {/* Header with status color */}
+              <div className={`p-6 ${
+                getExamStatus(selectedExam) === 'ongoing' ? 'bg-green-500' :
+                getExamStatus(selectedExam) === 'upcoming' ? 'bg-amber-500' : 'bg-stone-500'
+              } text-white rounded-t-2xl`}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="px-2 py-1 bg-white/20 text-xs rounded-full font-medium">
+                      {selectedExam.examType}
+                    </span>
+                    <h2 className="text-2xl font-bold mt-2">{selectedExam.courseCode}</h2>
+                    {selectedExam.courseName && <p className="text-white/80">{selectedExam.courseName}</p>}
+                  </div>
+                  <button onClick={() => setSelectedExam(null)} className="p-2 hover:bg-white/20 rounded-full transition-colors">
+                    <Icon name="close" />
+                  </button>
+                </div>
+                <div className="mt-4 flex items-center gap-4 text-sm">
+                  <span className="px-3 py-1 bg-white/20 rounded-full font-medium capitalize">
+                    {getExamStatus(selectedExam) === 'ongoing' ? '🟢 In Progress' :
+                     getExamStatus(selectedExam) === 'upcoming' ? '🟡 Upcoming' : '✓ Completed'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Details */}
+              <div className="p-6 space-y-4">
+                {/* Date & Time */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                    <Icon name="event" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-stone-500">Date & Time</p>
+                    <p className="font-semibold text-stone-800">{formatExamDate(selectedExam.date)}</p>
+                    <p className="text-stone-600">{formatExamTime(selectedExam.startTime)} - {formatExamTime(selectedExam.endTime)}</p>
+                  </div>
+                </div>
+
+                {/* Room */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                    <Icon name="meeting_room" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-stone-500">Room</p>
+                    <p className="font-semibold text-stone-800">{selectedExam.room}</p>
+                  </div>
+                </div>
+
+                {/* Proctor */}
+                {selectedExam.proctor && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                      <Icon name="person" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-stone-500">Proctor</p>
+                      <p className="font-semibold text-stone-800">{selectedExam.proctor}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes - with preserved line breaks */}
+                {selectedExam.notes && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                      <Icon name="notes" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-stone-500">Notes</p>
+                      <p className="text-stone-700 whitespace-pre-wrap bg-amber-50 p-3 rounded-xl mt-1 text-sm">{selectedExam.notes}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Added by */}
+                {selectedExam.createdByName && (
+                  <div className="pt-4 border-t border-stone-200">
+                    <p className="text-xs text-stone-400">Added by {selectedExam.createdByName}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="p-4 border-t border-stone-200 flex gap-2">
+                <button
+                  onClick={() => setSelectedExam(null)}
+                  className="flex-1 py-3 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200 transition-colors"
+                >
+                  Close
+                </button>
+                {user && user.idNumber === selectedExam.createdBy && getExamStatus(selectedExam) !== 'done' && (
+                  <button
+                    onClick={() => { setExamToEdit(selectedExam); setSelectedExam(null); }}
+                    className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Icon name="edit" /> Edit
+                  </button>
+                )}
               </div>
             </div>
           </div>
