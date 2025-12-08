@@ -263,6 +263,7 @@ const App = () => {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [categories, setCategories] = useState<Record<string, CategoryItem[]>>({});
   const [resources, setResources] = useState<Record<string, Resource[]>>({});
+  const [apiSubjects, setApiSubjects] = useState<string[]>([]);
   
   // Navigation State
   const [activeSubject, setActiveSubject] = useState<string | null>(null);
@@ -293,6 +294,16 @@ const App = () => {
       // Load cached data
       const cachedDecks = await db.decks.toArray();
       setDecks(cachedDecks);
+      
+      // Load cached subjects
+      const cachedSubjects = localStorage.getItem('flashmaster_subjects');
+      if (cachedSubjects) {
+        try {
+          setApiSubjects(JSON.parse(cachedSubjects));
+        } catch (e) {
+          // ignore
+        }
+      }
       
       setLoading(false);
 
@@ -357,6 +368,12 @@ const App = () => {
         for (const [subject, items] of Object.entries(data.resources)) {
           await db.resources.put({ subject, items: items as Resource[] });
         }
+      }
+
+      // Process subjects from Category sheet
+      if (data.subjects && Array.isArray(data.subjects)) {
+        setApiSubjects(data.subjects);
+        localStorage.setItem('flashmaster_subjects', JSON.stringify(data.subjects));
       }
     } catch (error) {
       console.error('Sync failed:', error);
@@ -436,11 +453,13 @@ const App = () => {
   };
 
   // Get subjects from decks (using the subject property from D1)
-  const subjects = [...new Set(decks.map(d => d.subject).filter(Boolean))] as string[];
+  const deckSubjects = [...new Set(decks.map(d => d.subject).filter(Boolean))] as string[];
   
   // Default subjects if no decks loaded yet
   const defaultSubjects = ['FL111', 'FL112', 'EDUC112', 'EDUC111', 'GE111', 'GE112', 'PE111', 'NSTP111'];
-  const displaySubjects = subjects.length > 0 ? subjects : defaultSubjects;
+  
+  // Priority: apiSubjects from Category sheet > deckSubjects from D1 > defaults
+  const displaySubjects = apiSubjects.length > 0 ? apiSubjects : (deckSubjects.length > 0 ? deckSubjects : defaultSubjects);
 
   // --- Views ---
 

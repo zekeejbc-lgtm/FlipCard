@@ -8,12 +8,16 @@
  *    - Column B: Name
  *    - Column C: Record (JSON string of user progress)
  * 
- * 2. Resources Sheet (name: "Resources")
+ * 2. Category Sheet (name: "Category")
+ *    - Row 1: Subject headers in odd columns (A=FL111, C=FL112, E=EDUC112, etc.)
+ *    - Even columns (B, D, F, etc.) are "Category" labels - ignored
+ * 
+ * 3. Resources Sheet (name: "Resources")
  *    - Row 1: Subject headers (FL111, FL112, etc.)
  *    - Row 2+: Resource entries
  *    - Format: A=ResourceName, B=Category|URL
  * 
- * 3. Flashcard Sheets (any sheet NOT named User, Category, or Resources)
+ * 4. Flashcard Sheets (any sheet NOT named User, Category, or Resources)
  *    - Cell C1: Display name (shown in frontend)
  *    - Cell D1: Subject category (FL111, FL112, EDUC112, etc.)
  *    - Column A: Question
@@ -36,6 +40,8 @@ function doGet(e) {
         return jsonResponse(getCategories());
       case 'getResources':
         return jsonResponse(getResources());
+      case 'getSubjects':
+        return jsonResponse(getSubjects());
       default:
         return jsonResponse(getAllData());
     }
@@ -75,7 +81,8 @@ function getAllData() {
   return {
     decks: getAllDecks(),
     categories: getCategories(),
-    resources: getResources()
+    resources: getResources(),
+    subjects: getSubjects()
   };
 }
 
@@ -336,6 +343,44 @@ function getCategories() {
   }
   
   return categories;
+}
+
+/**
+ * Get subjects from Category sheet
+ * Reads row 1, odd columns (A, C, E, G, etc.) - skips "Category" columns (B, D, F, H, etc.)
+ * Returns array of subject names like ["FL111", "FL112", "EDUC112", ...]
+ */
+function getSubjects() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const categorySheet = ss.getSheetByName('Category');
+  
+  if (!categorySheet) {
+    // Fallback: extract unique subjects from decks
+    const decks = getAllDecks();
+    const subjectSet = new Set();
+    for (const deckData of Object.values(decks)) {
+      if (deckData.subject) {
+        subjectSet.add(deckData.subject);
+      }
+    }
+    return Array.from(subjectSet);
+  }
+  
+  const data = categorySheet.getDataRange().getValues();
+  if (data.length === 0) return [];
+  
+  const headers = data[0];
+  const subjects = [];
+  
+  // Read odd columns (0, 2, 4, 6, ...) which are A, C, E, G, ...
+  for (let col = 0; col < headers.length; col += 2) {
+    const subject = headers[col];
+    if (subject && String(subject).trim() !== '' && String(subject).trim().toLowerCase() !== 'category') {
+      subjects.push(String(subject).trim());
+    }
+  }
+  
+  return subjects;
 }
 
 /**
