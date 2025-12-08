@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import Dexie from 'dexie';
 
@@ -18,9 +18,15 @@ type Deck = {
 };
 
 type Resource = {
+  id?: string;
   name: string;
-  category: 'Video' | 'Image' | 'Files';
+  title?: string;
+  description?: string;
+  category: 'Video' | 'Image' | 'Files' | 'Lesson PPT' | 'Lesson PDF' | 'Reviewer' | string;
   url: string;
+  submittedBy?: string;
+  submittedByName?: string;
+  timestamp?: string;
 };
 
 type CategoryItem = {
@@ -32,6 +38,13 @@ type User = {
   idNumber: string;
   name: string;
   record: Record<string, any>;
+};
+
+type Toast = {
+  id: number;
+  message: string;
+  type: 'info' | 'success' | 'error' | 'loading';
+  progress?: number;
 };
 
 type AppView = 'HOME' | 'SUBJECT' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY' | 'RESOURCE_VIEW';
@@ -62,15 +75,356 @@ const Icon = ({ name, className = "" }: { name: string; className?: string }) =>
   <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
 );
 
+// Toast Container Component
+const ToastContainer = ({ toasts, removeToast }: { toasts: Toast[]; removeToast: (id: number) => void }) => {
+  return (
+    <div className="fixed bottom-4 right-4 z-50 space-y-2 max-w-sm">
+      {toasts.map(toast => (
+        <div 
+          key={toast.id}
+          className={`p-4 rounded-xl shadow-lg flex items-center gap-3 animate-slide-up ${
+            toast.type === 'success' ? 'bg-emerald-500 text-white' :
+            toast.type === 'error' ? 'bg-red-500 text-white' :
+            toast.type === 'loading' ? 'bg-stone-800 text-white' :
+            'bg-white text-stone-800 border border-stone-200'
+          }`}
+        >
+          {toast.type === 'loading' && (
+            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          )}
+          {toast.type === 'success' && <Icon name="check_circle" />}
+          {toast.type === 'error' && <Icon name="error" />}
+          {toast.type === 'info' && <Icon name="info" />}
+          <div className="flex-1">
+            <p className="text-sm font-medium">{toast.message}</p>
+            {toast.progress !== undefined && (
+              <div className="mt-2 h-1 bg-white/30 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-white transition-all duration-300"
+                  style={{ width: `${toast.progress}%` }}
+                />
+              </div>
+            )}
+          </div>
+          {toast.type !== 'loading' && (
+            <button onClick={() => removeToast(toast.id)} className="p-1 hover:opacity-70">
+              <Icon name="close" className="text-sm" />
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Upload Modal Component
+const UploadModal = ({ 
+  isOpen, 
+  onClose, 
+  subject,
+  user,
+  onUploadComplete,
+  addToast,
+  updateToast,
+  removeToast
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  subject: string;
+  user: User | null;
+  onUploadComplete: () => void;
+  addToast: (message: string, type: Toast['type'], progress?: number) => number;
+  updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
+  removeToast: (id: number) => void;
+}) => {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState<'Lesson PPT' | 'Lesson PDF' | 'Video' | 'Reviewer'>('Lesson PDF');
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const MAX_TOTAL_SIZE = 5 * 1024 * 1024 * 1024; // 5GB
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    const totalSize = selectedFiles.reduce((acc, f) => acc + f.size, 0);
+    
+    if (totalSize > MAX_TOTAL_SIZE) {
+      setError('Total file size exceeds 5GB limit');
+      return;
+    }
+    
+    setFiles(selectedFiles);
+    setError('');
+  };
+
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  };
+
+  const handleUpload = async () => {
+    if (!title.trim()) {
+      setError('Please enter a title');
+      return;
+    }
+    if (files.length === 0) {
+      setError('Please select at least one file');
+      return;
+    }
+    if (!user) {
+      setError('Please login to upload resources');
+      return;
+    }
+
+    setUploading(true);
+    setError('');
+    
+    const toastId = addToast(`Uploading ${files.length} file(s)...`, 'loading', 0);
+    
+    try {
+      let successCount = 0;
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileTitle = files.length > 1 ? `${title} (${i + 1})` : title;
+        
+        updateToast(toastId, `Uploading ${file.name}...`, 'loading', Math.round((i / files.length) * 100));
+        
+        // Convert file to base64
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64Data = result.split(',')[1];
+            resolve(base64Data);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        
+        // Upload to GAS
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'uploadResource',
+            title: fileTitle,
+            description: description,
+            subject: subject,
+            category: category,
+            fileData: base64,
+            fileName: file.name,
+            mimeType: file.type,
+            userId: user.idNumber,
+            userName: user.name
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          successCount++;
+        } else {
+          console.error('Upload failed:', result.error);
+        }
+      }
+      
+      if (successCount === files.length) {
+        updateToast(toastId, `Successfully uploaded ${successCount} file(s)!`, 'success');
+        setTimeout(() => removeToast(toastId), 3000);
+        onUploadComplete();
+        onClose();
+        setTitle('');
+        setDescription('');
+        setFiles([]);
+      } else {
+        updateToast(toastId, `Uploaded ${successCount}/${files.length} files`, successCount > 0 ? 'info' : 'error');
+        setTimeout(() => removeToast(toastId), 5000);
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      updateToast(toastId, 'Upload failed. Please try again.', 'error');
+      setTimeout(() => removeToast(toastId), 5000);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-stone-800">Upload Resource</h2>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-600" disabled={uploading}>
+            <Icon name="close" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {/* Title */}
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Title *</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Enter resource title"
+              className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+              disabled={uploading}
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional description"
+              rows={3}
+              className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none resize-none"
+              disabled={uploading}
+            />
+          </div>
+
+          {/* Subject (read-only) */}
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Subject</label>
+            <input
+              type="text"
+              value={subject}
+              readOnly
+              className="w-full p-3 border border-stone-200 rounded-xl bg-stone-50 text-stone-500"
+            />
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Submit as *</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(['Lesson PPT', 'Lesson PDF', 'Reviewer', 'Video'] as const).map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setCategory(cat)}
+                  disabled={uploading}
+                  className={`p-3 rounded-xl border text-sm font-medium transition-all ${
+                    category === cat 
+                      ? 'bg-stone-800 text-white border-stone-800' 
+                      : 'bg-white text-stone-600 border-stone-200 hover:border-stone-400'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Submitted By (read-only) */}
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Submitted by</label>
+            <input
+              type="text"
+              value={user ? `${user.name} (${user.idNumber})` : 'Please login first'}
+              readOnly
+              className="w-full p-3 border border-stone-200 rounded-xl bg-stone-50 text-stone-500"
+            />
+          </div>
+
+          {/* File Upload */}
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Files * (Max 5GB total)</label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileChange}
+              className="hidden"
+              disabled={uploading}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="w-full p-4 border-2 border-dashed border-stone-300 rounded-xl text-stone-500 hover:border-stone-400 hover:bg-stone-50 transition-all flex items-center justify-center gap-2"
+            >
+              <Icon name="cloud_upload" />
+              Click to select files
+            </button>
+            
+            {files.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {files.map((file, i) => (
+                  <div key={i} className="flex items-center gap-2 p-2 bg-stone-50 rounded-lg">
+                    <Icon name="description" className="text-stone-400" />
+                    <span className="flex-1 text-sm text-stone-600 truncate">{file.name}</span>
+                    <span className="text-xs text-stone-400">{formatFileSize(file.size)}</span>
+                    <button 
+                      onClick={() => removeFile(i)}
+                      className="p-1 text-stone-400 hover:text-red-500"
+                      disabled={uploading}
+                    >
+                      <Icon name="close" className="text-sm" />
+                    </button>
+                  </div>
+                ))}
+                <p className="text-xs text-stone-400 text-right">
+                  Total: {formatFileSize(files.reduce((acc, f) => acc + f.size, 0))}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {error && (
+            <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{error}</div>
+          )}
+
+          <button
+            onClick={handleUpload}
+            disabled={uploading || !user}
+            className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+          >
+            {uploading ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Uploading...
+              </>
+            ) : (
+              <>
+                <Icon name="cloud_upload" />
+                Upload
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Login Modal Component
 const LoginModal = ({ 
   isOpen, 
   onClose, 
-  onLogin 
+  onLogin,
+  addToast,
+  updateToast,
+  removeToast
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
   onLogin: (user: User) => void;
+  addToast: (message: string, type: Toast['type'], progress?: number) => number;
+  updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
+  removeToast: (id: number) => void;
 }) => {
   const [idNumber, setIdNumber] = useState('');
   const [name, setName] = useState('');
@@ -93,25 +447,39 @@ const LoginModal = ({
     }
 
     setLoading(true);
+    const toastId = addToast('Logging in...', 'loading');
     
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'login', idNumber, name: name.trim() }),
-        mode: 'no-cors'
+        body: JSON.stringify({ action: 'login', idNumber, name: name.trim() })
       });
       
-      // Since no-cors doesn't return data, we'll store locally
-      const user: User = { idNumber, name: name.trim(), record: {} };
-      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
-      onLogin(user);
-      onClose();
+      const result = await response.json();
+      
+      if (result.success) {
+        const user: User = result.user;
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+        onLogin(user);
+        updateToast(toastId, result.isNew ? 'Account created successfully!' : 'Welcome back!', 'success');
+        setTimeout(() => removeToast(toastId), 3000);
+        onClose();
+      } else {
+        // Fallback to local-only mode
+        const user: User = { idNumber, name: name.trim(), record: {} };
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+        onLogin(user);
+        updateToast(toastId, 'Logged in (offline mode)', 'info');
+        setTimeout(() => removeToast(toastId), 3000);
+        onClose();
+      }
     } catch (err) {
       // Fallback to local-only mode
       const user: User = { idNumber, name: name.trim(), record: {} };
       localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
       onLogin(user);
+      updateToast(toastId, 'Logged in (offline mode)', 'info');
+      setTimeout(() => removeToast(toastId), 3000);
       onClose();
     } finally {
       setLoading(false);
@@ -253,6 +621,25 @@ const App = () => {
   // User State
   const [user, setUser] = useState<User | null>(null);
   const [showLogin, setShowLogin] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
+
+  // Toast State
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const toastIdRef = useRef(0);
+
+  const addToast = (message: string, type: Toast['type'], progress?: number): number => {
+    const id = ++toastIdRef.current;
+    setToasts(prev => [...prev, { id, message, type, progress }]);
+    return id;
+  };
+
+  const updateToast = (id: number, message: string, type: Toast['type'], progress?: number) => {
+    setToasts(prev => prev.map(t => t.id === id ? { ...t, message, type, progress } : t));
+  };
+
+  const removeToast = (id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
 
   // Data State
   const [view, setView] = useState<AppView>('HOME');
@@ -467,7 +854,15 @@ const App = () => {
   if (view === 'HOME') {
     return (
       <div className="min-h-screen bg-[#F5F5F4]">
-        <LoginModal isOpen={showLogin} onClose={() => setShowLogin(false)} onLogin={setUser} />
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <LoginModal 
+          isOpen={showLogin} 
+          onClose={() => setShowLogin(false)} 
+          onLogin={setUser}
+          addToast={addToast}
+          updateToast={updateToast}
+          removeToast={removeToast}
+        />
         
         {/* Header */}
         <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
@@ -571,19 +966,128 @@ const App = () => {
     // Get decks for this subject using the subject property
     const subjectDecks = decks.filter(d => d.subject === activeSubject);
     
+    // Organize resources by category
+    const lessonPPTResources = subjectResources.filter(r => r.category === 'Lesson PPT');
+    const lessonPDFResources = subjectResources.filter(r => r.category === 'Lesson PDF');
+    const reviewerResources = subjectResources.filter(r => r.category === 'Reviewer');
     const videoResources = subjectResources.filter(r => r.category === 'Video');
+    // Legacy categories
     const imageResources = subjectResources.filter(r => r.category === 'Image');
-    const fileResources = subjectResources.filter(r => r.category === 'Files');
+    const fileResources = subjectResources.filter(r => r.category === 'Files' || !['Lesson PPT', 'Lesson PDF', 'Reviewer', 'Video', 'Image'].includes(r.category));
+
+    const handleDeleteResource = async (resource: Resource) => {
+      if (!user) {
+        addToast('Please login to delete resources', 'error');
+        return;
+      }
+      
+      if (resource.submittedBy !== user.idNumber) {
+        addToast('You can only delete your own submissions', 'error');
+        return;
+      }
+      
+      if (!confirm(`Delete "${resource.name}"?`)) return;
+      
+      const toastId = addToast('Deleting resource...', 'loading');
+      
+      try {
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'deleteResource',
+            resourceUrl: resource.url,
+            userId: user.idNumber
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          updateToast(toastId, 'Resource deleted!', 'success');
+          setTimeout(() => removeToast(toastId), 3000);
+          syncData(); // Refresh resources
+        } else {
+          updateToast(toastId, result.error || 'Delete failed', 'error');
+          setTimeout(() => removeToast(toastId), 5000);
+        }
+      } catch (err) {
+        updateToast(toastId, 'Delete failed. Please try again.', 'error');
+        setTimeout(() => removeToast(toastId), 5000);
+      }
+    };
+
+    const renderResourceCard = (r: Resource, i: number, icon: string, iconBg: string, iconColor: string, borderColor: string) => (
+      <div
+        key={i}
+        className={`bg-white p-4 rounded-xl border border-stone-200 hover:${borderColor} transition-all`}
+      >
+        <div className="flex items-start gap-3">
+          <button
+            onClick={() => openResource(r)}
+            className="flex-1 flex items-center gap-3 text-left"
+          >
+            <div className={`w-10 h-10 ${iconBg} rounded-lg flex items-center justify-center ${iconColor}`}>
+              <Icon name={icon} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-stone-700 truncate">{r.name || r.title}</p>
+              {r.description && <p className="text-xs text-stone-400 truncate">{r.description}</p>}
+              {r.submittedByName && (
+                <p className="text-xs text-stone-400">by {r.submittedByName}</p>
+              )}
+            </div>
+          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => openResource(r)}
+              className="p-2 text-stone-400 hover:text-stone-600"
+            >
+              <Icon name="open_in_new" className="text-sm" />
+            </button>
+            {user && r.submittedBy === user.idNumber && (
+              <button
+                onClick={() => handleDeleteResource(r)}
+                className="p-2 text-stone-400 hover:text-red-500"
+                title="Delete"
+              >
+                <Icon name="delete" className="text-sm" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
 
     return (
       <div className="min-h-screen bg-[#F5F5F4]">
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <UploadModal 
+          isOpen={showUpload} 
+          onClose={() => setShowUpload(false)} 
+          subject={activeSubject}
+          user={user}
+          onUploadComplete={syncData}
+          addToast={addToast}
+          updateToast={updateToast}
+          removeToast={removeToast}
+        />
+        
         {/* Header */}
         <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
           <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
             <button onClick={resetHome} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
               <Icon name="arrow_back" className="text-stone-600" />
             </button>
-            <h1 className="font-bold text-stone-800 text-lg">{activeSubject}</h1>
+            <h1 className="font-bold text-stone-800 text-lg flex-1">{activeSubject}</h1>
+            {activeTab === 'Resources' && (
+              <button
+                onClick={() => user ? setShowUpload(true) : setShowLogin(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
+              >
+                <Icon name="cloud_upload" className="text-sm" />
+                Upload
+              </button>
+            )}
           </div>
           
           {/* Tabs */}
@@ -632,79 +1136,88 @@ const App = () => {
             </div>
           ) : (
             <div className="space-y-6">
+              {/* Lesson PPT */}
+              {lessonPPTResources.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
+                    <Icon name="slideshow" className="text-orange-500" /> Lesson PPT
+                  </h3>
+                  <div className="space-y-2">
+                    {lessonPPTResources.map((r, i) => renderResourceCard(r, i, 'slideshow', 'bg-orange-100', 'text-orange-500', 'border-orange-300'))}
+                  </div>
+                </div>
+              )}
+
+              {/* Lesson PDF */}
+              {lessonPDFResources.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
+                    <Icon name="picture_as_pdf" className="text-red-500" /> Lesson PDF
+                  </h3>
+                  <div className="space-y-2">
+                    {lessonPDFResources.map((r, i) => renderResourceCard(r, i, 'picture_as_pdf', 'bg-red-100', 'text-red-500', 'border-red-300'))}
+                  </div>
+                </div>
+              )}
+
+              {/* Reviewers */}
+              {reviewerResources.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
+                    <Icon name="quiz" className="text-purple-500" /> Reviewers
+                  </h3>
+                  <div className="space-y-2">
+                    {reviewerResources.map((r, i) => renderResourceCard(r, i, 'quiz', 'bg-purple-100', 'text-purple-500', 'border-purple-300'))}
+                  </div>
+                </div>
+              )}
+
               {/* Videos */}
               {videoResources.length > 0 && (
                 <div>
                   <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
-                    <Icon name="play_circle" className="text-red-500" /> Videos
+                    <Icon name="play_circle" className="text-blue-500" /> Videos
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {videoResources.map((r, i) => (
-                      <button
-                        key={i}
-                        onClick={() => openResource(r)}
-                        className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-red-300 transition-all flex items-center gap-3"
-                      >
-                        <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center text-red-500">
-                          <Icon name="play_arrow" />
-                        </div>
-                        <span className="font-medium text-stone-700">{r.name}</span>
-                      </button>
-                    ))}
+                  <div className="space-y-2">
+                    {videoResources.map((r, i) => renderResourceCard(r, i, 'play_circle', 'bg-blue-100', 'text-blue-500', 'border-blue-300'))}
                   </div>
                 </div>
               )}
 
-              {/* Images */}
+              {/* Images (legacy) */}
               {imageResources.length > 0 && (
                 <div>
                   <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
-                    <Icon name="image" className="text-blue-500" /> Images
+                    <Icon name="image" className="text-teal-500" /> Images
                   </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {imageResources.map((r, i) => (
-                      <button
-                        key={i}
-                        onClick={() => openResource(r)}
-                        className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-blue-300 transition-all"
-                      >
-                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-500 mb-2">
-                          <Icon name="image" />
-                        </div>
-                        <span className="text-sm font-medium text-stone-700 line-clamp-2">{r.name}</span>
-                      </button>
-                    ))}
+                  <div className="space-y-2">
+                    {imageResources.map((r, i) => renderResourceCard(r, i, 'image', 'bg-teal-100', 'text-teal-500', 'border-teal-300'))}
                   </div>
                 </div>
               )}
 
-              {/* Files */}
+              {/* Other Files (legacy) */}
               {fileResources.length > 0 && (
                 <div>
                   <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
-                    <Icon name="description" className="text-emerald-500" /> Files
+                    <Icon name="folder" className="text-emerald-500" /> Other Files
                   </h3>
                   <div className="space-y-2">
-                    {fileResources.map((r, i) => (
-                      <button
-                        key={i}
-                        onClick={() => openResource(r)}
-                        className="w-full bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-emerald-300 transition-all flex items-center gap-3"
-                      >
-                        <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center text-emerald-500">
-                          <Icon name="description" />
-                        </div>
-                        <span className="font-medium text-stone-700">{r.name}</span>
-                        <Icon name="open_in_new" className="text-stone-300 ml-auto" />
-                      </button>
-                    ))}
+                    {fileResources.map((r, i) => renderResourceCard(r, i, 'description', 'bg-emerald-100', 'text-emerald-500', 'border-emerald-300'))}
                   </div>
                 </div>
               )}
 
-              {videoResources.length === 0 && imageResources.length === 0 && fileResources.length === 0 && (
-                <div className="text-center py-12 text-stone-400">
-                  No resources available for this subject
+              {subjectResources.length === 0 && (
+                <div className="text-center py-12">
+                  <Icon name="cloud_upload" className="text-4xl text-stone-300 mb-3" />
+                  <p className="text-stone-400 mb-4">No resources available for this subject</p>
+                  <button
+                    onClick={() => user ? setShowUpload(true) : setShowLogin(true)}
+                    className="px-6 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors"
+                  >
+                    Upload First Resource
+                  </button>
                 </div>
               )}
             </div>
