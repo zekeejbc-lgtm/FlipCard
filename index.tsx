@@ -47,7 +47,7 @@ type Toast = {
   progress?: number;
 };
 
-type AppView = 'HOME' | 'SUBJECT' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY' | 'RESOURCE_VIEW';
+type AppView = 'HOME' | 'SUBJECT' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY' | 'RESOURCE_VIEW' | 'ANALYTICS';
 
 // --- Constants ---
 
@@ -663,6 +663,11 @@ const App = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [scores, setScores] = useState<Record<string, 'correct' | 'incorrect'>>({});
+  const [sessionStartTime, setSessionStartTime] = useState<number>(0);
+
+  // Analytics State
+  const [userAnalytics, setUserAnalytics] = useState<any>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
 
   // --- Initialization ---
 
@@ -767,6 +772,54 @@ const App = () => {
     }
   };
 
+  // --- Analytics Functions ---
+
+  const saveSessionAnalytics = async (correct: number, incorrect: number) => {
+    if (!user || !activeDeck || !activeSubject) return;
+    
+    const timeSpent = Math.round((Date.now() - sessionStartTime) / 1000); // in seconds
+    
+    try {
+      await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'saveAnalytics',
+          idNumber: user.idNumber,
+          subject: activeSubject,
+          deck: activeDeck.name,
+          correct,
+          incorrect,
+          timeSpent
+        })
+      });
+    } catch (error) {
+      console.error('Failed to save analytics:', error);
+    }
+  };
+
+  const fetchUserAnalytics = async () => {
+    if (!user) return;
+    
+    setLoadingAnalytics(true);
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'getAnalytics',
+          idNumber: user.idNumber
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUserAnalytics(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch analytics:', error);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
   // --- Actions ---
 
   const handleLogout = () => {
@@ -813,17 +866,23 @@ const App = () => {
     setQueue(newQueue);
     setCurrentIndex(0);
     setIsFlipped(false);
+    setSessionStartTime(Date.now());
     setView('PLAY');
   };
 
   const handleScore = (result: 'correct' | 'incorrect') => {
     const card = queue[currentIndex];
-    setScores(prev => ({ ...prev, [card.id]: result }));
+    const newScores = { ...scores, [card.id]: result };
+    setScores(newScores);
     setIsFlipped(false);
     setTimeout(() => {
       if (currentIndex < queue.length - 1) {
         setCurrentIndex(prev => prev + 1);
       } else {
+        // Session ended - calculate final scores and save analytics
+        const correct = Object.values(newScores).filter(s => s === 'correct').length;
+        const incorrect = Object.values(newScores).filter(s => s === 'incorrect').length;
+        saveSessionAnalytics(correct, incorrect);
         setView('SUMMARY');
       }
     }, 200);
@@ -880,15 +939,26 @@ const App = () => {
               </div>
             </div>
             
-            <button
-              onClick={() => user ? handleLogout() : setShowLogin(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors"
-            >
-              <Icon name={user ? 'logout' : 'login'} className="text-stone-600" />
-              <span className="text-sm font-medium text-stone-700">
-                {user ? user.name.split(' ')[0] : 'Login'}
-              </span>
-            </button>
+            <div className="flex items-center gap-2">
+              {user && (
+                <button
+                  onClick={() => { setUserAnalytics(null); setView('ANALYTICS'); }}
+                  className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
+                  title="View Analytics"
+                >
+                  <Icon name="analytics" className="text-stone-600" />
+                </button>
+              )}
+              <button
+                onClick={() => user ? handleLogout() : setShowLogin(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors"
+              >
+                <Icon name={user ? 'logout' : 'login'} className="text-stone-600" />
+                <span className="text-sm font-medium text-stone-700">
+                  {user ? user.name.split(' ')[0] : 'Login'}
+                </span>
+              </button>
+            </div>
           </div>
         </header>
 
@@ -1413,6 +1483,188 @@ const App = () => {
             </button>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // ANALYTICS View
+  if (view === 'ANALYTICS') {
+    // Fetch analytics if not loaded
+    if (!userAnalytics && !loadingAnalytics && user) {
+      fetchUserAnalytics();
+    }
+
+    return (
+      <div className="min-h-screen bg-[#F5F5F4]">
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <LoginModal 
+          isOpen={showLogin} 
+          onClose={() => setShowLogin(false)} 
+          onLogin={setUser}
+          addToast={addToast}
+          updateToast={updateToast}
+          removeToast={removeToast}
+        />
+        
+        {/* Header */}
+        <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
+          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+            <button onClick={resetHome} className="p-2 -ml-2 text-stone-600 hover:bg-stone-100 rounded-lg">
+              <Icon name="arrow_back" />
+            </button>
+            <div>
+              <h1 className="text-lg font-bold text-stone-800">My Analytics</h1>
+              <p className="text-sm text-stone-500">Track your learning progress</p>
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-5xl mx-auto px-4 py-6">
+          {!user ? (
+            <div className="text-center py-12">
+              <Icon name="person" className="text-4xl text-stone-300 mb-2" />
+              <p className="text-stone-500 mb-4">Sign in to view your analytics</p>
+              <button 
+                onClick={() => setShowLogin(true)}
+                className="px-6 py-2 bg-stone-800 text-white rounded-xl font-semibold"
+              >
+                Sign In
+              </button>
+            </div>
+          ) : loadingAnalytics ? (
+            <div className="text-center py-12">
+              <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-stone-500">Loading analytics...</p>
+            </div>
+          ) : !userAnalytics ? (
+            <div className="text-center py-12">
+              <Icon name="analytics" className="text-4xl text-stone-300 mb-2" />
+              <p className="text-stone-500">No analytics data yet</p>
+              <p className="text-sm text-stone-400 mt-1">Complete some flashcard sessions to see your progress</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Overall Stats */}
+              {userAnalytics.summary?.analytics && (
+                <div className="bg-white rounded-2xl p-6 border border-stone-200">
+                  <h2 className="font-bold text-stone-800 mb-4">Overall Progress</h2>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {(() => {
+                      const subjects = userAnalytics.summary.analytics.subjects || {};
+                      let totalAttempts = 0;
+                      let totalCorrect = 0;
+                      let totalDecks = 0;
+                      Object.values(subjects).forEach((s: any) => {
+                        totalAttempts += s.totalAttempts || 0;
+                        totalCorrect += s.correct || 0;
+                        totalDecks += Object.keys(s.decks || {}).length;
+                      });
+                      const avgScore = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
+                      return (
+                        <>
+                          <div className="text-center p-4 bg-stone-50 rounded-xl">
+                            <div className="text-2xl font-bold text-stone-800">{Object.keys(subjects).length}</div>
+                            <div className="text-xs text-stone-500">Subjects</div>
+                          </div>
+                          <div className="text-center p-4 bg-stone-50 rounded-xl">
+                            <div className="text-2xl font-bold text-stone-800">{totalDecks}</div>
+                            <div className="text-xs text-stone-500">Decks Played</div>
+                          </div>
+                          <div className="text-center p-4 bg-stone-50 rounded-xl">
+                            <div className="text-2xl font-bold text-stone-800">{totalAttempts}</div>
+                            <div className="text-xs text-stone-500">Total Cards</div>
+                          </div>
+                          <div className="text-center p-4 bg-emerald-50 rounded-xl">
+                            <div className="text-2xl font-bold text-emerald-600">{avgScore}%</div>
+                            <div className="text-xs text-stone-500">Avg Score</div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {/* Per Subject */}
+              {userAnalytics.summary?.analytics?.subjects && Object.entries(userAnalytics.summary.analytics.subjects).map(([subject, data]: [string, any]) => (
+                <div key={subject} className="bg-white rounded-2xl p-6 border border-stone-200">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="font-bold text-stone-800">{subject}</h2>
+                    <span className="text-sm text-stone-500">
+                      {data.totalAttempts > 0 ? Math.round((data.correct / data.totalAttempts) * 100) : 0}% accuracy
+                    </span>
+                  </div>
+                  
+                  {/* Progress bar */}
+                  <div className="h-2 bg-stone-100 rounded-full mb-4 overflow-hidden">
+                    <div 
+                      className="h-full bg-emerald-500 rounded-full transition-all"
+                      style={{ width: `${data.totalAttempts > 0 ? (data.correct / data.totalAttempts) * 100 : 0}%` }}
+                    ></div>
+                  </div>
+
+                  <div className="flex gap-4 text-sm mb-4">
+                    <span className="text-emerald-600"><strong>{data.correct}</strong> correct</span>
+                    <span className="text-red-500"><strong>{data.incorrect}</strong> incorrect</span>
+                    <span className="text-stone-500">{Object.keys(data.decks || {}).length} decks</span>
+                  </div>
+
+                  {/* Decks breakdown */}
+                  {data.decks && Object.entries(data.decks).length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-stone-400 uppercase tracking-wide">Decks</p>
+                      {Object.entries(data.decks).map(([deckName, deckData]: [string, any]) => (
+                        <div key={deckName} className="flex justify-between items-center p-3 bg-stone-50 rounded-lg text-sm">
+                          <span className="font-medium text-stone-700 truncate flex-1">{deckName}</span>
+                          <div className="flex items-center gap-3 text-xs">
+                            <span className="text-emerald-600">{deckData.correct}✓</span>
+                            <span className="text-red-500">{deckData.incorrect}✗</span>
+                            <span className="bg-stone-200 px-2 py-0.5 rounded text-stone-600">Best: {deckData.bestScore}%</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Detailed Table */}
+              {userAnalytics.analytics && userAnalytics.analytics.length > 0 && (
+                <div className="bg-white rounded-2xl p-6 border border-stone-200">
+                  <h2 className="font-bold text-stone-800 mb-4">Session History</h2>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-stone-200">
+                          <th className="text-left py-2 text-stone-500 font-medium">Subject</th>
+                          <th className="text-left py-2 text-stone-500 font-medium">Deck</th>
+                          <th className="text-right py-2 text-stone-500 font-medium">Attempts</th>
+                          <th className="text-right py-2 text-stone-500 font-medium">Best</th>
+                          <th className="text-right py-2 text-stone-500 font-medium">Avg</th>
+                          <th className="text-right py-2 text-stone-500 font-medium">Last Played</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {userAnalytics.analytics.map((row: any, idx: number) => (
+                          <tr key={idx} className="border-b border-stone-100">
+                            <td className="py-2 text-stone-700">{row.subject}</td>
+                            <td className="py-2 text-stone-700 truncate max-w-32">{row.deck}</td>
+                            <td className="py-2 text-right text-stone-600">{row.totalAttempts}</td>
+                            <td className="py-2 text-right text-emerald-600">{row.bestScore}%</td>
+                            <td className="py-2 text-right text-stone-600">{row.averageScore}%</td>
+                            <td className="py-2 text-right text-stone-400 text-xs">
+                              {row.lastPlayed ? new Date(row.lastPlayed).toLocaleDateString() : '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </main>
       </div>
     );
   }

@@ -76,6 +76,10 @@ function doPost(e) {
         return jsonResponse(loginOrCreateUser(data.idNumber, data.name));
       case 'updateRecord':
         return jsonResponse(updateUserRecord(data.idNumber, data.record));
+      case 'saveSessionResult':
+        return jsonResponse(saveSessionResult(data));
+      case 'getAnalytics':
+        return jsonResponse(getUserAnalytics(data.idNumber));
       case 'uploadResource':
         return jsonResponse(uploadResource(data));
       case 'deleteResource':
@@ -102,19 +106,19 @@ function setupSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const results = [];
   
-  // 1. Setup User sheet
+  // 1. Setup User sheet with analytics column
   let userSheet = ss.getSheetByName('User');
   if (!userSheet) {
     userSheet = ss.insertSheet('User');
-    userSheet.appendRow(['ID Number', 'Name', 'Record']);
+    userSheet.appendRow(['ID Number', 'Name', 'Record', 'Analytics', 'LastActive']);
     userSheet.setFrozenRows(1);
-    results.push('Created User sheet');
+    results.push('Created User sheet with analytics columns');
   } else {
-    // Check if headers exist
-    const headers = userSheet.getRange(1, 1, 1, 3).getValues()[0];
-    if (headers[0] !== 'ID Number') {
-      userSheet.getRange(1, 1, 1, 3).setValues([['ID Number', 'Name', 'Record']]);
-      results.push('Updated User sheet headers');
+    // Check if headers exist and update if needed
+    const headers = userSheet.getRange(1, 1, 1, 5).getValues()[0];
+    if (headers[0] !== 'ID Number' || headers[3] !== 'Analytics') {
+      userSheet.getRange(1, 1, 1, 5).setValues([['ID Number', 'Name', 'Record', 'Analytics', 'LastActive']]);
+      results.push('Updated User sheet headers with analytics');
     } else {
       results.push('User sheet already exists');
     }
@@ -131,7 +135,7 @@ function setupSheets() {
     results.push('Category sheet already exists');
   }
   
-  // 3. Setup Resources sheet with new structure
+  // 3. Setup Resources sheet with Title and Description
   let resourceSheet = ss.getSheetByName('Resources');
   if (!resourceSheet) {
     resourceSheet = ss.insertSheet('Resources');
@@ -282,6 +286,268 @@ function updateUserRecord(idNumber, record) {
   }
   
   return { error: 'User not found' };
+}
+
+/**
+ * Save analytics data for a flashcard session
+ * @param {Object} data - { idNumber, subject, deck, correct, incorrect, timeSpent }
+ */
+function saveAnalytics(data) {
+  try {
+    const { idNumber, subject, deck, correct, incorrect, timeSpent } = data;
+    
+    if (!idNumber || !subject || !deck) {
+      return { error: 'Missing required fields' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const analyticsSheet = ss.getSheetByName('Analytics');
+    
+    if (!analyticsSheet) {
+      return { error: 'Analytics sheet not found. Please run setupSheets first.' };
+    }
+    
+    const totalAttempts = (correct || 0) + (incorrect || 0);
+    const score = totalAttempts > 0 ? Math.round((correct / totalAttempts) * 100) : 0;
+    const now = new Date().toISOString();
+    
+    // Find existing row for this user/subject/deck combo
+    const analyticsData = analyticsSheet.getDataRange().getValues();
+    let existingRow = -1;
+    
+    for (let i = 1; i < analyticsData.length; i++) {
+      if (String(analyticsData[i][0]) === String(idNumber) && 
+          String(analyticsData[i][1]) === String(subject) && 
+          String(analyticsData[i][2]) === String(deck)) {
+        existingRow = i + 1;
+        break;
+      }
+    }
+    
+    if (existingRow > 0) {
+      // Update existing record
+      const oldTotalAttempts = analyticsData[existingRow - 1][3] || 0;
+      const oldCorrect = analyticsData[existingRow - 1][4] || 0;
+      const oldIncorrect = analyticsData[existingRow - 1][5] || 0;
+      const oldBestScore = analyticsData[existingRow - 1][7] || 0;
+      const oldTimeSpent = analyticsData[existingRow - 1][9] || 0;
+      
+      const newTotalAttempts = oldTotalAttempts + totalAttempts;
+      const newCorrect = oldCorrect + correct;
+      const newIncorrect = oldIncorrect + incorrect;
+      const newBestScore = Math.max(oldBestScore, score);
+      const newAvgScore = newTotalAttempts > 0 ? Math.round((newCorrect / newTotalAttempts) * 100) : 0;
+      const newTimeSpent = oldTimeSpent + (timeSpent || 0);
+      
+      analyticsSheet.getRange(existingRow, 4, 1, 7).setValues([[
+        newTotalAttempts, newCorrect, newIncorrect, now, newBestScore, newAvgScore, newTimeSpent
+      ]]);
+    } else {
+      // Add new record
+      analyticsSheet.appendRow([
+        idNumber, subject, deck, totalAttempts, correct, incorrect, now, score, score, timeSpent || 0
+      ]);
+    }
+    
+    // Also update User Record JSON for quick access
+    updateUserRecordWithAnalytics(idNumber, subject, deck, correct, incorrect, score);
+    
+    return { success: true };
+  } catch (error) {
+    return { error: error.toString() };
+  }
+}
+
+/**
+ * Update user's Record JSON with analytics summary
+ */
+function updateUserRecordWithAnalytics(idNumber, subject, deck, correct, incorrect, score) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const userSheet = ss.getSheetByName('User');
+  
+  if (!userSheet) return;
+  
+  const data = userSheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(idNumber)) {
+      let record = {};
+      try {
+        record = JSON.parse(data[i][2] || '{}');
+      } catch (e) {
+        record = {};
+      }
+      
+      // Initialize structure if needed
+      if (!record.analytics) {
+        record.analytics = { subjects: {} };
+      }
+      if (!record.analytics.subjects[subject]) {
+        record.analytics.subjects[subject] = {
+          totalAttempts: 0,
+          correct: 0,
+          incorrect: 0,
+          decks: {}
+        };
+      }
+      if (!record.analytics.subjects[subject].decks[deck]) {
+        record.analytics.subjects[subject].decks[deck] = {
+          attempts: 0,
+          correct: 0,
+          incorrect: 0,
+          bestScore: 0,
+          lastPlayed: null
+        };
+      }
+      
+      // Update subject totals
+      record.analytics.subjects[subject].totalAttempts += (correct + incorrect);
+      record.analytics.subjects[subject].correct += correct;
+      record.analytics.subjects[subject].incorrect += incorrect;
+      
+      // Update deck stats
+      const deckStats = record.analytics.subjects[subject].decks[deck];
+      deckStats.attempts += (correct + incorrect);
+      deckStats.correct += correct;
+      deckStats.incorrect += incorrect;
+      deckStats.bestScore = Math.max(deckStats.bestScore, score);
+      deckStats.lastPlayed = new Date().toISOString();
+      
+      userSheet.getRange(i + 1, 3).setValue(JSON.stringify(record));
+      break;
+    }
+  }
+}
+
+/**
+ * Get all analytics for a user
+ * @param {string} idNumber - User ID
+ */
+function getAnalytics(idNumber) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const analyticsSheet = ss.getSheetByName('Analytics');
+    
+    if (!analyticsSheet) {
+      return { error: 'Analytics sheet not found' };
+    }
+    
+    const data = analyticsSheet.getDataRange().getValues();
+    const headers = data[0];
+    const analytics = [];
+    
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(idNumber)) {
+        analytics.push({
+          subject: data[i][1],
+          deck: data[i][2],
+          totalAttempts: data[i][3],
+          correctAnswers: data[i][4],
+          incorrectAnswers: data[i][5],
+          lastPlayed: data[i][6],
+          bestScore: data[i][7],
+          averageScore: data[i][8],
+          timeSpent: data[i][9]
+        });
+      }
+    }
+    
+    // Also get summary from user record
+    const userSheet = ss.getSheetByName('User');
+    let recordAnalytics = null;
+    
+    if (userSheet) {
+      const userData = userSheet.getDataRange().getValues();
+      for (let i = 1; i < userData.length; i++) {
+        if (String(userData[i][0]) === String(idNumber)) {
+          try {
+            const record = JSON.parse(userData[i][2] || '{}');
+            recordAnalytics = record.analytics || null;
+          } catch (e) {}
+          break;
+        }
+      }
+    }
+    
+    return { 
+      success: true, 
+      analytics: analytics,
+      summary: recordAnalytics
+    };
+  } catch (error) {
+    return { error: error.toString() };
+  }
+}
+
+/**
+ * Get analytics for a specific user and subject
+ * @param {string} idNumber - User ID
+ * @param {string} subject - Subject code (optional)
+ */
+function getUserAnalytics(idNumber, subject) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const analyticsSheet = ss.getSheetByName('Analytics');
+    
+    if (!analyticsSheet) {
+      return { error: 'Analytics sheet not found' };
+    }
+    
+    const data = analyticsSheet.getDataRange().getValues();
+    const analytics = [];
+    
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(idNumber)) {
+        // If subject specified, filter by it
+        if (!subject || String(data[i][1]) === String(subject)) {
+          analytics.push({
+            subject: data[i][1],
+            deck: data[i][2],
+            totalAttempts: data[i][3],
+            correctAnswers: data[i][4],
+            incorrectAnswers: data[i][5],
+            lastPlayed: data[i][6],
+            bestScore: data[i][7],
+            averageScore: data[i][8],
+            timeSpent: data[i][9]
+          });
+        }
+      }
+    }
+    
+    // Calculate aggregated stats
+    let totalAttempts = 0;
+    let totalCorrect = 0;
+    let totalIncorrect = 0;
+    let totalTimeSpent = 0;
+    let overallBestScore = 0;
+    
+    analytics.forEach(a => {
+      totalAttempts += a.totalAttempts || 0;
+      totalCorrect += a.correctAnswers || 0;
+      totalIncorrect += a.incorrectAnswers || 0;
+      totalTimeSpent += a.timeSpent || 0;
+      overallBestScore = Math.max(overallBestScore, a.bestScore || 0);
+    });
+    
+    const overallAverage = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
+    
+    return { 
+      success: true, 
+      analytics: analytics,
+      aggregated: {
+        totalAttempts,
+        totalCorrect,
+        totalIncorrect,
+        totalTimeSpent,
+        overallBestScore,
+        overallAverage,
+        decksPlayed: analytics.length
+      }
+    };
+  } catch (error) {
+    return { error: error.toString() };
+  }
 }
 
 /**
