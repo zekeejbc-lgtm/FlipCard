@@ -16,9 +16,10 @@ type Deck = {
   lastUpdated?: number;
 };
 
-type AppView = 'HOME' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY' | 'SETTINGS';
+type AppView = 'HOME' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY';
 
-const STORAGE_KEY_URL = 'flashcard_gas_url';
+// Hardcoded GAS URL - no user configuration needed
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxnlS12um9vSaZqrC4oS6MZbl0AVAZyop3G9Qd2uAZmtj1VMP6ZiP0APtd-mFYBGpA/exec';
 const STORAGE_KEY_STATE = 'flashcard_session_state';
 
 // --- Database (Dexie) ---
@@ -30,29 +31,6 @@ const db = new Dexie('FlashMasterDB') as Dexie & {
 db.version(1).stores({
   decks: 'name'
 });
-
-// --- Mock Data (Fallback) ---
-const DEMO_DECKS: Deck[] = [
-  {
-    name: "Demo: History",
-    cards: [
-      { id: "h1", q: "Who was the first President of the USA?", a: "George Washington" },
-      { id: "h2", q: "In which year did the Titanic sink?", a: "1912" },
-      { id: "h3", q: "Who painted the Mona Lisa?", a: "Leonardo da Vinci" },
-      { id: "h4", q: "What empire did Genghis Khan found?", a: "The Mongol Empire" },
-      { id: "h5", q: "When did the Berlin Wall fall?", a: "1989" }
-    ]
-  },
-  {
-    name: "Demo: Science",
-    cards: [
-      { id: "s1", q: "What is the chemical symbol for Gold?", a: "Au" },
-      { id: "s2", q: "What planet is known as the Red Planet?", a: "Mars" },
-      { id: "s3", q: "What is the powerhouse of the cell?", a: "Mitochondria" },
-      { id: "s4", q: "What gas do plants absorb?", a: "Carbon Dioxide" }
-    ]
-  }
-];
 
 // --- Components ---
 
@@ -69,7 +47,6 @@ const App = () => {
   const [view, setView] = useState<AppView>('HOME');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [gasUrl, setGasUrl] = useState(localStorage.getItem(STORAGE_KEY_URL) || '');
   const [decks, setDecks] = useState<Deck[]>([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   
@@ -85,11 +62,8 @@ const App = () => {
   useEffect(() => {
     // 1. Initialize logic
     const initApp = async () => {
-      // Load Decks from Dexie
+      // Load Decks from Dexie (cached data for offline)
       let localDecks = await db.decks.toArray();
-      if (localDecks.length === 0 && !gasUrl) {
-        localDecks = DEMO_DECKS;
-      }
       setDecks(localDecks);
       setLoading(false);
 
@@ -112,9 +86,9 @@ const App = () => {
         }
       }
 
-      // Initial Sync if configured
-      if (gasUrl && navigator.onLine) {
-        syncDecks(gasUrl, false);
+      // Always sync from GAS when online
+      if (navigator.onLine) {
+        syncDecks(false);
       }
     };
 
@@ -126,9 +100,9 @@ const App = () => {
     
     // Auto-sync when app comes back to foreground
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && navigator.onLine && gasUrl) {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
         console.log("App focused, checking for updates...");
-        syncDecks(gasUrl, true);
+        syncDecks(true);
       }
     };
 
@@ -160,12 +134,12 @@ const App = () => {
 
   // --- Logic ---
 
-  const syncDecks = async (url: string = gasUrl, silent = false) => {
-    if (!url || !navigator.onLine) return;
+  const syncDecks = async (silent = false) => {
+    if (!navigator.onLine) return;
     if (!silent) setSyncing(true);
     
     try {
-      const response = await fetch(url);
+      const response = await fetch(GAS_URL);
       if (!response.ok) throw new Error("Network response was not ok");
       
       const data = await response.json();
@@ -306,7 +280,7 @@ const App = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-12">
               {decks.length === 0 && (
                 <div className="col-span-full text-center p-8 bg-white rounded-2xl border border-stone-200 text-stone-500">
-                  No decks found. Set up your data source.
+                  No decks available. Please check your internet connection and refresh.
                 </div>
               )}
               {decks.map(deck => (
@@ -326,16 +300,6 @@ const App = () => {
               ))}
             </div>
 
-            {/* Footer Settings Link */}
-            <div className="text-center pb-8 pt-4 border-t border-stone-200 mt-auto">
-               <button 
-                 onClick={() => setView('SETTINGS')}
-                 className="text-stone-400 text-sm hover:text-stone-600 flex items-center justify-center gap-2 mx-auto px-4 py-2 rounded-lg hover:bg-stone-100 transition-colors"
-               >
-                 <Icon name="settings" className="text-lg" />
-                 <span>Manage Data Source</span>
-               </button>
-            </div>
           </div>
         )}
       </div>
@@ -553,67 +517,8 @@ const App = () => {
     );
   }
 
-  // Settings View
-  return (
-    <div className="min-h-screen bg-[#F5F5F4] p-6 max-w-md mx-auto">
-      <div className="flex items-center gap-4 mb-8 mt-2">
-        <button onClick={resetHome} className="p-2 -ml-2 text-stone-500 hover:bg-white rounded-full transition-colors">
-          <Icon name="arrow_back" />
-        </button>
-        <h1 className="text-xl font-bold text-stone-800">Settings</h1>
-      </div>
-
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-200 mb-6">
-        <label className="block text-sm font-bold text-stone-700 uppercase tracking-wider mb-3">
-          Google Apps Script URL
-        </label>
-        <input 
-          type="text" 
-          value={gasUrl}
-          onChange={(e) => setGasUrl(e.target.value)}
-          placeholder="https://script.google.com/..."
-          className="w-full p-4 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 text-sm focus:ring-2 focus:ring-stone-400 outline-none transition-shadow"
-        />
-        <p className="text-xs text-stone-400 mt-2">Leave empty to use demo mode.</p>
-      </div>
-
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-200">
-        <h3 className="font-bold text-stone-800 mb-4 flex items-center gap-2">
-          <Icon name="code" className="text-stone-400" /> Backend Setup Guide
-        </h3>
-        <p className="text-sm text-stone-600 mb-4 leading-relaxed">
-           Deploy the code from <code className="bg-stone-100 px-1 rounded">backend.gs</code> as a Web App:
-        </p>
-        <ol className="list-decimal pl-4 space-y-2 text-sm text-stone-600 marker:text-stone-400 mb-4">
-          <li>Create a Google Spreadsheet</li>
-          <li>Go to Extensions → Apps Script</li>
-          <li>Paste the backend.gs code</li>
-          <li>Deploy → Web App (Execute: Me, Access: Anyone)</li>
-          <li>Copy the Web App URL and paste above</li>
-        </ol>
-        <div className="bg-stone-50 p-3 rounded-lg border border-stone-200">
-          <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Sheet Format:</p>
-          <ul className="list-disc pl-4 space-y-1 text-sm text-stone-600 marker:text-stone-400">
-            <li>Each Sheet = One Deck (e.g., "FL111 exam (1)")</li>
-            <li>Row 1 = Headers (ignored)</li>
-            <li>Column A = Question</li>
-            <li>Column B = Answer</li>
-          </ul>
-        </div>
-      </div>
-
-      <button 
-        onClick={() => {
-          localStorage.setItem(STORAGE_KEY_URL, gasUrl);
-          syncDecks(gasUrl, false);
-          resetHome();
-        }}
-        className="w-full mt-6 py-4 bg-stone-800 text-[#FDFBF7] rounded-2xl font-bold shadow-lg active:scale-[0.98] transition-transform"
-      >
-        Save & Return
-      </button>
-    </div>
-  );
+  // Fallback - should never reach here
+  return null;
 };
 
 const root = createRoot(document.getElementById('root')!);
