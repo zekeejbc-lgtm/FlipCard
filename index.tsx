@@ -746,6 +746,11 @@ const App = () => {
   const [showLogin, setShowLogin] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
 
+  // PWA Install State
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallToast, setShowInstallToast] = useState(false);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
+
   // Toast State
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastIdRef = useRef(0);
@@ -880,6 +885,109 @@ const App = () => {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // --- PWA Install Prompt & Cache Management ---
+  
+  useEffect(() => {
+    // Check if already installed
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                         (window.navigator as any).standalone === true;
+    const dismissedInstall = localStorage.getItem('flashmaster_install_dismissed');
+    
+    if (isStandalone) {
+      setIsAppInstalled(true);
+      localStorage.setItem('flashmaster_installed', 'true');
+    } else if (!dismissedInstall && !localStorage.getItem('flashmaster_installed')) {
+      // Show install prompt after 3 seconds
+      const timer = setTimeout(() => {
+        setShowInstallToast(true);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+
+    // Listen for install prompt
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    // Listen for successful install
+    const handleAppInstalled = () => {
+      setIsAppInstalled(true);
+      setShowInstallToast(false);
+      setDeferredPrompt(null);
+      localStorage.setItem('flashmaster_installed', 'true');
+      addToast('App installed successfully!', 'success');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  // --- Cache Management - Auto clear on new version ---
+  
+  useEffect(() => {
+    const APP_VERSION = '1.1.0'; // Increment this to trigger cache clear
+    const storedVersion = localStorage.getItem('flashmaster_version');
+    
+    if (storedVersion !== APP_VERSION) {
+      // New version detected - clear caches
+      const clearCaches = async () => {
+        try {
+          // Clear IndexedDB cache
+          await db.decks.clear();
+          await db.categories.clear();
+          await db.resources.clear();
+          
+          // Clear service worker caches if available
+          if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map(name => caches.delete(name)));
+          }
+          
+          // Update stored version
+          localStorage.setItem('flashmaster_version', APP_VERSION);
+          
+          console.log('Cache cleared for new version:', APP_VERSION);
+          
+          // Reload data
+          if (navigator.onLine) {
+            syncData(true);
+          }
+        } catch (e) {
+          console.error('Error clearing cache:', e);
+        }
+      };
+      
+      clearCaches();
+    }
+  }, []);
+
+  // PWA Install handlers
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setShowInstallToast(false);
+      }
+      setDeferredPrompt(null);
+    } else {
+      // Fallback for browsers that don't support beforeinstallprompt
+      addToast('Add to Home Screen from your browser menu', 'info');
+      setShowInstallToast(false);
+    }
+  };
+
+  const handleDismissInstall = () => {
+    setShowInstallToast(false);
+    localStorage.setItem('flashmaster_install_dismissed', Date.now().toString());
+  };
 
   // --- Data Sync ---
 
@@ -1111,6 +1219,36 @@ const App = () => {
     return (
       <div className="min-h-screen bg-[#F5F5F4]">
         <ToastContainer toasts={toasts} removeToast={removeToast} />
+        
+        {/* PWA Install Toast */}
+        {showInstallToast && !isAppInstalled && (
+          <div className="fixed bottom-20 left-4 right-4 z-[90] animate-slide-up">
+            <div className="max-w-md mx-auto bg-gradient-to-r from-stone-800 to-stone-700 text-white p-4 rounded-2xl shadow-xl flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Icon name="download" className="text-2xl" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold">Install FlashMaster</p>
+                <p className="text-sm text-stone-300">Get faster access & offline support</p>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                <button 
+                  onClick={handleDismissInstall}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <Icon name="close" className="text-stone-300" />
+                </button>
+                <button 
+                  onClick={handleInstallClick}
+                  className="px-4 py-2 bg-white text-stone-800 rounded-xl font-semibold hover:bg-stone-100 transition-colors"
+                >
+                  Install
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <LoginModal 
           isOpen={showLogin} 
           onClose={() => setShowLogin(false)} 
