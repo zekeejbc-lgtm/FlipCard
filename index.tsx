@@ -536,12 +536,12 @@ const App = () => {
             </div>
           )}
 
-          {/* All Flashcards Section */}
-          {decks.length > 0 && (
+          {/* Uncategorized Decks Section */}
+          {decks.filter(d => !d.subject || d.subject === 'Uncategorized' || !displaySubjects.includes(d.subject)).length > 0 && (
             <>
-              <h2 className="text-lg font-bold text-stone-800 mb-4 mt-8">All Flashcard Decks</h2>
+              <h2 className="text-lg font-bold text-stone-800 mb-4 mt-8">Uncategorized</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {decks.map(deck => (
+                {decks.filter(d => !d.subject || d.subject === 'Uncategorized' || !displaySubjects.includes(d.subject)).map(deck => (
                   <button
                     key={deck.name}
                     onClick={() => openDeck(deck)}
