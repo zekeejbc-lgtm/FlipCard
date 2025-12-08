@@ -90,6 +90,7 @@ type SubjectInfo = {
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxnlS12um9vSaZqrC4oS6MZbl0AVAZyop3G9Qd2uAZmtj1VMP6ZiP0APtd-mFYBGpA/exec';
 const STORAGE_KEY_USER = 'flashmaster_user';
 const STORAGE_KEY_STATE = 'flashcard_session_state';
+const STORAGE_KEY_CACHE_VERSION = 'flashmaster_cache_version';
 
 // --- Database ---
 
@@ -1408,6 +1409,40 @@ const App = () => {
 
   // --- Data Sync ---
 
+  // Function to clear all local cache
+  const clearAllLocalCache = async () => {
+    // Clear localStorage (except user)
+    const savedUser = localStorage.getItem(STORAGE_KEY_USER);
+    localStorage.clear();
+    if (savedUser) {
+      localStorage.setItem(STORAGE_KEY_USER, savedUser);
+    }
+    
+    // Clear sessionStorage
+    sessionStorage.clear();
+    
+    // Clear IndexedDB
+    await db.decks.clear();
+    await db.categories.clear();
+    await db.resources.clear();
+    
+    // Unregister service workers
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const registration of registrations) {
+        await registration.unregister();
+      }
+    }
+    
+    // Clear Cache API
+    if ('caches' in window) {
+      const names = await caches.keys();
+      for (const name of names) {
+        await caches.delete(name);
+      }
+    }
+  };
+
   const syncData = async (showToast = true) => {
     let toastId: number | null = null;
     
@@ -1433,6 +1468,17 @@ const App = () => {
           setTimeout(() => removeToast(toastId!), 4000);
         }
         return;
+      }
+
+      // Check cache version - if server version is higher, clear all cache
+      if (data.cacheVersion) {
+        const localVersion = parseInt(localStorage.getItem(STORAGE_KEY_CACHE_VERSION) || '0');
+        if (data.cacheVersion > localVersion) {
+          console.log(`Cache version changed: ${localVersion} -> ${data.cacheVersion}. Clearing cache...`);
+          if (toastId) updateToast(toastId, 'New version detected, updating cache...', 'loading', 45);
+          await clearAllLocalCache();
+          localStorage.setItem(STORAGE_KEY_CACHE_VERSION, String(data.cacheVersion));
+        }
       }
 
       if (toastId) updateToast(toastId, 'Processing flashcards...', 'loading', 50);
@@ -1565,49 +1611,46 @@ const App = () => {
     localStorage.removeItem(STORAGE_KEY_USER);
   };
 
-  const handleAdminClearAllCache = () => {
+  const handleAdminClearAllCache = async () => {
     if (!user || user.idNumber !== ADMIN_USER_ID) return;
     
-    if (!confirm('Are you sure you want to clear ALL cache for ALL users? This will:\n\n• Clear all localStorage data\n• Clear all sessionStorage data\n• Unregister service workers\n• Clear browser cache\n\nUsers will need to login again.')) {
+    if (!confirm('Are you sure you want to clear ALL cache for ALL users?\\n\\nThis will force everyone to reload fresh data on their next visit.')) {
       return;
     }
     
-    const toastId = addToast('Admin: Clearing all cache...', 'loading');
+    const toastId = addToast('Admin: Bumping cache version...', 'loading');
     
     try {
-      // Clear all localStorage
-      localStorage.clear();
+      // Call backend to bump cache version
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'bumpCacheVersion',
+          userId: user.idNumber
+        })
+      });
       
-      // Clear all sessionStorage
-      sessionStorage.clear();
+      const result = await response.json();
       
-      // Unregister all service workers
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(registrations => {
-          registrations.forEach(registration => {
-            registration.unregister();
-          });
-        });
+      if (result.error) {
+        updateToast(toastId, `Error: ${result.error}`, 'error');
+        setTimeout(() => removeToast(toastId), 4000);
+        return;
       }
       
-      // Clear caches (Cache API)
-      if ('caches' in window) {
-        caches.keys().then(names => {
-          names.forEach(name => {
-            caches.delete(name);
-          });
-        });
-      }
+      updateToast(toastId, `Cache version bumped to v${result.newVersion}! All users will refresh on next load.`, 'success');
+      setTimeout(() => removeToast(toastId), 5000);
       
-      updateToast(toastId, 'Cache cleared! Reloading...', 'success');
+      // Also clear local cache and reload
+      await clearAllLocalCache();
+      localStorage.setItem(STORAGE_KEY_CACHE_VERSION, String(result.newVersion));
       
-      // Reload page after a short delay
       setTimeout(() => {
         window.location.reload();
-      }, 1500);
-    } catch (error) {
-      updateToast(toastId, 'Failed to clear cache', 'error');
-      setTimeout(() => removeToast(toastId), 3000);
+      }, 2000);
+    } catch (error: any) {
+      updateToast(toastId, `Failed: ${error.message}`, 'error');
+      setTimeout(() => removeToast(toastId), 4000);
     }
   };
 

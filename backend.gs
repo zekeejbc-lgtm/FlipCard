@@ -104,6 +104,10 @@ function doPost(e) {
         return jsonResponse(deleteExam(data.examId, data.userId));
       case 'getExams':
         return jsonResponse(getExams(data.subject));
+      case 'getCacheVersion':
+        return jsonResponse(getCacheVersion());
+      case 'bumpCacheVersion':
+        return jsonResponse(bumpCacheVersion(data.userId));
       default:
         return jsonResponse({ error: 'Unknown action' });
     }
@@ -219,6 +223,7 @@ function setupSheets() {
 function getAllData() {
   const examsResult = getExams();
   const subjects = getSubjects();
+  const cacheVersionResult = getCacheVersion();
   
   // Build subjectInfo map for quick lookup
   const subjectInfo = {};
@@ -232,7 +237,8 @@ function getAllData() {
     resources: getResources(),
     subjects: subjects, // Array of {code, name} objects
     subjectInfo: subjectInfo, // Map of code -> {code, name}
-    exams: examsResult.success ? examsResult.exams : []
+    exams: examsResult.success ? examsResult.exams : [],
+    cacheVersion: cacheVersionResult.version || 1
   };
 }
 
@@ -1611,5 +1617,53 @@ function deleteExam(examId, userId) {
     return { error: 'Exam not found' };
   } catch (error) {
     return { error: 'Failed to delete exam: ' + error.message };
+  }
+}
+
+// ==================== CACHE VERSION FUNCTIONS ====================
+
+const ADMIN_USER_ID = '2025-00046';
+
+/**
+ * Get current cache version from script properties
+ */
+function getCacheVersion() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const version = props.getProperty('CACHE_VERSION');
+    return { 
+      success: true, 
+      version: version ? parseInt(version) : 1 
+    };
+  } catch (error) {
+    return { success: false, version: 1, error: error.message };
+  }
+}
+
+/**
+ * Bump cache version (admin only) - forces all clients to clear cache
+ * @param {string} userId - User ID requesting the bump
+ */
+function bumpCacheVersion(userId) {
+  try {
+    // Only allow admin user
+    if (String(userId) !== ADMIN_USER_ID) {
+      return { error: 'Unauthorized. Only admin can bump cache version.' };
+    }
+    
+    const props = PropertiesService.getScriptProperties();
+    const currentVersion = props.getProperty('CACHE_VERSION');
+    const newVersion = (currentVersion ? parseInt(currentVersion) : 1) + 1;
+    
+    props.setProperty('CACHE_VERSION', String(newVersion));
+    
+    return { 
+      success: true, 
+      message: 'Cache version bumped. All users will clear their cache on next load.',
+      oldVersion: currentVersion ? parseInt(currentVersion) : 1,
+      newVersion: newVersion
+    };
+  } catch (error) {
+    return { error: 'Failed to bump cache version: ' + error.message };
   }
 }
