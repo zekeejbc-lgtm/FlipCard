@@ -86,6 +86,8 @@ function doPost(e) {
         return jsonResponse(uploadResource(data));
       case 'deleteResource':
         return jsonResponse(deleteResource(data.resourceUrl, data.userId));
+      case 'addResourceByLink':
+        return jsonResponse(addResourceByLink(data));
       default:
         return jsonResponse({ error: 'Unknown action' });
     }
@@ -674,6 +676,58 @@ function deleteResource(resourceUrl, userId) {
     return { error: 'Resource not found' };
   } catch (error) {
     return { error: 'Delete failed: ' + error.message };
+  }
+}
+
+/**
+ * Add a resource by external link (user uploads to Drive manually)
+ * @param {Object} data - Resource data with link
+ */
+function addResourceByLink(data) {
+  try {
+    const { title, description, subject, category, link, userId, userName } = data;
+    
+    // Validate required fields
+    if (!title || !subject || !category || !link || !userId) {
+      return { error: 'Missing required fields' };
+    }
+    
+    // Validate that it's a Google Drive link
+    if (!link.includes('drive.google.com') && !link.includes('docs.google.com')) {
+      return { error: 'Please provide a valid Google Drive link' };
+    }
+    
+    // Save to Resources sheet
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let resourceSheet = ss.getSheetByName('Resources');
+    
+    if (!resourceSheet) {
+      resourceSheet = ss.insertSheet('Resources');
+      resourceSheet.appendRow(['Title', 'Description', 'Subject', 'Category', 'URL', 'SubmittedBy', 'SubmittedByName', 'Timestamp']);
+    }
+    
+    const timestamp = new Date().toISOString();
+    resourceSheet.appendRow([title, description || '', subject, category, link, userId, userName || '', timestamp]);
+    
+    // Try to extract file ID for the resource object
+    const fileId = extractFileIdFromUrl(link);
+    
+    return {
+      success: true,
+      resource: {
+        id: fileId || 'external-' + Date.now(),
+        title: title,
+        description: description || '',
+        subject: subject,
+        category: category,
+        url: link,
+        submittedBy: userId,
+        submittedByName: userName || '',
+        timestamp: timestamp
+      }
+    };
+  } catch (error) {
+    return { error: 'Failed to add resource: ' + error.message };
   }
 }
 

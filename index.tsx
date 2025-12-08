@@ -78,7 +78,7 @@ const Icon = ({ name, className = "" }: { name: string; className?: string }) =>
 // Toast Container Component
 const ToastContainer = ({ toasts, removeToast }: { toasts: Toast[]; removeToast: (id: number) => void }) => {
   return (
-    <div className="fixed bottom-4 right-4 z-50 space-y-2 max-w-sm">
+    <div className="fixed bottom-4 right-4 z-[100] space-y-2 max-w-sm">
       {toasts.map(toast => (
         <div 
           key={toast.id}
@@ -137,22 +137,25 @@ const UploadModal = ({
   updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
   removeToast: (id: number) => void;
 }) => {
+  const [mode, setMode] = useState<'upload' | 'link'>('upload');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<'Lesson PPT' | 'Lesson PDF' | 'Video' | 'Reviewer'>('Lesson PDF');
   const [files, setFiles] = useState<File[]>([]);
+  const [driveLink, setDriveLink] = useState('');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [showInstructions, setShowInstructions] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const MAX_TOTAL_SIZE = 5 * 1024 * 1024 * 1024; // 5GB
+  const MAX_FILE_SIZE = 35 * 1024 * 1024; // 35MB limit for base64 upload
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
-    const totalSize = selectedFiles.reduce((acc, f) => acc + f.size, 0);
+    const oversizedFiles = selectedFiles.filter(f => f.size > MAX_FILE_SIZE);
     
-    if (totalSize > MAX_TOTAL_SIZE) {
-      setError('Total file size exceeds 5GB limit');
+    if (oversizedFiles.length > 0) {
+      setError(`File "${oversizedFiles[0].name}" exceeds 35MB limit. Use "Paste Link" for larger files.`);
       return;
     }
     
@@ -171,132 +174,262 @@ const UploadModal = ({
     return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
   };
 
-  const handleUpload = async () => {
+  const validateDriveLink = (url: string): boolean => {
+    const patterns = [
+      /drive\.google\.com/,
+      /docs\.google\.com/,
+      /youtube\.com/,
+      /youtu\.be/,
+    ];
+    return patterns.some(pattern => pattern.test(url));
+  };
+
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setFiles([]);
+    setDriveLink('');
+    setError('');
+  };
+
+  const handleSubmit = async () => {
     if (!title.trim()) {
       setError('Please enter a title');
       return;
     }
-    if (files.length === 0) {
+    if (mode === 'upload' && files.length === 0) {
       setError('Please select at least one file');
       return;
     }
+    if (mode === 'link' && !driveLink.trim()) {
+      setError('Please enter a link');
+      return;
+    }
+    if (mode === 'link' && !validateDriveLink(driveLink)) {
+      setError('Please enter a valid Google Drive or YouTube link');
+      return;
+    }
     if (!user) {
-      setError('Please login to upload resources');
+      setError('Please login first');
       return;
     }
 
     setUploading(true);
     setError('');
-    
-    const toastId = addToast(`Preparing upload...`, 'loading', 0);
-    
-    try {
-      let successCount = 0;
+
+    if (mode === 'link') {
+      // Direct link - just save to Resources sheet
+      const toastId = addToast('Step 1/4: Validating link...', 'loading', 10);
       
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const fileTitle = files.length > 1 ? `${title} (${i + 1})` : title;
-        const fileNum = files.length > 1 ? ` (${i + 1}/${files.length})` : '';
+      try {
+        updateToast(toastId, 'Step 2/4: Connecting to server...', 'loading', 30);
         
-        // Step 1: Reading file
-        updateToast(toastId, `Reading ${file.name}${fileNum}...`, 'loading', 10);
-        
-        // Convert file to base64 with progress
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onprogress = (event) => {
-            if (event.lengthComputable) {
-              const percent = Math.round((event.loaded / event.total) * 30) + 10;
-              updateToast(toastId, `Reading ${file.name}${fileNum} (${formatFileSize(event.loaded)}/${formatFileSize(event.total)})`, 'loading', percent);
-            }
-          };
-          reader.onload = () => {
-            const result = reader.result as string;
-            const base64Data = result.split(',')[1];
-            resolve(base64Data);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-        
-        // Step 2: Uploading to server
-        updateToast(toastId, `Uploading ${file.name}${fileNum} to server...`, 'loading', 50);
-        
-        // Upload to GAS
         const response = await fetch(GAS_URL, {
           method: 'POST',
           body: JSON.stringify({
-            action: 'uploadResource',
-            title: fileTitle,
+            action: 'addResourceByLink',
+            title: title,
             description: description,
             subject: subject,
             category: category,
-            fileData: base64,
-            fileName: file.name,
-            mimeType: file.type,
+            link: driveLink,
             userId: user.idNumber,
             userName: user.name
           })
         });
         
-        // Step 3: Processing response
-        updateToast(toastId, `Saving ${file.name}${fileNum} to Drive...`, 'loading', 80);
+        updateToast(toastId, 'Step 3/4: Processing response...', 'loading', 60);
         
         const result = await response.json();
         
+        updateToast(toastId, 'Step 4/4: Finalizing...', 'loading', 90);
+        
         if (result.success) {
-          successCount++;
-          updateToast(toastId, `Uploaded ${file.name}${fileNum} ✓`, 'loading', 90);
+          updateToast(toastId, '✓ Resource added successfully!', 'success', 100);
+          setTimeout(() => removeToast(toastId), 3000);
+          onUploadComplete();
+          onClose();
+          resetForm();
         } else {
-          console.error('Upload failed:', result.error);
-          updateToast(toastId, `Failed: ${result.error || 'Unknown error'}`, 'error', 0);
+          updateToast(toastId, `Error: ${result.error || 'Unknown error'}`, 'error');
+          setTimeout(() => removeToast(toastId), 5000);
         }
-      }
-      
-      if (successCount === files.length) {
-        updateToast(toastId, `Successfully uploaded ${successCount} file(s)!`, 'success', 100);
-        setTimeout(() => removeToast(toastId), 3000);
-        onUploadComplete();
-        onClose();
-        setTitle('');
-        setDescription('');
-        setFiles([]);
-      } else {
-        updateToast(toastId, `Uploaded ${successCount}/${files.length} files`, successCount > 0 ? 'info' : 'error');
+      } catch (err: any) {
+        updateToast(toastId, `Network error: ${err.message || 'Failed to connect'}`, 'error');
         setTimeout(() => removeToast(toastId), 5000);
+      } finally {
+        setUploading(false);
       }
-    } catch (err) {
-      console.error('Upload error:', err);
-      updateToast(toastId, `Upload failed: ${err instanceof Error ? err.message : 'Network error'}`, 'error');
-      setTimeout(() => removeToast(toastId), 5000);
-    } finally {
-      setUploading(false);
+    } else {
+      // File upload
+      const toastId = addToast('Step 1/6: Preparing upload...', 'loading', 5);
+      
+      try {
+        let successCount = 0;
+        
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const fileTitle = files.length > 1 ? `${title} (${i + 1})` : title;
+          const fileNum = files.length > 1 ? ` [${i + 1}/${files.length}]` : '';
+          
+          updateToast(toastId, `Step 2/6: Reading file${fileNum}...`, 'loading', 15);
+          
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onprogress = (e) => {
+              if (e.lengthComputable) {
+                const pct = Math.round((e.loaded / e.total) * 20) + 15;
+                updateToast(toastId, `Step 2/6: Reading... ${formatFileSize(e.loaded)}/${formatFileSize(e.total)}`, 'loading', pct);
+              }
+            };
+            reader.onload = () => resolve((reader.result as string).split(',')[1]);
+            reader.onerror = (e) => reject(new Error('Failed to read file'));
+            reader.readAsDataURL(file);
+          });
+          
+          updateToast(toastId, `Step 3/6: Connecting to server${fileNum}...`, 'loading', 40);
+          
+          const response = await fetch(GAS_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+              action: 'uploadResource',
+              title: fileTitle,
+              description: description,
+              subject: subject,
+              category: category,
+              fileData: base64,
+              fileName: file.name,
+              mimeType: file.type,
+              userId: user.idNumber,
+              userName: user.name
+            })
+          });
+          
+          updateToast(toastId, `Step 4/6: Uploading to Google Drive${fileNum}...`, 'loading', 60);
+          
+          const result = await response.json();
+          
+          updateToast(toastId, `Step 5/6: Saving to database${fileNum}...`, 'loading', 80);
+          
+          if (result.success) {
+            successCount++;
+            updateToast(toastId, `Step 6/6: Verifying${fileNum}...`, 'loading', 95);
+          } else {
+            updateToast(toastId, `✗ Failed: ${result.error || 'Unknown error'}`, 'error');
+            setTimeout(() => removeToast(toastId), 5000);
+            setUploading(false);
+            return;
+          }
+        }
+        
+        if (successCount === files.length) {
+          updateToast(toastId, `✓ ${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully!`, 'success', 100);
+          setTimeout(() => removeToast(toastId), 3000);
+          onUploadComplete();
+          onClose();
+          resetForm();
+        } else {
+          updateToast(toastId, `Partial: ${successCount}/${files.length} uploaded`, 'info');
+          setTimeout(() => removeToast(toastId), 5000);
+        }
+      } catch (err: any) {
+        updateToast(toastId, `✗ Upload failed: ${err.message || 'Network error'}`, 'error');
+        setTimeout(() => removeToast(toastId), 5000);
+      } finally {
+        setUploading(false);
+      }
     }
   };
 
   if (!isOpen) return null;
 
+  // Instructions Modal
+  if (showInstructions) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-stone-800">How to Get a Link</h2>
+            <button onClick={() => setShowInstructions(false)} className="text-stone-400 hover:text-stone-600">
+              <Icon name="close" />
+            </button>
+          </div>
+          
+          <div className="space-y-4 text-sm">
+            <div className="bg-blue-50 p-4 rounded-xl">
+              <p className="font-semibold text-blue-800 mb-2">📁 Google Drive Files</p>
+              <ol className="list-decimal list-inside space-y-1 text-blue-700">
+                <li>Go to <a href="https://drive.google.com" target="_blank" className="underline">drive.google.com</a></li>
+                <li>Upload your file</li>
+                <li>Right-click → Share</li>
+                <li>Set to "Anyone with the link"</li>
+                <li>Copy link and paste here</li>
+              </ol>
+            </div>
+            
+            <div className="bg-green-50 p-4 rounded-xl">
+              <p className="font-semibold text-green-800 mb-2">🎥 YouTube Videos</p>
+              <ol className="list-decimal list-inside space-y-1 text-green-700">
+                <li>Go to the YouTube video</li>
+                <li>Click Share → Copy link</li>
+                <li>Paste here</li>
+              </ol>
+            </div>
+            
+            <div className="bg-amber-50 p-4 rounded-xl">
+              <p className="font-semibold text-amber-800 mb-2">⚠️ Important</p>
+              <p className="text-amber-700">Make sure the file is set to "Anyone with the link can view"</p>
+            </div>
+          </div>
+          
+          <button onClick={() => setShowInstructions(false)} className="w-full mt-4 py-3 bg-stone-800 text-white rounded-xl font-semibold">
+            Got it!
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-stone-800">Upload Resource</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-stone-800">Add Resource</h2>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-600" disabled={uploading}>
             <Icon name="close" />
           </button>
         </div>
 
-        <div className="space-y-4">
+        {/* Mode Tabs */}
+        <div className="flex gap-2 mb-4 p-1 bg-stone-100 rounded-xl">
+          <button
+            onClick={() => { setMode('upload'); setError(''); }}
+            disabled={uploading}
+            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-1 ${
+              mode === 'upload' ? 'bg-white shadow text-stone-800' : 'text-stone-500'
+            }`}
+          >
+            <Icon name="cloud_upload" className="text-base" /> Upload
+          </button>
+          <button
+            onClick={() => { setMode('link'); setError(''); }}
+            disabled={uploading}
+            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-1 ${
+              mode === 'link' ? 'bg-white shadow text-stone-800' : 'text-stone-500'
+            }`}
+          >
+            <Icon name="link" className="text-base" /> Paste Link
+          </button>
+        </div>
+
+        <div className="space-y-3">
           {/* Title */}
           <div>
             <label className="block text-sm font-medium text-stone-600 mb-1">Title *</label>
             <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Enter resource title"
+              type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+              placeholder="Resource title" disabled={uploading}
               className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
-              disabled={uploading}
             />
           </div>
 
@@ -304,120 +437,94 @@ const UploadModal = ({
           <div>
             <label className="block text-sm font-medium text-stone-600 mb-1">Description</label>
             <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description"
-              rows={3}
+              value={description} onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional" rows={2} disabled={uploading}
               className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none resize-none"
-              disabled={uploading}
             />
           </div>
 
-          {/* Subject (read-only) */}
+          {/* Subject */}
           <div>
             <label className="block text-sm font-medium text-stone-600 mb-1">Subject</label>
-            <input
-              type="text"
-              value={subject}
-              readOnly
-              className="w-full p-3 border border-stone-200 rounded-xl bg-stone-50 text-stone-500"
-            />
+            <input type="text" value={subject} readOnly className="w-full p-3 border border-stone-200 rounded-xl bg-stone-50 text-stone-500" />
           </div>
 
           {/* Category */}
           <div>
-            <label className="block text-sm font-medium text-stone-600 mb-1">Submit as *</label>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Category *</label>
             <div className="grid grid-cols-2 gap-2">
               {(['Lesson PPT', 'Lesson PDF', 'Reviewer', 'Video'] as const).map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setCategory(cat)}
-                  disabled={uploading}
-                  className={`p-3 rounded-xl border text-sm font-medium transition-all ${
-                    category === cat 
-                      ? 'bg-stone-800 text-white border-stone-800' 
-                      : 'bg-white text-stone-600 border-stone-200 hover:border-stone-400'
+                <button key={cat} onClick={() => setCategory(cat)} disabled={uploading}
+                  className={`p-2.5 rounded-xl border text-sm font-medium transition-all ${
+                    category === cat ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-600 border-stone-200 hover:border-stone-400'
                   }`}
-                >
-                  {cat}
-                </button>
+                >{cat}</button>
               ))}
             </div>
           </div>
 
-          {/* Submitted By (read-only) */}
+          {/* Submitted By */}
           <div>
             <label className="block text-sm font-medium text-stone-600 mb-1">Submitted by</label>
-            <input
-              type="text"
-              value={user ? `${user.name} (${user.idNumber})` : 'Please login first'}
-              readOnly
-              className="w-full p-3 border border-stone-200 rounded-xl bg-stone-50 text-stone-500"
-            />
+            <input type="text" value={user ? `${user.name} (${user.idNumber})` : 'Login required'} readOnly 
+              className="w-full p-3 border border-stone-200 rounded-xl bg-stone-50 text-stone-500" />
           </div>
 
-          {/* File Upload */}
-          <div>
-            <label className="block text-sm font-medium text-stone-600 mb-1">Files * (Max 5GB total)</label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={handleFileChange}
-              className="hidden"
-              disabled={uploading}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="w-full p-4 border-2 border-dashed border-stone-300 rounded-xl text-stone-500 hover:border-stone-400 hover:bg-stone-50 transition-all flex items-center justify-center gap-2"
-            >
-              <Icon name="cloud_upload" />
-              Click to select files
-            </button>
-            
-            {files.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {files.map((file, i) => (
-                  <div key={i} className="flex items-center gap-2 p-2 bg-stone-50 rounded-lg">
-                    <Icon name="description" className="text-stone-400" />
-                    <span className="flex-1 text-sm text-stone-600 truncate">{file.name}</span>
-                    <span className="text-xs text-stone-400">{formatFileSize(file.size)}</span>
-                    <button 
-                      onClick={() => removeFile(i)}
-                      className="p-1 text-stone-400 hover:text-red-500"
-                      disabled={uploading}
-                    >
-                      <Icon name="close" className="text-sm" />
-                    </button>
-                  </div>
-                ))}
-                <p className="text-xs text-stone-400 text-right">
-                  Total: {formatFileSize(files.reduce((acc, f) => acc + f.size, 0))}
-                </p>
-              </div>
-            )}
-          </div>
-
-          {error && (
-            <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{error}</div>
+          {/* Upload Mode */}
+          {mode === 'upload' && (
+            <div>
+              <label className="block text-sm font-medium text-stone-600 mb-1">File * <span className="text-stone-400">(Max 35MB)</span></label>
+              <input ref={fileInputRef} type="file" multiple onChange={handleFileChange} className="hidden" disabled={uploading} />
+              <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                className="w-full p-4 border-2 border-dashed border-stone-300 rounded-xl text-stone-500 hover:border-stone-400 flex items-center justify-center gap-2"
+              >
+                <Icon name="cloud_upload" /> Select files
+              </button>
+              <p className="text-xs text-stone-400 mt-1">For larger files, use <button onClick={() => setMode('link')} className="text-blue-500 underline">Paste Link</button></p>
+              
+              {files.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {files.map((f, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2 bg-stone-50 rounded-lg text-sm">
+                      <Icon name="description" className="text-stone-400" />
+                      <span className="flex-1 truncate">{f.name}</span>
+                      <span className="text-xs text-stone-400">{formatFileSize(f.size)}</span>
+                      <button onClick={() => removeFile(i)} disabled={uploading} className="text-stone-400 hover:text-red-500">
+                        <Icon name="close" className="text-sm" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
-          <button
-            onClick={handleUpload}
-            disabled={uploading || !user}
-            className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+          {/* Link Mode */}
+          {mode === 'link' && (
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-sm font-medium text-stone-600">Link *</label>
+                <button onClick={() => setShowInstructions(true)} className="text-xs text-blue-500 flex items-center gap-1">
+                  <Icon name="help" className="text-sm" /> How?
+                </button>
+              </div>
+              <input type="url" value={driveLink} onChange={(e) => setDriveLink(e.target.value)}
+                placeholder="https://drive.google.com/..." disabled={uploading}
+                className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+              />
+              <p className="text-xs text-stone-400 mt-1">Google Drive, Docs, Sheets, Slides, or YouTube</p>
+            </div>
+          )}
+
+          {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{error}</div>}
+
+          <button onClick={handleSubmit} disabled={uploading || !user}
+            className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {uploading ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Uploading...
-              </>
+              <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {mode === 'link' ? 'Saving...' : 'Uploading...'}</>
             ) : (
-              <>
-                <Icon name="cloud_upload" />
-                Upload
-              </>
+              <><Icon name={mode === 'link' ? 'add_link' : 'cloud_upload'} /> {mode === 'link' ? 'Add Resource' : 'Upload'}</>
             )}
           </button>
         </div>
@@ -658,7 +765,10 @@ const App = () => {
   };
 
   // Data State
-  const [view, setView] = useState<AppView>('HOME');
+  const [view, setView] = useState<AppView>(() => {
+    const saved = localStorage.getItem('flashmaster_lastView');
+    return (saved as AppView) || 'HOME';
+  });
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   
@@ -669,10 +779,30 @@ const App = () => {
   const [apiSubjects, setApiSubjects] = useState<string[]>([]);
   
   // Navigation State
-  const [activeSubject, setActiveSubject] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'Flashcards' | 'Resources'>('Flashcards');
+  const [activeSubject, setActiveSubject] = useState<string | null>(() => {
+    return localStorage.getItem('flashmaster_lastSubject');
+  });
+  const [activeTab, setActiveTab] = useState<'Flashcards' | 'Resources'>(() => {
+    const saved = localStorage.getItem('flashmaster_lastTab');
+    return (saved as 'Flashcards' | 'Resources') || 'Flashcards';
+  });
   const [activeDeck, setActiveDeck] = useState<Deck | null>(null);
   const [activeResource, setActiveResource] = useState<Resource | null>(null);
+
+  // Save navigation state to localStorage
+  useEffect(() => {
+    localStorage.setItem('flashmaster_lastView', view);
+  }, [view]);
+
+  useEffect(() => {
+    if (activeSubject) {
+      localStorage.setItem('flashmaster_lastSubject', activeSubject);
+    }
+  }, [activeSubject]);
+
+  useEffect(() => {
+    localStorage.setItem('flashmaster_lastTab', activeTab);
+  }, [activeTab]);
 
   // Session State
   const [queue, setQueue] = useState<Card[]>([]);
@@ -713,6 +843,23 @@ const App = () => {
         }
       }
       
+      // Load cached resources
+      const cachedResources = await db.resources.toArray();
+      if (cachedResources.length > 0) {
+        const resourceMap: Record<string, Resource[]> = {};
+        cachedResources.forEach(r => {
+          resourceMap[r.subject] = r.items;
+        });
+        setResources(resourceMap);
+      }
+      
+      // Validate restored view - if SUBJECT view but no subject, go HOME
+      const savedView = localStorage.getItem('flashmaster_lastView') as AppView;
+      const savedSubject = localStorage.getItem('flashmaster_lastSubject');
+      if (savedView === 'SUBJECT' && !savedSubject) {
+        setView('HOME');
+      }
+      
       setLoading(false);
 
       // Sync with backend
@@ -736,17 +883,34 @@ const App = () => {
 
   // --- Data Sync ---
 
-  const syncData = async () => {
+  const syncData = async (showToast = true) => {
+    let toastId: number | null = null;
+    
+    if (showToast) {
+      toastId = addToast('Loading data...', 'loading', 10);
+    }
+    
     try {
+      if (toastId) updateToast(toastId, 'Connecting to server...', 'loading', 20);
+      
       const response = await fetch(`${GAS_URL}?action=getAll`, {
         redirect: 'follow'
       });
+      
+      if (toastId) updateToast(toastId, 'Fetching flashcards...', 'loading', 40);
+      
       const data = await response.json();
 
       if (data.error) {
         console.error('Sync error:', data.error);
+        if (toastId) {
+          updateToast(toastId, `Sync error: ${data.error}`, 'error');
+          setTimeout(() => removeToast(toastId!), 4000);
+        }
         return;
       }
+
+      if (toastId) updateToast(toastId, 'Processing flashcards...', 'loading', 50);
 
       // Process decks - format: { displayName: { sheetName, subject, cards } }
       if (data.decks) {
@@ -764,6 +928,8 @@ const App = () => {
         setDecks(parsedDecks);
       }
 
+      if (toastId) updateToast(toastId, 'Loading categories...', 'loading', 65);
+
       // Process categories (auto-generated from deck subjects)
       if (data.categories) {
         setCategories(data.categories);
@@ -771,6 +937,8 @@ const App = () => {
           await db.categories.put({ subject, items: items as CategoryItem[] });
         }
       }
+
+      if (toastId) updateToast(toastId, 'Loading resources...', 'loading', 80);
 
       // Process resources
       if (data.resources) {
@@ -780,13 +948,24 @@ const App = () => {
         }
       }
 
+      if (toastId) updateToast(toastId, 'Finalizing...', 'loading', 95);
+
       // Process subjects from Category sheet
       if (data.subjects && Array.isArray(data.subjects)) {
         setApiSubjects(data.subjects);
         localStorage.setItem('flashmaster_subjects', JSON.stringify(data.subjects));
       }
-    } catch (error) {
+      
+      if (toastId) {
+        updateToast(toastId, '✓ Data loaded successfully!', 'success', 100);
+        setTimeout(() => removeToast(toastId!), 2000);
+      }
+    } catch (error: any) {
       console.error('Sync failed:', error);
+      if (toastId) {
+        updateToast(toastId, `Sync failed: ${error.message || 'Network error'}`, 'error');
+        setTimeout(() => removeToast(toastId!), 4000);
+      }
     }
   };
 
@@ -1562,11 +1741,21 @@ const App = () => {
               <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin mx-auto mb-4"></div>
               <p className="text-stone-500">Loading analytics...</p>
             </div>
-          ) : !userAnalytics ? (
-            <div className="text-center py-12">
-              <Icon name="analytics" className="text-4xl text-stone-300 mb-2" />
-              <p className="text-stone-500">No analytics data yet</p>
-              <p className="text-sm text-stone-400 mt-1">Complete some flashcard sessions to see your progress</p>
+          ) : !userAnalytics || !userAnalytics.analytics || userAnalytics.analytics.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="w-20 h-20 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Icon name="school" className="text-4xl text-stone-400" />
+              </div>
+              <h3 className="text-xl font-bold text-stone-800 mb-2">No Analytics Yet</h3>
+              <p className="text-stone-500 mb-1">You haven't completed any flashcard sessions yet.</p>
+              <p className="text-stone-400 text-sm mb-6">Start studying to track your progress!</p>
+              <button 
+                onClick={() => { setView('HOME'); }}
+                className="px-6 py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-700 transition-colors inline-flex items-center gap-2"
+              >
+                <Icon name="play_arrow" />
+                Start Studying
+              </button>
             </div>
           ) : (
             <div className="space-y-6">
