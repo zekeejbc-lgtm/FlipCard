@@ -579,16 +579,27 @@ const App = () => {
 
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-200">
         <h3 className="font-bold text-stone-800 mb-4 flex items-center gap-2">
-          <Icon name="code" className="text-stone-400" /> Backend Info
+          <Icon name="code" className="text-stone-400" /> Backend Setup Guide
         </h3>
         <p className="text-sm text-stone-600 mb-4 leading-relaxed">
-           Deploy the code from <code>backend.gs</code> as a Web App (Exec: Me, Access: Anyone).
+           Deploy the code from <code className="bg-stone-100 px-1 rounded">backend.gs</code> as a Web App:
         </p>
-        <ul className="list-disc pl-4 space-y-2 text-sm text-stone-600 marker:text-stone-400">
-          <li>Sheet Name = Deck Title</li>
-          <li>Row 1 = Headers (Ignored)</li>
-          <li>Col 1 = Question, Col 2 = Answer</li>
-        </ul>
+        <ol className="list-decimal pl-4 space-y-2 text-sm text-stone-600 marker:text-stone-400 mb-4">
+          <li>Create a Google Spreadsheet</li>
+          <li>Go to Extensions → Apps Script</li>
+          <li>Paste the backend.gs code</li>
+          <li>Deploy → Web App (Execute: Me, Access: Anyone)</li>
+          <li>Copy the Web App URL and paste above</li>
+        </ol>
+        <div className="bg-stone-50 p-3 rounded-lg border border-stone-200">
+          <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Sheet Format:</p>
+          <ul className="list-disc pl-4 space-y-1 text-sm text-stone-600 marker:text-stone-400">
+            <li>Each Sheet = One Deck (e.g., "FL111 exam (1)")</li>
+            <li>Row 1 = Headers (ignored)</li>
+            <li>Column A = Question</li>
+            <li>Column B = Answer</li>
+          </ul>
+        </div>
       </div>
 
       <button 
