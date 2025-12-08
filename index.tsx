@@ -2395,45 +2395,48 @@ const App = () => {
     const renderResourceCard = (r: Resource, i: number, icon: string, iconBg: string, iconColor: string, borderColor: string) => (
       <div
         key={i}
-        className={`bg-white p-4 rounded-xl border border-stone-200 hover:${borderColor} transition-all`}
+        className={`bg-white p-4 rounded-xl border border-stone-200 hover:${borderColor} hover:shadow-md transition-all cursor-pointer`}
+        onClick={() => openResource(r)}
       >
-        <div className="flex items-start gap-3">
-          <div className={`w-10 h-10 flex-shrink-0 ${iconBg} rounded-lg flex items-center justify-center ${iconColor}`}>
-            <Icon name={icon} />
+        <div className="flex gap-3">
+          <div className={`w-12 h-12 flex-shrink-0 ${iconBg} rounded-xl flex items-center justify-center ${iconColor}`}>
+            <Icon name={icon} className="text-xl" />
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-stone-700 break-words leading-tight">{r.name || r.title}</p>
-            {r.description && <p className="text-xs text-stone-400 break-words mt-1">{r.description}</p>}
+          <div className="flex-1">
+            <h4 className="font-semibold text-stone-800 text-base leading-snug">{r.name || r.title}</h4>
+            {r.description && (
+              <p className="text-sm text-stone-500 mt-1 leading-relaxed">{r.description}</p>
+            )}
             {r.submittedByName && (
-              <p className="text-xs text-stone-400 mt-1">by {r.submittedByName}</p>
+              <p className="text-xs text-stone-400 mt-2">by {r.submittedByName}</p>
             )}
           </div>
         </div>
-        <div className="flex items-center justify-end gap-1 mt-3 pt-3 border-t border-stone-100">
+        <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-stone-100">
           <button
-            onClick={() => openResource(r)}
-            className="p-2 text-stone-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-            title="View in app"
+            onClick={(e) => { e.stopPropagation(); openResource(r); }}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs text-stone-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
           >
             <Icon name="visibility" className="text-sm" />
+            <span>View</span>
           </button>
           <a
             href={r.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2 text-stone-400 hover:text-green-500 hover:bg-green-50 rounded-lg transition-colors"
-            title="Open in Google Drive"
+            className="flex items-center gap-1 px-3 py-1.5 text-xs text-stone-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
             onClick={(e) => e.stopPropagation()}
           >
             <Icon name="open_in_new" className="text-sm" />
+            <span>Open</span>
           </a>
           {user && r.submittedBy === user.idNumber && (
             <button
-              onClick={() => handleDeleteResource(r)}
-              className="p-2 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-              title="Delete"
+              onClick={(e) => { e.stopPropagation(); handleDeleteResource(r); }}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs text-stone-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
             >
               <Icon name="delete" className="text-sm" />
+              <span>Delete</span>
             </button>
           )}
         </div>
