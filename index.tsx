@@ -1370,7 +1370,7 @@ const App = () => {
   }, []);
 
   // --- Cache Management - Notify on new version ---
-  const APP_VERSION = '1.2.0'; // Increment this to trigger update notification
+  const APP_VERSION = '1.2.1'; // Increment this to trigger update notification
   
   useEffect(() => {
     const storedVersion = localStorage.getItem('flashmaster_version');
@@ -1394,6 +1394,14 @@ const App = () => {
       await db.categories.clear();
       await db.resources.clear();
       
+      // Unregister all service workers
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await registration.unregister();
+        }
+      }
+      
       // Clear service worker caches if available
       if ('caches' in window) {
         const cacheNames = await caches.keys();
@@ -1406,9 +1414,9 @@ const App = () => {
       removeToast(loadingToast);
       addToast('Update complete! Refreshing...', 'success');
       
-      // Reload the page after a short delay
+      // Force reload bypassing cache
       setTimeout(() => {
-        window.location.reload();
+        window.location.href = window.location.origin + '?v=' + Date.now();
       }, 1000);
     } catch (e) {
       console.error('Error updating app:', e);

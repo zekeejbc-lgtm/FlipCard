@@ -103,7 +103,65 @@
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <!-- Fallback loading/error UI shown before React loads -->
+    <div id="loading-fallback" style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; font-family: Inter, sans-serif;">
+      <div style="width: 48px; height: 48px; border: 3px solid #e7e5e4; border-top-color: #292524; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+      <p style="margin-top: 16px; color: #57534e; font-size: 14px;">Loading FlashMaster...</p>
+      <button id="recovery-btn" style="display: none; margin-top: 24px; padding: 12px 24px; background: #292524; color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer;" onclick="clearAllAndReload()">
+        Clear Cache & Reload
+      </button>
+    </div>
+    <style>
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    <script>
+      // Show recovery button after 8 seconds if app hasn't loaded
+      setTimeout(function() {
+        var btn = document.getElementById('recovery-btn');
+        if (btn && document.getElementById('loading-fallback')) {
+          btn.style.display = 'block';
+        }
+      }, 8000);
+      
+      // Clear all caches and reload
+      async function clearAllAndReload() {
+        try {
+          // Clear localStorage except user data
+          var userData = localStorage.getItem('flashmaster_user');
+          localStorage.clear();
+          if (userData) localStorage.setItem('flashmaster_user', userData);
+          
+          // Unregister service workers
+          if ('serviceWorker' in navigator) {
+            var registrations = await navigator.serviceWorker.getRegistrations();
+            for (var reg of registrations) {
+              await reg.unregister();
+            }
+          }
+          
+          // Clear caches
+          if ('caches' in window) {
+            var names = await caches.keys();
+            for (var name of names) {
+              await caches.delete(name);
+            }
+          }
+          
+          // Clear IndexedDB
+          if (window.indexedDB) {
+            indexedDB.deleteDatabase('FlashMasterDB');
+          }
+          
+          // Force reload
+          window.location.href = window.location.origin + '?cleared=' + Date.now();
+        } catch (e) {
+          console.error('Error clearing cache:', e);
+          window.location.reload();
+        }
+      }
+    </script>
+  </div>
   <script type="module" src="/index.tsx"></script>
 </body>
 </html>
