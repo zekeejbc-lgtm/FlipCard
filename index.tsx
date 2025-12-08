@@ -47,7 +47,43 @@ type Toast = {
   progress?: number;
 };
 
-type AppView = 'HOME' | 'SUBJECT' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY' | 'RESOURCE_VIEW' | 'ANALYTICS';
+type AppView = 'HOME' | 'SUBJECT' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY' | 'RESOURCE_VIEW' | 'ANALYTICS' | 'EXAMS' | 'ALL_RESOURCES';
+
+type DeckProgress = {
+  deckName: string;
+  cardStatuses: Record<string, 'correct' | 'incorrect' | 'unanswered'>;
+  currentIndex: number;
+  mode: 'shuffle' | 'chronological';
+  shuffledOrder?: string[]; // Card IDs in shuffled order
+  lastUpdated: number | string;
+};
+
+type Subject = {
+  code: string;
+  name: string;
+};
+
+type Exam = {
+  examId: string;
+  courseCode: string;
+  courseName: string;
+  examType: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  room: string;
+  proctor: string;
+  notes: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  status: 'upcoming' | 'ongoing' | 'done';
+};
+
+type SubjectInfo = {
+  code: string;
+  name: string;
+};
 
 // --- Constants ---
 
@@ -68,6 +104,9 @@ db.version(2).stores({
   categories: 'subject',
   resources: 'subject'
 });
+
+// Progress storage key prefix
+const PROGRESS_KEY_PREFIX = 'flashmaster_deck_progress_';
 
 // --- Components ---
 
@@ -533,6 +572,251 @@ const UploadModal = ({
   );
 };
 
+// Confirmation Modal Component
+const ConfirmModal = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmText = 'Delete',
+  confirmColor = 'red'
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+  confirmText?: string;
+  confirmColor?: 'red' | 'green' | 'stone';
+}) => {
+  if (!isOpen) return null;
+
+  const colorClasses = {
+    red: 'bg-red-500 hover:bg-red-600',
+    green: 'bg-green-500 hover:bg-green-600',
+    stone: 'bg-stone-800 hover:bg-stone-900'
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl animate-in fade-in zoom-in duration-200">
+        <div className="p-6">
+          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Icon name="warning" className="text-2xl text-red-500" />
+          </div>
+          <h3 className="text-lg font-bold text-stone-800 text-center mb-2">{title}</h3>
+          <p className="text-stone-600 text-center text-sm">{message}</p>
+        </div>
+        <div className="flex border-t border-stone-200">
+          <button
+            onClick={onClose}
+            className="flex-1 py-3 text-stone-600 font-medium hover:bg-stone-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              onConfirm();
+              onClose();
+            }}
+            className={`flex-1 py-3 text-white font-medium transition-colors ${colorClasses[confirmColor]}`}
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Add Exam Modal Component
+const AddExamModal = ({ 
+  isOpen, 
+  onClose, 
+  subject,
+  subjectName,
+  user,
+  onAddExam,
+  addToast,
+  updateToast,
+  removeToast
+}: { 
+  isOpen: boolean; 
+  onClose: () => void;
+  subject: string;
+  subjectName: string;
+  user: User | null;
+  onAddExam: (exam: { courseCode: string; courseName: string; examType: string; date: string; startTime: string; endTime: string; room: string; proctor: string; notes: string }) => Promise<boolean>;
+  addToast: (message: string, type: Toast['type'], progress?: number) => number;
+  updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
+  removeToast: (id: number) => void;
+}) => {
+  const [examType, setExamType] = useState('Midterm');
+  const [date, setDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [room, setRoom] = useState('');
+  const [proctor, setProctor] = useState('');
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!user) {
+      addToast('Please login first', 'error');
+      return;
+    }
+    
+    if (!examType || !date || !startTime || !endTime || !room) {
+      addToast('Please fill all required fields', 'error');
+      return;
+    }
+    
+    setSubmitting(true);
+    
+    const success = await onAddExam({
+      courseCode: subject,
+      courseName: subjectName || subject,
+      examType,
+      date,
+      startTime,
+      endTime,
+      room,
+      proctor,
+      notes
+    });
+    
+    setSubmitting(false);
+    
+    if (success) {
+      // Reset form
+      setExamType('Midterm');
+      setDate('');
+      setStartTime('');
+      setEndTime('');
+      setRoom('');
+      setProctor('');
+      setNotes('');
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-stone-800">Add Exam</h2>
+            <button onClick={onClose} className="p-2 hover:bg-stone-100 rounded-full">
+              <Icon name="close" className="text-stone-500" />
+            </button>
+          </div>
+          
+          <p className="text-sm text-stone-500 mb-4">Schedule an exam for {subjectName || subject}</p>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Exam Type *</label>
+              <select 
+                value={examType}
+                onChange={(e) => setExamType(e.target.value)}
+                className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500"
+              >
+                <option value="LE Deadline">LE Deadline</option>
+                <option value="Quiz">Quiz</option>
+                <option value="Midterm Exam">Midterm Exam</option>
+                <option value="Final Exam">Final Exam</option>
+                <option value="Reporting">Reporting</option>
+                <option value="Performance">Performance</option>
+                <option value="Presentation">Presentation</option>
+                <option value="Submission">Submission</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Date *</label>
+              <input 
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500"
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">Start Time *</label>
+                <input 
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">End Time *</label>
+                <input 
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Room *</label>
+              <input 
+                type="text"
+                value={room}
+                onChange={(e) => setRoom(e.target.value)}
+                placeholder="e.g., Room 101, Lab A"
+                className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Proctor</label>
+              <input 
+                type="text"
+                value={proctor}
+                onChange={(e) => setProctor(e.target.value)}
+                placeholder="e.g., Prof. Santos"
+                className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Notes</label>
+              <textarea 
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Any additional notes..."
+                rows={2}
+                className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500 resize-none"
+              />
+            </div>
+          </div>
+          
+          <button 
+            onClick={handleSubmit} 
+            disabled={submitting || !user}
+            className="w-full mt-6 py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {submitting ? (
+              <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Adding...</>
+            ) : (
+              <><Icon name="event" /> Add Exam</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Login Modal Component
 const LoginModal = ({ 
   isOpen, 
@@ -726,10 +1010,22 @@ const ResourceViewer = ({
   return (
     <div className="fixed inset-0 bg-black/90 flex flex-col z-50">
       <div className="flex justify-between items-center p-4 bg-stone-900">
-        <h2 className="text-white font-semibold truncate">{resource.name}</h2>
-        <button onClick={onClose} className="text-white hover:text-stone-300 p-2">
-          <Icon name="close" className="text-2xl" />
-        </button>
+        <h2 className="text-white font-semibold truncate flex-1 mr-4">{resource.name}</h2>
+        <div className="flex items-center gap-2">
+          <a
+            href={resource.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
+            title="Open in Google Drive"
+          >
+            <Icon name="open_in_new" className="text-lg" />
+            <span className="text-sm hidden sm:inline">Open Externally</span>
+          </a>
+          <button onClick={onClose} className="text-white hover:text-stone-300 p-2">
+            <Icon name="close" className="text-2xl" />
+          </button>
+        </div>
       </div>
       <div className="flex-1 flex items-center justify-center p-4">
         {renderContent()}
@@ -782,17 +1078,25 @@ const App = () => {
   const [categories, setCategories] = useState<Record<string, CategoryItem[]>>({});
   const [resources, setResources] = useState<Record<string, Resource[]>>({});
   const [apiSubjects, setApiSubjects] = useState<string[]>([]);
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [subjectInfo, setSubjectInfo] = useState<Record<string, SubjectInfo>>({});
+  const [showAddExam, setShowAddExam] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date()); // For real-time exam status
+  const [examToDelete, setExamToDelete] = useState<string | null>(null); // For delete confirmation
+  const [examToEdit, setExamToEdit] = useState<Exam | null>(null); // For editing exam
   
   // Navigation State
   const [activeSubject, setActiveSubject] = useState<string | null>(() => {
     return localStorage.getItem('flashmaster_lastSubject');
   });
-  const [activeTab, setActiveTab] = useState<'Flashcards' | 'Resources'>(() => {
+  const [activeTab, setActiveTab] = useState<'Flashcards' | 'Resources' | 'Exams'>(() => {
     const saved = localStorage.getItem('flashmaster_lastTab');
-    return (saved as 'Flashcards' | 'Resources') || 'Flashcards';
+    return (saved as 'Flashcards' | 'Resources' | 'Exams') || 'Flashcards';
   });
   const [activeDeck, setActiveDeck] = useState<Deck | null>(null);
+  const [deckLoading, setDeckLoading] = useState<string | null>(null); // Track which deck is loading
   const [activeResource, setActiveResource] = useState<Resource | null>(null);
+  const [previousView, setPreviousView] = useState<AppView>('HOME'); // Track where we came from
 
   // Save navigation state to localStorage
   useEffect(() => {
@@ -809,16 +1113,32 @@ const App = () => {
     localStorage.setItem('flashmaster_lastTab', activeTab);
   }, [activeTab]);
 
+  // Real-time exam status updates - refresh every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 30000); // Update every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
   // Session State
   const [queue, setQueue] = useState<Card[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [scores, setScores] = useState<Record<string, 'correct' | 'incorrect'>>({});
   const [sessionStartTime, setSessionStartTime] = useState<number>(0);
+  const [playMode, setPlayMode] = useState<'shuffle' | 'chronological'>('shuffle');
+  const [showContinueModal, setShowContinueModal] = useState(false);
+  const [savedProgress, setSavedProgress] = useState<DeckProgress | null>(null);
 
   // Analytics State
   const [userAnalytics, setUserAnalytics] = useState<any>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+
+  // ALL_RESOURCES View Filter States (must be at top level for hooks rules)
+  const [resourceSearchQuery, setResourceSearchQuery] = useState('');
+  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('');
 
   // --- Initialization ---
 
@@ -843,6 +1163,26 @@ const App = () => {
       if (cachedSubjects) {
         try {
           setApiSubjects(JSON.parse(cachedSubjects));
+        } catch (e) {
+          // ignore
+        }
+      }
+      
+      // Load cached subject info (code to name mapping)
+      const cachedSubjectInfo = localStorage.getItem('flashmaster_subjectInfo');
+      if (cachedSubjectInfo) {
+        try {
+          setSubjectInfo(JSON.parse(cachedSubjectInfo));
+        } catch (e) {
+          // ignore
+        }
+      }
+      
+      // Load cached exams
+      const cachedExams = localStorage.getItem('flashmaster_exams');
+      if (cachedExams) {
+        try {
+          setExams(JSON.parse(cachedExams));
         } catch (e) {
           // ignore
         }
@@ -1096,13 +1436,27 @@ const App = () => {
         }
       }
 
-      if (toastId) updateToast(toastId, 'Finalizing...', 'loading', 95);
+      if (toastId) updateToast(toastId, 'Loading exam schedule...', 'loading', 90);
 
-      // Process subjects from Category sheet
+      // Process subjects from Category sheet (now with code and name)
       if (data.subjects && Array.isArray(data.subjects)) {
-        setApiSubjects(data.subjects);
-        localStorage.setItem('flashmaster_subjects', JSON.stringify(data.subjects));
+        setApiSubjects(data.subjects.map((s: any) => typeof s === 'string' ? s : s.code));
+        localStorage.setItem('flashmaster_subjects', JSON.stringify(data.subjects.map((s: any) => typeof s === 'string' ? s : s.code)));
       }
+      
+      // Process subject info (code to name mapping)
+      if (data.subjectInfo && typeof data.subjectInfo === 'object') {
+        setSubjectInfo(data.subjectInfo);
+        localStorage.setItem('flashmaster_subjectInfo', JSON.stringify(data.subjectInfo));
+      }
+      
+      // Process exams
+      if (data.exams && Array.isArray(data.exams)) {
+        setExams(data.exams);
+        localStorage.setItem('flashmaster_exams', JSON.stringify(data.exams));
+      }
+
+      if (toastId) updateToast(toastId, 'Finalizing...', 'loading', 95);
       
       if (toastId) {
         updateToast(toastId, '✓ Data loaded successfully!', 'success', 100);
@@ -1178,28 +1532,424 @@ const App = () => {
     setView('SUBJECT');
   };
 
-  const openDeck = (deck: Deck) => {
+  const openDeck = async (deck: Deck) => {
+    // Show loading state
+    setDeckLoading(deck.name);
+    const loadingToast = addToast('loading', `Loading ${deck.name}...`);
+    
+    // Small delay to show loading state (prevents flash)
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     setActiveDeck(deck);
+    
+    // First check backend for progress if user is logged in
+    if (user && navigator.onLine) {
+      try {
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'getDeckProgress',
+            idNumber: user.idNumber,
+            deckName: deck.name
+          })
+        });
+        const data = await response.json();
+        
+        if (data.success && data.progress) {
+          // Use backend progress
+          const progress = data.progress as DeckProgress;
+          const hasProgress = Object.values(progress.cardStatuses).some(s => s !== 'unanswered');
+          if (hasProgress) {
+            // Save to local storage as well
+            saveDeckProgressLocal(deck.name, progress);
+            setSavedProgress(progress);
+            removeToast(loadingToast);
+            setDeckLoading(null);
+            setShowContinueModal(true);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch progress from backend:', e);
+      }
+    }
+    
+    // Fall back to local storage
+    const progressKey = PROGRESS_KEY_PREFIX + deck.name;
+    const savedProgressStr = localStorage.getItem(progressKey);
+    if (savedProgressStr) {
+      try {
+        const progress: DeckProgress = JSON.parse(savedProgressStr);
+        // Check if progress has any answered cards
+        const hasProgress = Object.values(progress.cardStatuses).some(s => s !== 'unanswered');
+        if (hasProgress) {
+          setSavedProgress(progress);
+          removeToast(loadingToast);
+          setDeckLoading(null);
+          setShowContinueModal(true);
+          return;
+        }
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+    
+    removeToast(loadingToast);
+    setDeckLoading(null);
     setView('DECK_OVERVIEW');
+  };
+
+  const getDeckProgress = (deckName: string): DeckProgress | null => {
+    const progressKey = PROGRESS_KEY_PREFIX + deckName;
+    const savedProgressStr = localStorage.getItem(progressKey);
+    if (savedProgressStr) {
+      try {
+        return JSON.parse(savedProgressStr);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const saveDeckProgressLocal = (deckName: string, progress: DeckProgress) => {
+    const progressKey = PROGRESS_KEY_PREFIX + deckName;
+    localStorage.setItem(progressKey, JSON.stringify(progress));
+  };
+
+  const saveDeckProgress = async (deckName: string, progress: DeckProgress) => {
+    // Save locally first
+    saveDeckProgressLocal(deckName, progress);
+    
+    // Sync to backend if user is logged in
+    if (user && navigator.onLine) {
+      try {
+        await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'saveDeckProgress',
+            idNumber: user.idNumber,
+            deckName: deckName,
+            cardStatuses: progress.cardStatuses,
+            currentIndex: progress.currentIndex,
+            mode: progress.mode,
+            shuffledOrder: progress.shuffledOrder
+          })
+        });
+      } catch (e) {
+        console.error('Failed to save progress to backend:', e);
+      }
+    }
+  };
+
+  const clearDeckProgress = async (deckName: string) => {
+    const progressKey = PROGRESS_KEY_PREFIX + deckName;
+    localStorage.removeItem(progressKey);
+    
+    // Clear from backend if user is logged in
+    if (user && navigator.onLine) {
+      try {
+        await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'clearDeckProgress',
+            idNumber: user.idNumber,
+            deckName: deckName
+          })
+        });
+      } catch (e) {
+        console.error('Failed to clear progress from backend:', e);
+      }
+    }
+  };
+
+  // Sync all deck progress from backend on login
+  const syncProgressFromBackend = async () => {
+    if (!user || !navigator.onLine) return;
+    
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'getAllDeckProgress',
+          idNumber: user.idNumber
+        })
+      });
+      const data = await response.json();
+      
+      if (data.success && data.progress) {
+        // Merge backend progress with local progress
+        Object.entries(data.progress).forEach(([deckName, progress]) => {
+          const localProgress = getDeckProgress(deckName);
+          const backendProgress = progress as DeckProgress;
+          
+          // Use backend if it's newer or local doesn't exist
+          const backendTime = backendProgress.lastUpdated ? new Date(backendProgress.lastUpdated).getTime() : 0;
+          const localTime = localProgress?.lastUpdated ? new Date(localProgress.lastUpdated).getTime() : 0;
+          
+          if (!localProgress || backendTime > localTime) {
+            saveDeckProgressLocal(deckName, backendProgress);
+          }
+        });
+      }
+    } catch (e) {
+      console.error('Failed to sync progress from backend:', e);
+    }
+  };
+
+  // Sync progress from backend when user logs in
+  useEffect(() => {
+    if (user) {
+      syncProgressFromBackend();
+    }
+  }, [user]);
+
+  // --- Exam Functions ---
+  
+  // Helper to parse time from various formats (HH:MM, H:MM, decimal from Google Sheets, etc.)
+  const parseTimeString = (timeStr: string | number): { hour: number; min: number } => {
+    if (typeof timeStr === 'number') {
+      // Google Sheets stores time as decimal fraction of day (e.g., 0.333... for 8:00 AM)
+      const totalMinutes = Math.round(timeStr * 24 * 60);
+      return { hour: Math.floor(totalMinutes / 60), min: totalMinutes % 60 };
+    }
+    
+    const str = String(timeStr || '').trim();
+    if (!str) return { hour: 0, min: 0 };
+    
+    // Handle "HH:MM" or "H:MM" format
+    if (str.includes(':')) {
+      const parts = str.split(':');
+      return { hour: parseInt(parts[0]) || 0, min: parseInt(parts[1]) || 0 };
+    }
+    
+    // Handle just hour number
+    const hourNum = parseInt(str);
+    if (!isNaN(hourNum)) {
+      return { hour: hourNum, min: 0 };
+    }
+    
+    return { hour: 0, min: 0 };
+  };
+  
+  const getExamStatus = (exam: Exam): 'upcoming' | 'ongoing' | 'completed' => {
+    // Use currentTime state for real-time updates
+    const now = currentTime;
+    
+    // Parse date correctly - split to avoid timezone issues
+    const dateStr = String(exam.date);
+    let examDate: Date;
+    if (dateStr.includes('-')) {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      examDate = new Date(year, month - 1, day); // month is 0-indexed
+    } else {
+      examDate = new Date(dateStr);
+    }
+    
+    const { hour: startHour, min: startMin } = parseTimeString(exam.startTime);
+    const { hour: endHour, min: endMin } = parseTimeString(exam.endTime || '23:59');
+    
+    const startDateTime = new Date(examDate);
+    startDateTime.setHours(startHour, startMin, 0, 0);
+    
+    const endDateTime = new Date(examDate);
+    endDateTime.setHours(endHour || 23, endMin || 59, 0, 0);
+    
+    // Handle case where end time equals or is before start time (use end of day instead)
+    if (endDateTime.getTime() <= startDateTime.getTime()) {
+      endDateTime.setHours(23, 59, 59, 999);
+    }
+    
+    if (now < startDateTime) return 'upcoming';
+    if (now >= startDateTime && now <= endDateTime) return 'ongoing';
+    return 'completed';
+  };
+  
+  const getSubjectExams = (subjectCode: string): Exam[] => {
+    return exams.filter(e => e.courseCode === subjectCode);
+  };
+  
+  const formatExamDate = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  };
+  
+  const formatExamTime = (time: string | number): string => {
+    const { hour, min } = parseTimeString(time);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${min.toString().padStart(2, '0')} ${ampm}`;
+  };
+  
+  const addExamToBackend = async (exam: { courseCode: string; courseName: string; examType: string; date: string; startTime: string; endTime: string; room: string; proctor: string; notes: string }) => {
+    if (!user) {
+      addToast('Please login to add exams', 'error');
+      return false;
+    }
+    
+    const toastId = addToast('Adding exam...', 'loading');
+    
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'addExam',
+          ...exam,
+          userId: user.idNumber,
+          userName: user.name
+        })
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        updateToast(toastId, 'Exam added!', 'success');
+        setTimeout(() => removeToast(toastId), 2000);
+        syncData(); // Refresh exams
+        return true;
+      } else {
+        updateToast(toastId, result.error || 'Failed to add exam', 'error');
+        setTimeout(() => removeToast(toastId), 4000);
+        return false;
+      }
+    } catch (e) {
+      updateToast(toastId, 'Failed to add exam', 'error');
+      setTimeout(() => removeToast(toastId), 4000);
+      return false;
+    }
+  };
+  
+  const deleteExamFromBackend = async (examId: string) => {
+    if (!user) {
+      addToast('Please login to delete exams', 'error');
+      return false;
+    }
+    
+    const toastId = addToast('Deleting exam...', 'loading');
+    
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'deleteExam',
+          examId,
+          userId: user.idNumber
+        })
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        updateToast(toastId, 'Exam deleted!', 'success');
+        setTimeout(() => removeToast(toastId), 2000);
+        syncData(); // Refresh exams
+        return true;
+      } else {
+        updateToast(toastId, result.error || 'Failed to delete exam', 'error');
+        setTimeout(() => removeToast(toastId), 4000);
+        return false;
+      }
+    } catch (e) {
+      updateToast(toastId, 'Failed to delete exam', 'error');
+      setTimeout(() => removeToast(toastId), 4000);
+      return false;
+    }
+  };
+
+  const updateExamToBackend = async (examId: string, updates: Partial<Exam>) => {
+    if (!user) {
+      addToast('Please login to edit exams', 'error');
+      return false;
+    }
+    
+    const toastId = addToast('Updating exam...', 'loading');
+    
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'updateExam',
+          examId,
+          ...updates,
+          userId: user.idNumber
+        })
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        updateToast(toastId, 'Exam updated!', 'success');
+        setTimeout(() => removeToast(toastId), 2000);
+        syncData(); // Refresh exams
+        return true;
+      } else {
+        updateToast(toastId, result.error || 'Failed to update exam', 'error');
+        setTimeout(() => removeToast(toastId), 4000);
+        return false;
+      }
+    } catch (e) {
+      updateToast(toastId, 'Failed to update exam', 'error');
+      setTimeout(() => removeToast(toastId), 4000);
+      return false;
+    }
   };
 
   const openResource = (resource: Resource) => {
     setActiveResource(resource);
+    setPreviousView('SUBJECT');
     setView('RESOURCE_VIEW');
   };
 
-  const startSession = (mode: 'new' | 'retry' | 'smart') => {
+  const startSession = (mode: 'new' | 'retry' | 'smart' | 'continue', selectedPlayMode?: 'shuffle' | 'chronological') => {
     if (!activeDeck) return;
     let newQueue: Card[] = [];
+    let startIndex = 0;
+    let initialScores: Record<string, 'correct' | 'incorrect'> = {};
+    const currentPlayMode = selectedPlayMode || playMode;
 
-    if (mode === 'new') {
-      newQueue = [...activeDeck.cards].sort(() => Math.random() - 0.5);
+    if (mode === 'continue' && savedProgress) {
+      // Continue from saved progress - get cards that haven't been answered
+      const unansweredIds = Object.entries(savedProgress.cardStatuses)
+        .filter(([_, status]) => status === 'unanswered')
+        .map(([id]) => id);
+      
+      if (savedProgress.shuffledOrder) {
+        // Keep the original shuffle order but filter to unanswered
+        newQueue = savedProgress.shuffledOrder
+          .filter(id => unansweredIds.includes(id))
+          .map(id => activeDeck.cards.find(c => c.id === id)!)
+          .filter(Boolean);
+      } else {
+        newQueue = activeDeck.cards.filter(c => unansweredIds.includes(c.id));
+      }
+      
+      // Convert card statuses to scores for already answered cards
+      Object.entries(savedProgress.cardStatuses).forEach(([id, status]) => {
+        if (status === 'correct') initialScores[id] = 'correct';
+        else if (status === 'incorrect') initialScores[id] = 'incorrect';
+      });
+      setPlayMode(savedProgress.mode);
+    } else if (mode === 'new') {
+      if (currentPlayMode === 'shuffle') {
+        newQueue = [...activeDeck.cards].sort(() => Math.random() - 0.5);
+      } else {
+        newQueue = [...activeDeck.cards];
+      }
+      setPlayMode(currentPlayMode);
     } else if (mode === 'retry') {
-      newQueue = activeDeck.cards.filter(c => scores[c.id] === 'incorrect');
-    } else {
-      const incorrect = activeDeck.cards.filter(c => scores[c.id] === 'incorrect');
-      const correct = activeDeck.cards.filter(c => scores[c.id] !== 'incorrect');
-      newQueue = [...incorrect.sort(() => Math.random() - 0.5), ...correct.sort(() => Math.random() - 0.5)];
+      const progress = getDeckProgress(activeDeck.name);
+      const incorrectIds = progress ? Object.entries(progress.cardStatuses).filter(([_, s]) => s === 'incorrect').map(([id]) => id) : Object.keys(scores).filter(id => scores[id] === 'incorrect');
+      newQueue = activeDeck.cards.filter(c => incorrectIds.includes(c.id));
+      if (currentPlayMode === 'shuffle') {
+        newQueue = newQueue.sort(() => Math.random() - 0.5);
+      }
+    } else if (mode === 'smart') {
+      const progress = getDeckProgress(activeDeck.name);
+      const incorrectIds = progress ? Object.entries(progress.cardStatuses).filter(([_, s]) => s === 'incorrect').map(([id]) => id) : Object.keys(scores).filter(id => scores[id] === 'incorrect');
+      const incorrect = activeDeck.cards.filter(c => incorrectIds.includes(c.id));
+      const others = activeDeck.cards.filter(c => !incorrectIds.includes(c.id));
+      if (currentPlayMode === 'shuffle') {
+        newQueue = [...incorrect.sort(() => Math.random() - 0.5), ...others.sort(() => Math.random() - 0.5)];
+      } else {
+        newQueue = [...incorrect, ...others];
+      }
     }
 
     if (newQueue.length === 0) {
@@ -1207,11 +1957,35 @@ const App = () => {
       return;
     }
 
-    setScores({});
+    // For continue mode, preserve the existing progress, just update currentIndex
+    if (mode === 'continue' && savedProgress) {
+      // Keep existing progress, just mark we're continuing
+      const updatedProgress = { ...savedProgress, lastUpdated: Date.now() };
+      saveDeckProgress(activeDeck.name, updatedProgress);
+    } else {
+      // Initialize progress for this session (new, retry, smart modes)
+      const newProgress: DeckProgress = {
+        deckName: activeDeck.name,
+        cardStatuses: {},
+        currentIndex: 0,
+        mode: currentPlayMode,
+        shuffledOrder: newQueue.map(c => c.id),
+        lastUpdated: Date.now()
+      };
+      // Populate initial card statuses - include all deck cards
+      activeDeck.cards.forEach(card => {
+        newProgress.cardStatuses[card.id] = initialScores[card.id] ? (initialScores[card.id] as 'correct' | 'incorrect') : 'unanswered';
+      });
+      saveDeckProgress(activeDeck.name, newProgress);
+    }
+
+    setScores(initialScores);
     setQueue(newQueue);
-    setCurrentIndex(0);
+    setCurrentIndex(startIndex);
     setIsFlipped(false);
     setSessionStartTime(Date.now());
+    setSavedProgress(null);
+    setShowContinueModal(false);
     setView('PLAY');
   };
 
@@ -1219,6 +1993,18 @@ const App = () => {
     const card = queue[currentIndex];
     const newScores = { ...scores, [card.id]: result };
     setScores(newScores);
+    
+    // Update saved progress
+    if (activeDeck) {
+      const progress = getDeckProgress(activeDeck.name);
+      if (progress) {
+        progress.cardStatuses[card.id] = result;
+        progress.currentIndex = currentIndex + 1;
+        progress.lastUpdated = Date.now();
+        saveDeckProgress(activeDeck.name, progress);
+      }
+    }
+    
     setIsFlipped(false);
     setTimeout(() => {
       if (currentIndex < queue.length - 1) {
@@ -1315,6 +2101,13 @@ const App = () => {
             </div>
             
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setView('EXAMS')}
+                className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
+                title="Schedule"
+              >
+                <Icon name="event" className="text-stone-600" />
+              </button>
               {user && (
                 <button
                   onClick={() => { setUserAnalytics(null); setView('ANALYTICS'); }}
@@ -1357,6 +2150,9 @@ const App = () => {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {displaySubjects.map(subject => {
                 const deckCount = decks.filter(d => d.subject === subject).length;
+                const resourceCount = (resources[subject] || []).length;
+                const info = subjectInfo[subject];
+                const courseName = info?.name || null;
                 return (
                   <button
                     key={subject}
@@ -1367,9 +2163,21 @@ const App = () => {
                       <Icon name="book_2" />
                     </div>
                     <h3 className="font-semibold text-stone-800">{subject}</h3>
-                    <p className="text-xs text-stone-400 mt-1">
-                      {deckCount} {deckCount === 1 ? 'deck' : 'decks'}
-                    </p>
+                    {courseName && (
+                      <p className="text-xs text-stone-500 mt-0.5 line-clamp-2">{courseName}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1 text-xs text-stone-400">
+                      <span>{deckCount} {deckCount === 1 ? 'deck' : 'decks'}</span>
+                      {resourceCount > 0 && (
+                        <>
+                          <span>•</span>
+                          <span className="flex items-center gap-0.5">
+                            <Icon name="folder" className="text-xs" />
+                            {resourceCount}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </button>
                 );
               })}
@@ -1396,6 +2204,92 @@ const App = () => {
                     </div>
                   </button>
                 ))}
+              </div>
+            </>
+          )}
+
+          {/* Quick Stats Row */}
+          <div className="grid grid-cols-2 gap-3 mt-8">
+            {/* Exams Quick View */}
+            <button
+              onClick={() => setView('EXAMS')}
+              className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-amber-300 hover:shadow-md transition-all"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
+                  <Icon name="event" />
+                </div>
+                {exams.filter(e => getExamStatus(e) === 'ongoing').length > 0 && (
+                  <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-medium animate-pulse">
+                    {exams.filter(e => getExamStatus(e) === 'ongoing').length} NOW
+                  </span>
+                )}
+              </div>
+              <h3 className="font-semibold text-stone-800">Schedule</h3>
+              <p className="text-xs text-stone-400 mt-1">
+                {exams.filter(e => getExamStatus(e) === 'upcoming').length} upcoming
+                {exams.filter(e => getExamStatus(e) === 'completed').length > 0 && ` • ${exams.filter(e => getExamStatus(e) === 'completed').length} done`}
+              </p>
+            </button>
+
+            {/* Resources Quick View */}
+            {(() => {
+              const totalResources = Object.values(resources).reduce((sum, arr) => sum + arr.length, 0);
+              return (
+                <button
+                  onClick={() => setView('ALL_RESOURCES')}
+                  className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-blue-300 hover:shadow-md transition-all"
+                >
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mb-2">
+                    <Icon name="folder_open" />
+                  </div>
+                  <h3 className="font-semibold text-stone-800">Resources</h3>
+                  <p className="text-xs text-stone-400 mt-1">
+                    {totalResources} files across {Object.keys(resources).length} subjects
+                  </p>
+                </button>
+              );
+            })()}
+          </div>
+
+          {/* Upcoming Exam Preview (show only if there are upcoming exams) */}
+          {exams.filter(e => getExamStatus(e) === 'upcoming' || getExamStatus(e) === 'ongoing').length > 0 && (
+            <>
+              <h2 className="text-lg font-bold text-stone-800 mb-4 mt-8 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Icon name="event" className="text-amber-500" /> Next Exams
+                </span>
+                <button onClick={() => setView('EXAMS')} className="text-sm text-stone-500 hover:text-stone-700">
+                  View all →
+                </button>
+              </h2>
+              <div className="space-y-2">
+                {/* Show ongoing first, then up to 3 upcoming */}
+                {[...exams.filter(e => getExamStatus(e) === 'ongoing'), ...exams.filter(e => getExamStatus(e) === 'upcoming').slice(0, 3)].slice(0, 4).map(exam => {
+                  const isOngoing = getExamStatus(exam) === 'ongoing';
+                  return (
+                    <div 
+                      key={exam.examId} 
+                      className={`p-3 rounded-xl border ${isOngoing ? 'bg-green-50 border-green-200' : 'bg-white border-stone-200'} flex items-center gap-3`}
+                    >
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isOngoing ? 'bg-green-500 text-white' : 'bg-amber-100 text-amber-600'}`}>
+                        <Icon name={isOngoing ? 'schedule' : 'event'} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-semibold ${isOngoing ? 'text-green-800' : 'text-stone-800'}`}>{exam.courseCode}</span>
+                          <span className={`text-xs ${isOngoing ? 'text-green-600' : 'text-stone-500'}`}>• {exam.examType}</span>
+                        </div>
+                        <p className={`text-xs ${isOngoing ? 'text-green-600' : 'text-stone-400'}`}>
+                          {isOngoing ? `Now until ${formatExamTime(exam.endTime)}` : `${formatExamDate(exam.date)} • ${formatExamTime(exam.startTime)}`} • Room: {exam.room}
+                        </p>
+                      </div>
+                      {isOngoing && (
+                        <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-medium animate-pulse">NOW</span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
@@ -1485,10 +2379,21 @@ const App = () => {
           <div className="flex items-center gap-1">
             <button
               onClick={() => openResource(r)}
-              className="p-2 text-stone-400 hover:text-stone-600"
+              className="p-2 text-stone-400 hover:text-blue-500"
+              title="View in app"
+            >
+              <Icon name="visibility" className="text-sm" />
+            </button>
+            <a
+              href={r.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 text-stone-400 hover:text-green-500"
+              title="Open in Google Drive"
+              onClick={(e) => e.stopPropagation()}
             >
               <Icon name="open_in_new" className="text-sm" />
-            </button>
+            </a>
             {user && r.submittedBy === user.idNumber && (
               <button
                 onClick={() => handleDeleteResource(r)}
@@ -1524,6 +2429,17 @@ const App = () => {
           updateToast={updateToast}
           removeToast={removeToast}
         />
+        <AddExamModal
+          isOpen={showAddExam}
+          onClose={() => setShowAddExam(false)}
+          subject={activeSubject || ''}
+          subjectName={subjectInfo[activeSubject || '']?.name || ''}
+          user={user}
+          onAddExam={addExamToBackend}
+          addToast={addToast}
+          updateToast={updateToast}
+          removeToast={removeToast}
+        />
         
         {/* Header */}
         <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
@@ -1531,7 +2447,12 @@ const App = () => {
             <button onClick={resetHome} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
               <Icon name="arrow_back" className="text-stone-600" />
             </button>
-            <h1 className="font-bold text-stone-800 text-lg flex-1">{activeSubject}</h1>
+            <div className="flex-1 min-w-0">
+              <h1 className="font-bold text-stone-800 text-lg">{activeSubject}</h1>
+              {subjectInfo[activeSubject || '']?.name && (
+                <p className="text-xs text-stone-500 truncate">{subjectInfo[activeSubject || ''].name}</p>
+              )}
+            </div>
             {activeTab === 'Resources' && (
               <button
                 onClick={() => user ? setShowUpload(true) : setShowLogin(true)}
@@ -1541,11 +2462,20 @@ const App = () => {
                 Upload
               </button>
             )}
+            {activeTab === 'Exams' && (
+              <button
+                onClick={() => user ? setShowAddExam(true) : setShowLogin(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
+              >
+                <Icon name="add" className="text-sm" />
+                Add Exam
+              </button>
+            )}
           </div>
           
           {/* Tabs */}
           <div className="max-w-5xl mx-auto px-4 flex gap-4">
-            {['Flashcards', 'Resources'].map(tab => (
+            {['Flashcards', 'Resources', 'Exams'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab as any)}
@@ -1569,25 +2499,63 @@ const App = () => {
                   No flashcard decks available for this subject
                 </div>
               ) : (
-                subjectDecks.map(deck => (
-                  <button
-                    key={deck.name}
-                    onClick={() => openDeck(deck)}
-                    className="w-full bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-stone-400 transition-all flex items-center gap-3"
-                  >
-                    <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
-                      <Icon name="style" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-stone-800">{deck.name}</h3>
-                      <p className="text-sm text-stone-400">{deck.cards.length} cards</p>
-                    </div>
-                    <Icon name="chevron_right" className="text-stone-300" />
-                  </button>
-                ))
+                subjectDecks.map(deck => {
+                  const deckProgress = getDeckProgress(deck.name);
+                  const totalCards = deck.cards.length;
+                  const answeredCount = deckProgress 
+                    ? Object.values(deckProgress.cardStatuses).filter(s => s !== 'unanswered').length 
+                    : 0;
+                  const correctCount = deckProgress
+                    ? Object.values(deckProgress.cardStatuses).filter(s => s === 'correct').length
+                    : 0;
+                  const progressPercent = totalCards > 0 ? Math.round((answeredCount / totalCards) * 100) : 0;
+                  const isLoading = deckLoading === deck.name;
+                  
+                  return (
+                    <button
+                      key={deck.name}
+                      onClick={() => openDeck(deck)}
+                      disabled={isLoading}
+                      className={`w-full bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-stone-400 transition-all ${isLoading ? 'opacity-70' : ''}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600 ${isLoading ? 'animate-pulse' : ''}`}>
+                          {isLoading ? (
+                            <Icon name="hourglass_empty" className="animate-spin" />
+                          ) : (
+                            <Icon name="style" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-stone-800">{deck.name}</h3>
+                          <p className="text-sm text-stone-400">{deck.cards.length} cards</p>
+                          
+                          {/* Progress indicator */}
+                          {answeredCount > 0 ? (
+                            <div className="mt-2">
+                              <div className="flex items-center justify-between text-xs mb-1">
+                                <span className="text-stone-500">{answeredCount}/{totalCards} answered</span>
+                                <span className="text-green-600 font-medium">{correctCount} correct</span>
+                              </div>
+                              <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-gradient-to-r from-amber-400 to-green-500 rounded-full transition-all"
+                                  style={{ width: `${progressPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-stone-400 mt-1 italic">No progress yet • Tap to study</p>
+                          )}
+                        </div>
+                        <Icon name="chevron_right" className="text-stone-300 flex-shrink-0" />
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
-          ) : (
+          ) : activeTab === 'Resources' ? (
             <div className="space-y-6">
               {/* Lesson PPT */}
               {lessonPPTResources.length > 0 && (
@@ -1674,8 +2642,247 @@ const App = () => {
                 </div>
               )}
             </div>
-          )}
+          ) : activeTab === 'Exams' ? (
+            <div className="space-y-4">
+              {/* Upcoming Exams */}
+              {(() => {
+                const subjectExams = getSubjectExams(activeSubject);
+                const upcomingExams = subjectExams.filter(e => getExamStatus(e) === 'upcoming');
+                const ongoingExams = subjectExams.filter(e => getExamStatus(e) === 'ongoing');
+                const completedExams = subjectExams.filter(e => getExamStatus(e) === 'completed');
+                
+                if (subjectExams.length === 0) {
+                  return (
+                    <div className="text-center py-12">
+                      <Icon name="event" className="text-4xl text-stone-300 mb-3" />
+                      <p className="text-stone-400 mb-4">No exams scheduled for this subject</p>
+                      <button
+                        onClick={() => user ? setShowAddExam(true) : setShowLogin(true)}
+                        className="px-6 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors"
+                      >
+                        Add First Exam
+                      </button>
+                    </div>
+                  );
+                }
+                
+                return (
+                  <>
+                    {/* Ongoing Exams */}
+                    {ongoingExams.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
+                          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                          Ongoing Now
+                        </h3>
+                        <div className="space-y-2">
+                          {ongoingExams.map(exam => (
+                            <div key={exam.examId} className="bg-green-50 border border-green-200 p-4 rounded-xl">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <p className="font-semibold text-green-800">{exam.examType}</p>
+                                  <p className="text-sm text-green-700">{formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)}</p>
+                                  <p className="text-xs text-green-600 mt-1">Room: {exam.room} • Proctor: {exam.proctor}</p>
+                                </div>
+                                <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-medium">
+                                  In Progress
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Upcoming Exams */}
+                    {upcomingExams.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
+                          <Icon name="schedule" className="text-amber-500" /> Upcoming
+                        </h3>
+                        <div className="space-y-2">
+                          {upcomingExams.map(exam => (
+                            <div key={exam.examId} className="bg-white border border-stone-200 p-4 rounded-xl hover:border-amber-300 transition-all">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <p className="font-semibold text-stone-800">{exam.examType}</p>
+                                  <p className="text-sm text-stone-600">{formatExamDate(exam.date)}</p>
+                                  <p className="text-sm text-stone-500">{formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)}</p>
+                                  <p className="text-xs text-stone-400 mt-1">Room: {exam.room} • Proctor: {exam.proctor}</p>
+                                  {exam.notes && <p className="text-xs text-stone-400 mt-1 italic">Note: {exam.notes}</p>}
+                                  {exam.createdByName && <p className="text-xs text-stone-400 mt-1">Added by: {exam.createdByName}</p>}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                                    Upcoming
+                                  </span>
+                                  {user && user.idNumber === exam.createdBy && (
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={() => setExamToEdit(exam)}
+                                        className="p-1 text-stone-400 hover:text-blue-500"
+                                        title="Edit exam"
+                                      >
+                                        <Icon name="edit" className="text-sm" />
+                                      </button>
+                                      <button
+                                        onClick={() => setExamToDelete(exam.examId)}
+                                        className="p-1 text-stone-400 hover:text-red-500"
+                                        title="Delete exam"
+                                      >
+                                        <Icon name="delete" className="text-sm" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Completed Exams */}
+                    {completedExams.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
+                          <Icon name="check_circle" className="text-stone-400" /> Completed
+                        </h3>
+                        <div className="space-y-2">
+                          {completedExams.map(exam => (
+                            <div key={exam.examId} className="bg-stone-50 border border-stone-200 p-4 rounded-xl opacity-70">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <p className="font-semibold text-stone-600">{exam.examType}</p>
+                                  <p className="text-sm text-stone-500">{formatExamDate(exam.date)}</p>
+                                  <p className="text-sm text-stone-400">{formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)}</p>
+                                  <p className="text-xs text-stone-400 mt-1">Room: {exam.room}</p>
+                                </div>
+                                <span className="px-2 py-1 bg-stone-200 text-stone-600 text-xs rounded-full font-medium">
+                                  Done
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          ) : null}
         </main>
+
+        {/* Delete Confirmation Modal */}
+        <ConfirmModal
+          isOpen={!!examToDelete}
+          title="Delete Exam"
+          message="Are you sure you want to delete this exam? This action cannot be undone."
+          onConfirm={async () => {
+            if (examToDelete) {
+              await deleteExamFromBackend(examToDelete);
+            }
+          }}
+          onClose={() => setExamToDelete(null)}
+        />
+
+        {/* Edit Exam Modal */}
+        {examToEdit && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-stone-800">Edit Exam</h2>
+                  <button onClick={() => setExamToEdit(null)} className="p-2 hover:bg-stone-100 rounded-full">
+                    <Icon name="close" className="text-stone-500" />
+                  </button>
+                </div>
+                
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target as HTMLFormElement;
+                  const formData = new FormData(form);
+                  
+                  const success = await updateExamToBackend(examToEdit.examId, {
+                    courseCode: formData.get('courseCode') as string,
+                    courseName: subjectInfo[formData.get('courseCode') as string]?.name || '',
+                    examType: formData.get('examType') as string,
+                    date: formData.get('date') as string,
+                    startTime: formData.get('startTime') as string,
+                    endTime: formData.get('endTime') as string,
+                    room: formData.get('room') as string,
+                    proctor: formData.get('proctor') as string,
+                    notes: formData.get('notes') as string
+                  });
+                  
+                  if (success) {
+                    setExamToEdit(null);
+                  }
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course *</label>
+                    <select name="courseCode" required defaultValue={examToEdit.courseCode} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
+                      <option value="">Select a course</option>
+                      {displaySubjects.map(s => (
+                        <option key={s} value={s}>{s} {subjectInfo[s]?.name ? `- ${subjectInfo[s].name}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Exam Type *</label>
+                    <select name="examType" required defaultValue={examToEdit.examType} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
+                      <option value="LE Deadline">LE Deadline</option>
+                      <option value="Quiz">Quiz</option>
+                      <option value="Midterm Exam">Midterm Exam</option>
+                      <option value="Final Exam">Final Exam</option>
+                      <option value="Reporting">Reporting</option>
+                      <option value="Performance">Performance</option>
+                      <option value="Presentation">Presentation</option>
+                      <option value="Submission">Submission</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Date *</label>
+                    <input type="date" name="date" required defaultValue={examToEdit.date} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time *</label>
+                      <input type="time" name="startTime" required defaultValue={examToEdit.startTime} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time *</label>
+                      <input type="time" name="endTime" required defaultValue={examToEdit.endTime} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Room *</label>
+                    <input type="text" name="room" required defaultValue={examToEdit.room} placeholder="e.g., Room 101" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Proctor</label>
+                    <input type="text" name="proctor" defaultValue={examToEdit.proctor || ''} placeholder="e.g., Prof. Santos" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Notes</label>
+                    <textarea name="notes" rows={2} defaultValue={examToEdit.notes || ''} placeholder="Additional notes..." className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500 resize-none" />
+                  </div>
+                  
+                  <button type="submit" className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 flex items-center justify-center gap-2">
+                    <Icon name="save" /> Save Changes
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1685,15 +2892,89 @@ const App = () => {
     return (
       <ResourceViewer 
         resource={activeResource} 
-        onClose={() => { setActiveResource(null); setView('SUBJECT'); }} 
+        onClose={() => { 
+          setActiveResource(null); 
+          setView(previousView === 'ALL_RESOURCES' ? 'ALL_RESOURCES' : 'SUBJECT'); 
+        }} 
       />
     );
   }
 
   // DECK_OVERVIEW View
   if (view === 'DECK_OVERVIEW' && activeDeck) {
+    const deckProgress = getDeckProgress(activeDeck.name);
+    const answeredCount = deckProgress ? Object.values(deckProgress.cardStatuses).filter(s => s !== 'unanswered').length : 0;
+    const correctCount = deckProgress ? Object.values(deckProgress.cardStatuses).filter(s => s === 'correct').length : 0;
+    const incorrectCount = deckProgress ? Object.values(deckProgress.cardStatuses).filter(s => s === 'incorrect').length : 0;
+    const progressPercent = activeDeck.cards.length > 0 ? Math.round((answeredCount / activeDeck.cards.length) * 100) : 0;
+    const hasProgress = answeredCount > 0;
+
     return (
       <div className="min-h-screen bg-[#F5F5F4] flex flex-col">
+        {/* Continue Modal */}
+        {showContinueModal && savedProgress && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+              <h2 className="text-xl font-bold text-stone-800 mb-2">Continue Progress?</h2>
+              <p className="text-stone-500 text-sm mb-4">
+                You have saved progress on this deck.
+              </p>
+              <div className="bg-stone-50 rounded-xl p-4 mb-4">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-stone-500">Progress</span>
+                  <span className="font-semibold text-stone-800">
+                    {Object.values(savedProgress.cardStatuses).filter(s => s !== 'unanswered').length} / {activeDeck.cards.length} cards
+                  </span>
+                </div>
+                <div className="h-2 bg-stone-200 rounded-full overflow-hidden mb-3">
+                  <div 
+                    className="h-full bg-stone-800 rounded-full transition-all"
+                    style={{ width: `${(Object.values(savedProgress.cardStatuses).filter(s => s !== 'unanswered').length / activeDeck.cards.length) * 100}%` }}
+                  />
+                </div>
+                <div className="flex gap-4 text-xs">
+                  <span className="text-emerald-600 flex items-center gap-1">
+                    <Icon name="check_circle" className="text-sm" />
+                    {Object.values(savedProgress.cardStatuses).filter(s => s === 'correct').length} correct
+                  </span>
+                  <span className="text-red-500 flex items-center gap-1">
+                    <Icon name="cancel" className="text-sm" />
+                    {Object.values(savedProgress.cardStatuses).filter(s => s === 'incorrect').length} missed
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <button
+                  onClick={() => startSession('continue')}
+                  className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold flex items-center justify-center gap-2"
+                >
+                  <Icon name="play_arrow" /> Continue
+                </button>
+                <button
+                  onClick={() => {
+                    clearDeckProgress(activeDeck.name);
+                    setSavedProgress(null);
+                    setShowContinueModal(false);
+                    setView('DECK_OVERVIEW');
+                  }}
+                  className="w-full py-3 bg-stone-100 text-stone-800 rounded-xl font-semibold"
+                >
+                  Start Fresh
+                </button>
+                <button
+                  onClick={() => {
+                    setShowContinueModal(false);
+                    setView('DECK_OVERVIEW');
+                  }}
+                  className="w-full py-2 text-stone-500 text-sm"
+                >
+                  View Deck
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <header className="bg-white border-b border-stone-200 sticky top-0 z-10 px-4 py-3">
           <div className="max-w-5xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1705,25 +2986,134 @@ const App = () => {
                 <p className="text-xs text-stone-500">{activeDeck.cards.length} cards</p>
               </div>
             </div>
-            <button 
-              onClick={() => startSession('new')}
-              className="bg-stone-800 text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2"
-            >
-              <Icon name="play_arrow" /> Start
-            </button>
           </div>
         </header>
 
+        {/* Progress Bar & Stats */}
+        {hasProgress && (
+          <div className="bg-white border-b border-stone-200 px-4 py-3">
+            <div className="max-w-5xl mx-auto">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium text-stone-600">Your Progress</span>
+                <span className="text-sm text-stone-500">{progressPercent}% complete</span>
+              </div>
+              <div className="h-2 bg-stone-100 rounded-full overflow-hidden mb-2">
+                <div className="h-full flex">
+                  <div 
+                    className="bg-emerald-500 transition-all"
+                    style={{ width: `${(correctCount / activeDeck.cards.length) * 100}%` }}
+                  />
+                  <div 
+                    className="bg-red-400 transition-all"
+                    style={{ width: `${(incorrectCount / activeDeck.cards.length) * 100}%` }}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-4 text-xs">
+                <span className="text-emerald-600 flex items-center gap-1">
+                  <Icon name="check_circle" className="text-sm" /> {correctCount} correct
+                </span>
+                <span className="text-red-500 flex items-center gap-1">
+                  <Icon name="cancel" className="text-sm" /> {incorrectCount} missed
+                </span>
+                <span className="text-stone-400 flex items-center gap-1">
+                  <Icon name="radio_button_unchecked" className="text-sm" /> {activeDeck.cards.length - answeredCount} remaining
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Play Options */}
+        <div className="bg-white border-b border-stone-200 px-4 py-3">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Mode Toggle */}
+              <div className="flex gap-2 p-1 bg-stone-100 rounded-xl flex-shrink-0">
+                <button
+                  onClick={() => setPlayMode('shuffle')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${
+                    playMode === 'shuffle' ? 'bg-white shadow text-stone-800' : 'text-stone-500'
+                  }`}
+                >
+                  <Icon name="shuffle" className="text-base" /> Shuffle
+                </button>
+                <button
+                  onClick={() => setPlayMode('chronological')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${
+                    playMode === 'chronological' ? 'bg-white shadow text-stone-800' : 'text-stone-500'
+                  }`}
+                >
+                  <Icon name="format_list_numbered" className="text-base" /> In Order
+                </button>
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex gap-2 flex-1">
+                <button 
+                  onClick={() => startSession('new', playMode)}
+                  className="flex-1 bg-stone-800 text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+                >
+                  <Icon name="play_arrow" /> {hasProgress ? 'Start Over' : 'Start'}
+                </button>
+                {hasProgress && incorrectCount > 0 && (
+                  <button 
+                    onClick={() => startSession('retry', playMode)}
+                    className="px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-semibold flex items-center gap-2"
+                  >
+                    <Icon name="refresh" /> Retry Missed ({incorrectCount})
+                  </button>
+                )}
+              </div>
+            </div>
+            {hasProgress && (
+              <button
+                onClick={() => {
+                  if (confirm('Clear all progress for this deck?')) {
+                    clearDeckProgress(activeDeck.name);
+                    setScores({});
+                  }
+                }}
+                className="mt-2 text-xs text-stone-400 hover:text-red-500 flex items-center gap-1"
+              >
+                <Icon name="delete" className="text-sm" /> Clear Progress
+              </button>
+            )}
+          </div>
+        </div>
+
         <main className="flex-1 p-4 overflow-y-auto">
           <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {activeDeck.cards.map((card, i) => (
-              <div key={i} className="bg-white rounded-xl p-4 border border-stone-200">
-                <span className="text-xs font-bold text-stone-300">#{i + 1}</span>
-                <p className="text-stone-800 font-medium mt-1">{card.q}</p>
-                <div className="h-px bg-stone-100 my-2"></div>
-                <p className="text-stone-500 text-sm">{card.a}</p>
-              </div>
-            ))}
+            {activeDeck.cards.map((card, i) => {
+              const cardStatus = deckProgress?.cardStatuses[card.id];
+              return (
+                <div 
+                  key={i} 
+                  className={`bg-white rounded-xl p-4 border transition-all ${
+                    cardStatus === 'correct' ? 'border-emerald-300 bg-emerald-50/50' :
+                    cardStatus === 'incorrect' ? 'border-red-300 bg-red-50/50' :
+                    'border-stone-200'
+                  }`}
+                >
+                  <div className="flex justify-between items-start">
+                    <span className="text-xs font-bold text-stone-300">#{i + 1}</span>
+                    {cardStatus === 'correct' && (
+                      <span className="text-emerald-500 flex items-center gap-1 text-xs">
+                        <Icon name="check_circle" className="text-sm" /> Got it
+                      </span>
+                    )}
+                    {cardStatus === 'incorrect' && (
+                      <span className="text-red-500 flex items-center gap-1 text-xs">
+                        <Icon name="cancel" className="text-sm" /> Missed
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-stone-800 font-medium mt-1">{card.q}</p>
+                  <div className="h-px bg-stone-100 my-2"></div>
+                  <p className="text-stone-500 text-sm">{card.a}</p>
+                </div>
+              );
+            })}
           </div>
         </main>
       </div>
@@ -1734,25 +3124,59 @@ const App = () => {
   if (view === 'PLAY' && queue.length > 0) {
     const card = queue[currentIndex];
     const progress = Math.round(((currentIndex + 1) / queue.length) * 100);
+    const correctSoFar = Object.values(scores).filter(s => s === 'correct').length;
+    const incorrectSoFar = Object.values(scores).filter(s => s === 'incorrect').length;
 
     return (
-      <div className="min-h-screen bg-[#E7E5E4] flex flex-col">
-        <header className="bg-[#F5F5F4] px-4 py-3 flex justify-between items-center border-b border-stone-200/50">
-          <button onClick={() => setView('DECK_OVERVIEW')} className="p-2 -ml-2">
-            <Icon name="close" className="text-stone-500" />
-          </button>
-          <div className="text-center">
-            <p className="text-sm font-semibold text-stone-800">{activeDeck?.name}</p>
-            <div className="h-1 w-20 bg-stone-200 rounded-full mt-1 overflow-hidden">
-              <div className="h-full bg-stone-800" style={{ width: `${progress}%` }}></div>
+      <div className="h-[100dvh] bg-[#E7E5E4] flex flex-col overflow-hidden">
+        <header className="flex-shrink-0 bg-[#F5F5F4] px-4 py-3 border-b border-stone-200/50">
+          <div className="flex justify-between items-center">
+            <button onClick={() => setView('DECK_OVERVIEW')} className="p-2 -ml-2">
+              <Icon name="close" className="text-stone-500" />
+            </button>
+            <div className="text-center flex-1">
+              <p className="text-sm font-semibold text-stone-800">{activeDeck?.name}</p>
+              <p className="text-xs text-stone-400">
+                {playMode === 'shuffle' ? 'Shuffled' : 'In Order'} • Card {currentIndex + 1} of {queue.length}
+              </p>
+            </div>
+            <div className="w-10" />
+          </div>
+          {/* Progress Bar */}
+          <div className="mt-2">
+            <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
+              <div className="h-full flex transition-all">
+                <div 
+                  className="bg-emerald-500"
+                  style={{ width: `${(correctSoFar / queue.length) * 100}%` }}
+                />
+                <div 
+                  className="bg-red-400"
+                  style={{ width: `${(incorrectSoFar / queue.length) * 100}%` }}
+                />
+                <div 
+                  className="bg-stone-400"
+                  style={{ width: `${((currentIndex - correctSoFar - incorrectSoFar) / queue.length) * 100}%` }}
+                />
+              </div>
+            </div>
+            <div className="flex justify-between mt-1 text-xs">
+              <div className="flex gap-3">
+                <span className="text-emerald-600 flex items-center gap-1">
+                  <Icon name="check" className="text-xs" /> {correctSoFar}
+                </span>
+                <span className="text-red-500 flex items-center gap-1">
+                  <Icon name="close" className="text-xs" /> {incorrectSoFar}
+                </span>
+              </div>
+              <span className="text-stone-500">{progress}%</span>
             </div>
           </div>
-          <div className="w-10" />
         </header>
 
-        <main className="flex-1 flex items-center justify-center p-4 perspective-1000">
+        <main className="flex-1 flex items-center justify-center p-4 perspective-1000 min-h-0">
           <div 
-            className="w-full max-w-sm aspect-[3/4] cursor-pointer"
+            className="w-full max-w-sm h-full max-h-[60vh] md:max-h-[65vh] cursor-pointer"
             onClick={() => setIsFlipped(!isFlipped)}
           >
             <div className={`w-full h-full duration-500 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
@@ -1762,7 +3186,7 @@ const App = () => {
                   <span>Question</span>
                   <span>{currentIndex + 1}/{queue.length}</span>
                 </div>
-                <p className="text-xl font-medium text-stone-800 text-center">{card.q}</p>
+                <p className="text-lg md:text-xl font-medium text-stone-800 text-center px-2 overflow-y-auto max-h-[70%]">{card.q}</p>
                 <p className="text-xs text-stone-300 uppercase">Tap to flip</p>
               </div>
               {/* Back */}
@@ -1771,14 +3195,14 @@ const App = () => {
                   <span>Answer</span>
                   <span>{currentIndex + 1}/{queue.length}</span>
                 </div>
-                <p className="text-xl font-medium text-center">{card.a}</p>
+                <p className="text-lg md:text-xl font-medium text-center px-2 overflow-y-auto max-h-[70%]">{card.a}</p>
                 <p className="text-xs text-stone-500 uppercase">Mark result</p>
               </div>
             </div>
           </div>
         </main>
 
-        <footer className="bg-[#F5F5F4] p-4 border-t border-stone-200">
+        <footer className="flex-shrink-0 bg-[#F5F5F4] p-4 border-t border-stone-200">
           <div className="max-w-sm mx-auto">
             {!isFlipped ? (
               <div className="flex gap-3">
@@ -1825,22 +3249,31 @@ const App = () => {
     const incorrect = queue.filter(c => scores[c.id] === 'incorrect').length;
     const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
 
+    // Get full deck progress
+    const fullProgress = activeDeck ? getDeckProgress(activeDeck.name) : null;
+    const totalDeckCards = activeDeck?.cards.length || 0;
+    const totalAnswered = fullProgress ? Object.values(fullProgress.cardStatuses).filter(s => s !== 'unanswered').length : 0;
+    const totalCorrect = fullProgress ? Object.values(fullProgress.cardStatuses).filter(s => s === 'correct').length : 0;
+
     return (
       <div className="min-h-screen bg-[#F5F5F4] p-4 flex items-center justify-center">
         <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-sm border border-stone-200 text-center">
           <div className="w-20 h-20 mx-auto mb-4 relative">
             <svg className="w-full h-full -rotate-90">
               <circle cx="40" cy="40" r="35" stroke="#E7E5E4" strokeWidth="6" fill="none" />
-              <circle cx="40" cy="40" r="35" stroke="#292524" strokeWidth="6" fill="none" 
+              <circle cx="40" cy="40" r="35" stroke={percentage >= 70 ? '#10B981' : percentage >= 50 ? '#F59E0B' : '#EF4444'} strokeWidth="6" fill="none" 
                 strokeDasharray="220" strokeDashoffset={220 - (220 * percentage / 100)} />
             </svg>
             <span className="absolute inset-0 flex items-center justify-center text-xl font-bold">{percentage}%</span>
           </div>
           
-          <h2 className="text-xl font-bold text-stone-800 mb-1">Session Complete</h2>
-          <p className="text-stone-500 text-sm mb-6">Great effort!</p>
+          <h2 className="text-xl font-bold text-stone-800 mb-1">
+            {percentage >= 80 ? 'Excellent!' : percentage >= 60 ? 'Good Job!' : percentage >= 40 ? 'Keep Practicing!' : 'Keep Going!'}
+          </h2>
+          <p className="text-stone-500 text-sm mb-4">Session Complete</p>
 
-          <div className="flex justify-center gap-6 mb-6 p-4 bg-stone-50 rounded-xl">
+          {/* Session Stats */}
+          <div className="flex justify-center gap-6 mb-4 p-4 bg-stone-50 rounded-xl">
             <div>
               <div className="text-2xl font-bold text-emerald-600">{correct}</div>
               <div className="text-xs text-stone-400">Correct</div>
@@ -1852,14 +3285,36 @@ const App = () => {
             </div>
           </div>
 
+          {/* Overall Deck Progress */}
+          {fullProgress && totalDeckCards > total && (
+            <div className="mb-4 p-4 bg-blue-50 rounded-xl text-left">
+              <p className="text-xs text-blue-600 font-semibold mb-2">Overall Deck Progress</p>
+              <div className="h-2 bg-blue-100 rounded-full overflow-hidden mb-2">
+                <div 
+                  className="h-full bg-blue-500 rounded-full transition-all"
+                  style={{ width: `${(totalAnswered / totalDeckCards) * 100}%` }}
+                />
+              </div>
+              <p className="text-xs text-blue-700">
+                {totalAnswered} of {totalDeckCards} cards completed ({Math.round((totalAnswered / totalDeckCards) * 100)}%)
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                Accuracy: {totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0}%
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             {incorrect > 0 && (
-              <button onClick={() => startSession('retry')} className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold">
-                Review Missed ({incorrect})
+              <button onClick={() => startSession('retry', playMode)} className="w-full py-3 bg-red-50 text-red-600 border border-red-200 rounded-xl font-semibold flex items-center justify-center gap-2">
+                <Icon name="refresh" /> Review Missed ({incorrect})
               </button>
             )}
-            <button onClick={() => startSession('smart')} className="w-full py-3 bg-stone-100 text-stone-800 rounded-xl font-semibold">
-              Smart Shuffle
+            <button onClick={() => startSession('new', playMode)} className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold flex items-center justify-center gap-2">
+              <Icon name="replay" /> Play Again
+            </button>
+            <button onClick={() => startSession('smart', playMode)} className="w-full py-3 bg-stone-100 text-stone-800 rounded-xl font-semibold flex items-center justify-center gap-2">
+              <Icon name="psychology" /> Smart Review
             </button>
             <button onClick={() => setView('DECK_OVERVIEW')} className="w-full py-3 text-stone-500 text-sm">
               Back to Deck
@@ -2058,6 +3513,659 @@ const App = () => {
             </div>
           )}
         </main>
+      </div>
+    );
+  }
+
+  // EXAMS View - All Exams Schedule
+  // ALL_RESOURCES View
+  if (view === 'ALL_RESOURCES') {
+    // Get all resources flattened with subject info
+    const allResourcesList = Object.entries(resources).flatMap(([subject, items]) => 
+      items.map(r => ({ ...r, subject }))
+    );
+    
+    // Get unique resource categories (types)
+    const resourceCategories = Array.from(new Set(allResourcesList.map(r => r.category))).sort();
+    
+    // Filter resources (using state from top level)
+    const filteredResources = allResourcesList.filter(r => {
+      const matchesSearch = !resourceSearchQuery || 
+        r.name.toLowerCase().includes(resourceSearchQuery.toLowerCase()) ||
+        r.category.toLowerCase().includes(resourceSearchQuery.toLowerCase()) ||
+        r.subject.toLowerCase().includes(resourceSearchQuery.toLowerCase()) ||
+        (subjectInfo[r.subject]?.name || '').toLowerCase().includes(resourceSearchQuery.toLowerCase());
+      const matchesSubject = !selectedSubjectFilter || r.subject === selectedSubjectFilter;
+      const matchesCategory = !selectedCategoryFilter || r.category === selectedCategoryFilter;
+      return matchesSearch && matchesSubject && matchesCategory;
+    });
+
+    const getResourceIcon = (category: string) => {
+      switch (category.toLowerCase()) {
+        case 'lesson ppt':
+        case 'ppt':
+          return 'slideshow';
+        case 'lesson pdf':
+        case 'pdf':
+          return 'picture_as_pdf';
+        case 'reviewer':
+          return 'quiz';
+        case 'video':
+          return 'play_circle';
+        case 'link':
+          return 'link';
+        default:
+          return 'description';
+      }
+    };
+
+    const getResourceColor = (category: string) => {
+      switch (category.toLowerCase()) {
+        case 'lesson ppt':
+        case 'ppt':
+          return 'bg-orange-100 text-orange-600';
+        case 'lesson pdf':
+        case 'pdf':
+          return 'bg-red-100 text-red-600';
+        case 'reviewer':
+          return 'bg-purple-100 text-purple-600';
+        case 'video':
+          return 'bg-pink-100 text-pink-600';
+        case 'link':
+          return 'bg-blue-100 text-blue-600';
+        default:
+          return 'bg-stone-100 text-stone-600';
+      }
+    };
+    
+    return (
+      <div className="min-h-screen bg-[#F5F5F4]">
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <LoginModal 
+          isOpen={showLogin} 
+          onClose={() => setShowLogin(false)} 
+          onLogin={setUser}
+          addToast={addToast}
+          updateToast={updateToast}
+          removeToast={removeToast}
+        />
+        
+        {/* Header */}
+        <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
+          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+            <button onClick={resetHome} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
+              <Icon name="arrow_back" className="text-stone-600" />
+            </button>
+            <div className="flex-1">
+              <h1 className="font-bold text-stone-800 text-lg">All Resources</h1>
+              <p className="text-xs text-stone-500">{allResourcesList.length} total files</p>
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-5xl mx-auto p-4">
+          {/* Search and Filters */}
+          <div className="bg-white rounded-xl border border-stone-200 p-4 mb-4 space-y-3">
+            {/* Search Bar */}
+            <div className="relative">
+              <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input
+                type="text"
+                placeholder="Search resources by name, type, or subject..."
+                value={resourceSearchQuery}
+                onChange={(e) => setResourceSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              {resourceSearchQuery && (
+                <button
+                  onClick={() => setResourceSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-stone-100 rounded-full"
+                >
+                  <Icon name="close" className="text-stone-400 text-sm" />
+                </button>
+              )}
+            </div>
+            
+            {/* Filter Dropdowns */}
+            <div className="flex gap-3">
+              {/* Subject Filter */}
+              <div className="flex-1">
+                <select
+                  value={selectedSubjectFilter}
+                  onChange={(e) => setSelectedSubjectFilter(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                >
+                  <option value="">All Subjects</option>
+                  {displaySubjects.map(s => (
+                    <option key={s} value={s}>{s} {subjectInfo[s]?.name ? `- ${subjectInfo[s].name}` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Type Filter */}
+              <div className="flex-1">
+                <select
+                  value={selectedCategoryFilter}
+                  onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                >
+                  <option value="">All Types</option>
+                  {resourceCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            {/* Active Filters Display */}
+            {(selectedSubjectFilter || selectedCategoryFilter || resourceSearchQuery) && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-stone-500">Filters:</span>
+                {resourceSearchQuery && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
+                    "{resourceSearchQuery}"
+                    <button onClick={() => setResourceSearchQuery('')} className="hover:text-blue-900">
+                      <Icon name="close" className="text-xs" />
+                    </button>
+                  </span>
+                )}
+                {selectedSubjectFilter && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
+                    {selectedSubjectFilter}
+                    <button onClick={() => setSelectedSubjectFilter('')} className="hover:text-green-900">
+                      <Icon name="close" className="text-xs" />
+                    </button>
+                  </span>
+                )}
+                {selectedCategoryFilter && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
+                    {selectedCategoryFilter}
+                    <button onClick={() => setSelectedCategoryFilter('')} className="hover:text-purple-900">
+                      <Icon name="close" className="text-xs" />
+                    </button>
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    setResourceSearchQuery('');
+                    setSelectedSubjectFilter('');
+                    setSelectedCategoryFilter('');
+                  }}
+                  className="text-xs text-stone-500 hover:text-stone-700 underline"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Results Count */}
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm text-stone-500">
+              Showing {filteredResources.length} of {allResourcesList.length} resources
+            </p>
+          </div>
+
+          {/* Resources Grid */}
+          {filteredResources.length === 0 ? (
+            <div className="text-center py-12">
+              <Icon name="search_off" className="text-5xl text-stone-300 mb-4" />
+              <h3 className="text-lg font-semibold text-stone-600 mb-2">No Resources Found</h3>
+              <p className="text-stone-400">
+                {allResourcesList.length === 0 
+                  ? 'No resources have been added yet' 
+                  : 'Try adjusting your filters or search query'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredResources.map((resource, idx) => (
+                <button
+                  key={`${resource.subject}-${resource.name}-${idx}`}
+                  onClick={() => {
+                    setActiveSubject(resource.subject);
+                    setActiveResource(resource);
+                    setPreviousView('ALL_RESOURCES');
+                    setView('RESOURCE_VIEW');
+                  }}
+                  className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-blue-300 hover:shadow-md transition-all group"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 ${getResourceColor(resource.category)} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                      <Icon name={getResourceIcon(resource.category)} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-stone-800 truncate group-hover:text-blue-600 transition-colors">
+                        {resource.name}
+                      </h3>
+                      <p className="text-xs text-stone-500 mt-0.5">
+                        {resource.subject} {subjectInfo[resource.subject]?.name && `• ${subjectInfo[resource.subject].name}`}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className={`px-2 py-0.5 ${getResourceColor(resource.category)} rounded-full text-xs font-medium`}>
+                          {resource.category}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
+
+  if (view === 'EXAMS') {
+    const ongoingExams = exams.filter(e => getExamStatus(e) === 'ongoing');
+    const upcomingExams = exams.filter(e => getExamStatus(e) === 'upcoming');
+    const completedExams = exams.filter(e => getExamStatus(e) === 'completed');
+    
+    return (
+      <div className="min-h-screen bg-[#F5F5F4]">
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <LoginModal 
+          isOpen={showLogin} 
+          onClose={() => setShowLogin(false)} 
+          onLogin={setUser}
+          addToast={addToast}
+          updateToast={updateToast}
+          removeToast={removeToast}
+        />
+        
+        {/* Header */}
+        <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
+          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+            <button onClick={resetHome} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
+              <Icon name="arrow_back" className="text-stone-600" />
+            </button>
+            <div className="flex-1">
+              <h1 className="font-bold text-stone-800 text-lg">Schedule</h1>
+              <p className="text-xs text-stone-500">{exams.length} total exams</p>
+            </div>
+            <button
+              onClick={() => user ? setShowAddExam(true) : setShowLogin(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
+            >
+              <Icon name="add" className="text-sm" />
+              Add Exam
+            </button>
+          </div>
+        </header>
+
+        {/* Add Exam Modal */}
+        {showAddExam && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-stone-800">Add Exam</h2>
+                  <button onClick={() => setShowAddExam(false)} className="p-2 hover:bg-stone-100 rounded-full">
+                    <Icon name="close" className="text-stone-500" />
+                  </button>
+                </div>
+                
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target as HTMLFormElement;
+                  const formData = new FormData(form);
+                  
+                  const success = await addExamToBackend({
+                    courseCode: formData.get('courseCode') as string,
+                    courseName: formData.get('courseName') as string || subjectInfo[formData.get('courseCode') as string]?.name || '',
+                    examType: formData.get('examType') as string,
+                    date: formData.get('date') as string,
+                    startTime: formData.get('startTime') as string,
+                    endTime: formData.get('endTime') as string,
+                    room: formData.get('room') as string,
+                    proctor: formData.get('proctor') as string,
+                    notes: formData.get('notes') as string
+                  });
+                  
+                  if (success) {
+                    setShowAddExam(false);
+                    form.reset();
+                  }
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Code *</label>
+                    <select name="courseCode" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
+                      <option value="">Select a course</option>
+                      {displaySubjects.map(s => (
+                        <option key={s} value={s}>{s} {subjectInfo[s]?.name ? `- ${subjectInfo[s].name}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Name</label>
+                    <input type="text" name="courseName" placeholder="e.g., Introduction to Language" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Exam Type *</label>
+                    <select name="examType" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
+                      <option value="LE Deadline">LE Deadline</option>
+                      <option value="Quiz">Quiz</option>
+                      <option value="Midterm Exam">Midterm Exam</option>
+                      <option value="Final Exam">Final Exam</option>
+                      <option value="Reporting">Reporting</option>
+                      <option value="Performance">Performance</option>
+                      <option value="Presentation">Presentation</option>
+                      <option value="Submission">Submission</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Date *</label>
+                    <input type="date" name="date" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time *</label>
+                      <input type="time" name="startTime" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time *</label>
+                      <input type="time" name="endTime" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Room *</label>
+                    <input type="text" name="room" required placeholder="e.g., Room 101" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Proctor</label>
+                    <input type="text" name="proctor" placeholder="e.g., Prof. Santos" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Notes</label>
+                    <textarea name="notes" rows={2} placeholder="Additional notes..." className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500 resize-none" />
+                  </div>
+                  
+                  <button type="submit" className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 flex items-center justify-center gap-2">
+                    <Icon name="event" /> Add Exam
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <main className="max-w-5xl mx-auto p-4">
+          {exams.length === 0 ? (
+            <div className="text-center py-12">
+              <Icon name="event" className="text-5xl text-stone-300 mb-4" />
+              <h3 className="text-lg font-semibold text-stone-600 mb-2">No Exams Scheduled</h3>
+              <p className="text-stone-400 mb-4">Add your first exam to get started</p>
+              <button
+                onClick={() => user ? setShowAddExam(true) : setShowLogin(true)}
+                className="px-6 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors"
+              >
+                Add Exam
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Ongoing Exams */}
+              {ongoingExams.length > 0 && (
+                <div>
+                  <h2 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    Ongoing Now ({ongoingExams.length})
+                  </h2>
+                  <div className="space-y-3">
+                    {ongoingExams.map(exam => (
+                      <div key={exam.examId} className="bg-green-50 border border-green-200 p-4 rounded-xl">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center text-white">
+                              <Icon name="schedule" className="text-xl" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-green-800">{exam.courseCode}</span>
+                                <span className="px-2 py-0.5 bg-green-500 text-white text-xs rounded-full font-medium">
+                                  {exam.examType}
+                                </span>
+                              </div>
+                              {exam.courseName && <p className="text-sm text-green-700">{exam.courseName}</p>}
+                              <p className="text-sm text-green-600 mt-1">
+                                {formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)} • Room: {exam.room}
+                              </p>
+                              {exam.proctor && <p className="text-xs text-green-600">Proctor: {exam.proctor}</p>}
+                            </div>
+                          </div>
+                          <span className="px-3 py-1 bg-green-500 text-white text-sm rounded-full font-semibold animate-pulse">
+                            IN PROGRESS
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Upcoming Exams */}
+              {upcomingExams.length > 0 && (
+                <div>
+                  <h2 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2">
+                    <Icon name="schedule" className="text-amber-500" />
+                    Upcoming ({upcomingExams.length})
+                  </h2>
+                  <div className="space-y-3">
+                    {upcomingExams.map(exam => (
+                      <div key={exam.examId} className="bg-white border border-stone-200 p-4 rounded-xl hover:border-amber-300 transition-all">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                              <Icon name="event" className="text-xl" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-stone-800">{exam.courseCode}</span>
+                                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                                  {exam.examType}
+                                </span>
+                              </div>
+                              {exam.courseName && <p className="text-sm text-stone-500">{exam.courseName}</p>}
+                              <p className="text-sm text-stone-600 mt-1">
+                                <span className="font-medium">{formatExamDate(exam.date)}</span>
+                              </p>
+                              <p className="text-sm text-stone-500">
+                                {formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)} • Room: {exam.room}
+                              </p>
+                              {exam.proctor && <p className="text-xs text-stone-400">Proctor: {exam.proctor}</p>}
+                              {exam.notes && <p className="text-xs text-stone-400 italic mt-1">"{exam.notes}"</p>}
+                              {exam.createdByName && <p className="text-xs text-stone-400">Added by: {exam.createdByName}</p>}
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-2">
+                            <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                              Upcoming
+                            </span>
+                            {user && user.idNumber === exam.createdBy && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => setExamToEdit(exam)}
+                                  className="p-1 text-stone-400 hover:text-blue-500"
+                                  title="Edit exam"
+                                >
+                                  <Icon name="edit" className="text-sm" />
+                                </button>
+                                <button
+                                  onClick={() => setExamToDelete(exam.examId)}
+                                  className="p-1 text-stone-400 hover:text-red-500"
+                                  title="Delete exam"
+                                >
+                                  <Icon name="delete" className="text-sm" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Completed Exams */}
+              {completedExams.length > 0 && (
+                <div>
+                  <h2 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2">
+                    <Icon name="check_circle" className="text-stone-400" />
+                    Completed ({completedExams.length})
+                  </h2>
+                  <div className="space-y-3">
+                    {completedExams.map(exam => (
+                      <div key={exam.examId} className="bg-stone-50 border border-stone-200 p-4 rounded-xl opacity-60">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-stone-200 rounded-xl flex items-center justify-center text-stone-500">
+                              <Icon name="check" className="text-xl" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-stone-600">{exam.courseCode}</span>
+                                <span className="px-2 py-0.5 bg-stone-200 text-stone-600 text-xs rounded-full font-medium">
+                                  {exam.examType}
+                                </span>
+                              </div>
+                              {exam.courseName && <p className="text-sm text-stone-500">{exam.courseName}</p>}
+                              <p className="text-sm text-stone-500 mt-1">
+                                {formatExamDate(exam.date)} • {formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)}
+                              </p>
+                              <p className="text-xs text-stone-400">Room: {exam.room}</p>
+                            </div>
+                          </div>
+                          <span className="px-2 py-1 bg-stone-200 text-stone-600 text-xs rounded-full font-medium">
+                            Done
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+
+        {/* Delete Confirmation Modal */}
+        <ConfirmModal
+          isOpen={!!examToDelete}
+          title="Delete Exam"
+          message="Are you sure you want to delete this exam? This action cannot be undone."
+          onConfirm={async () => {
+            if (examToDelete) {
+              await deleteExamFromBackend(examToDelete);
+            }
+          }}
+          onClose={() => setExamToDelete(null)}
+        />
+
+        {/* Edit Exam Modal */}
+        {examToEdit && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-stone-800">Edit Exam</h2>
+                  <button onClick={() => setExamToEdit(null)} className="p-2 hover:bg-stone-100 rounded-full">
+                    <Icon name="close" className="text-stone-500" />
+                  </button>
+                </div>
+                
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target as HTMLFormElement;
+                  const formData = new FormData(form);
+                  
+                  const success = await updateExamToBackend(examToEdit.examId, {
+                    courseCode: formData.get('courseCode') as string,
+                    courseName: subjectInfo[formData.get('courseCode') as string]?.name || '',
+                    examType: formData.get('examType') as string,
+                    date: formData.get('date') as string,
+                    startTime: formData.get('startTime') as string,
+                    endTime: formData.get('endTime') as string,
+                    room: formData.get('room') as string,
+                    proctor: formData.get('proctor') as string,
+                    notes: formData.get('notes') as string
+                  });
+                  
+                  if (success) {
+                    setExamToEdit(null);
+                  }
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course *</label>
+                    <select name="courseCode" required defaultValue={examToEdit.courseCode} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
+                      <option value="">Select a course</option>
+                      {displaySubjects.map(s => (
+                        <option key={s} value={s}>{s} {subjectInfo[s]?.name ? `- ${subjectInfo[s].name}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Exam Type *</label>
+                    <select name="examType" required defaultValue={examToEdit.examType} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
+                      <option value="LE Deadline">LE Deadline</option>
+                      <option value="Quiz">Quiz</option>
+                      <option value="Midterm Exam">Midterm Exam</option>
+                      <option value="Final Exam">Final Exam</option>
+                      <option value="Reporting">Reporting</option>
+                      <option value="Performance">Performance</option>
+                      <option value="Presentation">Presentation</option>
+                      <option value="Submission">Submission</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Date *</label>
+                    <input type="date" name="date" required defaultValue={examToEdit.date} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time *</label>
+                      <input type="time" name="startTime" required defaultValue={examToEdit.startTime} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time *</label>
+                      <input type="time" name="endTime" required defaultValue={examToEdit.endTime} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Room *</label>
+                    <input type="text" name="room" required defaultValue={examToEdit.room} placeholder="e.g., Room 101" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Proctor</label>
+                    <input type="text" name="proctor" defaultValue={examToEdit.proctor || ''} placeholder="e.g., Prof. Santos" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Notes</label>
+                    <textarea name="notes" rows={2} defaultValue={examToEdit.notes || ''} placeholder="Additional notes..." className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500 resize-none" />
+                  </div>
+                  
+                  <button type="submit" className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 flex items-center justify-center gap-2">
+                    <Icon name="save" /> Save Changes
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

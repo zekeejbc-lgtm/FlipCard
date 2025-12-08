@@ -88,6 +88,22 @@ function doPost(e) {
         return jsonResponse(deleteResource(data.resourceUrl, data.userId));
       case 'addResourceByLink':
         return jsonResponse(addResourceByLink(data));
+      case 'saveDeckProgress':
+        return jsonResponse(saveDeckProgress(data));
+      case 'getDeckProgress':
+        return jsonResponse(getDeckProgress(data.idNumber, data.deckName));
+      case 'getAllDeckProgress':
+        return jsonResponse(getAllDeckProgress(data.idNumber));
+      case 'clearDeckProgress':
+        return jsonResponse(clearDeckProgressBackend(data.idNumber, data.deckName));
+      case 'addExam':
+        return jsonResponse(addExam(data));
+      case 'updateExam':
+        return jsonResponse(updateExam(data));
+      case 'deleteExam':
+        return jsonResponse(deleteExam(data.examId, data.userId));
+      case 'getExams':
+        return jsonResponse(getExams(data.subject));
       default:
         return jsonResponse({ error: 'Unknown action' });
     }
@@ -168,6 +184,28 @@ function setupSheets() {
     results.push('Analytics sheet already exists');
   }
   
+  // 5. Setup DeckProgress sheet for saving card-by-card progress
+  let progressSheet = ss.getSheetByName('DeckProgress');
+  if (!progressSheet) {
+    progressSheet = ss.insertSheet('DeckProgress');
+    progressSheet.appendRow(['UserID', 'DeckName', 'CardStatuses', 'CurrentIndex', 'Mode', 'ShuffledOrder', 'LastUpdated']);
+    progressSheet.setFrozenRows(1);
+    results.push('Created DeckProgress sheet');
+  } else {
+    results.push('DeckProgress sheet already exists');
+  }
+  
+  // 6. Setup ExamSchedule sheet
+  let examSheet = ss.getSheetByName('ExamSchedule');
+  if (!examSheet) {
+    examSheet = ss.insertSheet('ExamSchedule');
+    examSheet.appendRow(['ExamID', 'CourseCode', 'CourseName', 'ExamType', 'Date', 'StartTime', 'EndTime', 'Room', 'Proctor', 'Notes', 'CreatedBy', 'CreatedByName', 'CreatedAt']);
+    examSheet.setFrozenRows(1);
+    results.push('Created ExamSchedule sheet');
+  } else {
+    results.push('ExamSchedule sheet already exists');
+  }
+  
   return { 
     success: true, 
     message: 'Setup complete', 
@@ -179,11 +217,22 @@ function setupSheets() {
  * Get all data needed by the app
  */
 function getAllData() {
+  const examsResult = getExams();
+  const subjects = getSubjects();
+  
+  // Build subjectInfo map for quick lookup
+  const subjectInfo = {};
+  subjects.forEach(s => {
+    subjectInfo[s.code] = { code: s.code, name: s.name };
+  });
+  
   return {
     decks: getAllDecks(),
     categories: getCategories(),
     resources: getResources(),
-    subjects: getSubjects()
+    subjects: subjects, // Array of {code, name} objects
+    subjectInfo: subjectInfo, // Map of code -> {code, name}
+    exams: examsResult.success ? examsResult.exams : []
   };
 }
 
@@ -852,7 +901,7 @@ function getAllDecks() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = ss.getSheets();
   const result = {};
-  const specialSheets = ['User', 'Category', 'Resources', 'Analytics'];
+  const specialSheets = ['User', 'Category', 'Resources', 'Analytics', 'DeckProgress', 'ExamSchedule'];
 
   for (let i = 0; i < sheets.length; i++) {
     const sheet = sheets[i];
@@ -935,8 +984,10 @@ function getCategories() {
 
 /**
  * Get subjects from Category sheet
- * Reads row 1, odd columns (A, C, E, G, etc.) - skips "Category" columns (B, D, F, H, etc.)
- * Returns array of subject names like ["FL111", "FL112", "EDUC112", ...]
+ * NEW FORMAT:
+ * - Row 1: Course codes (FL111, FL112, etc.) - one per column (A1, B1, C1...)
+ * - Row 2: Course names/descriptions (Introduksyon sa Pag-aaral ng Wika, etc.)
+ * Returns array of objects: [{ code: "FL111", name: "Introduksyon sa Pag-aaral ng Wika" }, ...]
  */
 function getSubjects() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -951,20 +1002,28 @@ function getSubjects() {
         subjectSet.add(deckData.subject);
       }
     }
-    return Array.from(subjectSet);
+    return Array.from(subjectSet).map(code => ({ code: code, name: code }));
   }
   
   const data = categorySheet.getDataRange().getValues();
   if (data.length === 0) return [];
   
-  const headers = data[0];
+  const codesRow = data[0]; // Row 1: Course codes
+  const namesRow = data.length > 1 ? data[1] : []; // Row 2: Course names
   const subjects = [];
   
-  // Read odd columns (0, 2, 4, 6, ...) which are A, C, E, G, ...
-  for (let col = 0; col < headers.length; col += 2) {
-    const subject = headers[col];
-    if (subject && String(subject).trim() !== '' && String(subject).trim().toLowerCase() !== 'category') {
-      subjects.push(String(subject).trim());
+  // Read each column - each column is a subject
+  for (let col = 0; col < codesRow.length; col++) {
+    const code = codesRow[col];
+    const name = namesRow[col] || '';
+    
+    // Skip empty cells and "Category" labels (from old format)
+    if (code && String(code).trim() !== '' && 
+        String(code).trim().toLowerCase() !== 'category') {
+      subjects.push({
+        code: String(code).trim(),
+        name: String(name).trim() || String(code).trim() // Fallback to code if no name
+      });
     }
   }
   
@@ -990,4 +1049,561 @@ function testSetupSheets() {
   const result = setupSheets();
   Logger.log(JSON.stringify(result, null, 2));
   return result;
+}
+
+/**
+ * Save deck progress for a user
+ * @param {Object} data - { idNumber, deckName, cardStatuses, currentIndex, mode, shuffledOrder }
+ */
+function saveDeckProgress(data) {
+  try {
+    const { idNumber, deckName, cardStatuses, currentIndex, mode, shuffledOrder } = data;
+    
+    if (!idNumber || !deckName) {
+      return { error: 'Missing required fields (idNumber, deckName)' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let progressSheet = ss.getSheetByName('DeckProgress');
+    
+    if (!progressSheet) {
+      // Create the sheet if it doesn't exist
+      progressSheet = ss.insertSheet('DeckProgress');
+      progressSheet.appendRow(['UserID', 'DeckName', 'CardStatuses', 'CurrentIndex', 'Mode', 'ShuffledOrder', 'LastUpdated']);
+      progressSheet.setFrozenRows(1);
+    }
+    
+    const progressData = progressSheet.getDataRange().getValues();
+    let existingRow = -1;
+    
+    // Find existing row for this user/deck combo
+    for (let i = 1; i < progressData.length; i++) {
+      if (String(progressData[i][0]) === String(idNumber) && 
+          String(progressData[i][1]) === String(deckName)) {
+        existingRow = i + 1;
+        break;
+      }
+    }
+    
+    const now = new Date().toISOString();
+    const cardStatusesJson = JSON.stringify(cardStatuses || {});
+    const shuffledOrderJson = JSON.stringify(shuffledOrder || []);
+    
+    if (existingRow > 0) {
+      // Update existing record
+      progressSheet.getRange(existingRow, 3, 1, 5).setValues([[
+        cardStatusesJson, currentIndex || 0, mode || 'shuffle', shuffledOrderJson, now
+      ]]);
+    } else {
+      // Add new record
+      progressSheet.appendRow([
+        idNumber, deckName, cardStatusesJson, currentIndex || 0, mode || 'shuffle', shuffledOrderJson, now
+      ]);
+    }
+    
+    return { success: true };
+  } catch (error) {
+    return { error: error.toString() };
+  }
+}
+
+/**
+ * Get deck progress for a user
+ * @param {string} idNumber - User ID
+ * @param {string} deckName - Deck name
+ */
+function getDeckProgress(idNumber, deckName) {
+  try {
+    if (!idNumber || !deckName) {
+      return { error: 'Missing required fields' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const progressSheet = ss.getSheetByName('DeckProgress');
+    
+    if (!progressSheet) {
+      return { success: true, progress: null };
+    }
+    
+    const data = progressSheet.getDataRange().getValues();
+    
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(idNumber) && 
+          String(data[i][1]) === String(deckName)) {
+        let cardStatuses = {};
+        let shuffledOrder = [];
+        
+        try {
+          cardStatuses = JSON.parse(data[i][2] || '{}');
+        } catch (e) {
+          cardStatuses = {};
+        }
+        
+        try {
+          shuffledOrder = JSON.parse(data[i][5] || '[]');
+        } catch (e) {
+          shuffledOrder = [];
+        }
+        
+        return {
+          success: true,
+          progress: {
+            deckName: data[i][1],
+            cardStatuses: cardStatuses,
+            currentIndex: data[i][3] || 0,
+            mode: data[i][4] || 'shuffle',
+            shuffledOrder: shuffledOrder,
+            lastUpdated: data[i][6]
+          }
+        };
+      }
+    }
+    
+    return { success: true, progress: null };
+  } catch (error) {
+    return { error: error.toString() };
+  }
+}
+
+/**
+ * Get all deck progress for a user
+ * @param {string} idNumber - User ID
+ */
+function getAllDeckProgress(idNumber) {
+  try {
+    if (!idNumber) {
+      return { error: 'Missing idNumber' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const progressSheet = ss.getSheetByName('DeckProgress');
+    
+    if (!progressSheet) {
+      return { success: true, progress: {} };
+    }
+    
+    const data = progressSheet.getDataRange().getValues();
+    const result = {};
+    
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(idNumber)) {
+        let cardStatuses = {};
+        let shuffledOrder = [];
+        
+        try {
+          cardStatuses = JSON.parse(data[i][2] || '{}');
+        } catch (e) {
+          cardStatuses = {};
+        }
+        
+        try {
+          shuffledOrder = JSON.parse(data[i][5] || '[]');
+        } catch (e) {
+          shuffledOrder = [];
+        }
+        
+        result[data[i][1]] = {
+          deckName: data[i][1],
+          cardStatuses: cardStatuses,
+          currentIndex: data[i][3] || 0,
+          mode: data[i][4] || 'shuffle',
+          shuffledOrder: shuffledOrder,
+          lastUpdated: data[i][6]
+        };
+      }
+    }
+    
+    return { success: true, progress: result };
+  } catch (error) {
+    return { error: error.toString() };
+  }
+}
+
+/**
+ * Clear deck progress for a user
+ * @param {string} idNumber - User ID
+ * @param {string} deckName - Deck name
+ */
+function clearDeckProgressBackend(idNumber, deckName) {
+  try {
+    if (!idNumber || !deckName) {
+      return { error: 'Missing required fields' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const progressSheet = ss.getSheetByName('DeckProgress');
+    
+    if (!progressSheet) {
+      return { success: true };
+    }
+    
+    const data = progressSheet.getDataRange().getValues();
+    
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(idNumber) && 
+          String(data[i][1]) === String(deckName)) {
+        progressSheet.deleteRow(i + 1);
+        return { success: true, message: 'Progress cleared' };
+      }
+    }
+    
+    return { success: true };
+  } catch (error) {
+    return { error: error.toString() };
+  }
+}
+
+/**
+ * Test deck progress functions
+ */
+function testDeckProgress() {
+  // Test save
+  const saveResult = saveDeckProgress({
+    idNumber: '2025-12345',
+    deckName: 'Test Deck',
+    cardStatuses: { 'card1': 'correct', 'card2': 'incorrect', 'card3': 'unanswered' },
+    currentIndex: 2,
+    mode: 'shuffle',
+    shuffledOrder: ['card1', 'card2', 'card3']
+  });
+  Logger.log('Save result: ' + JSON.stringify(saveResult));
+  
+  // Test get
+  const getResult = getDeckProgress('2025-12345', 'Test Deck');
+  Logger.log('Get result: ' + JSON.stringify(getResult));
+  
+  return { saveResult, getResult };
+}
+
+// ==================== EXAM SCHEDULE FUNCTIONS ====================
+
+/**
+ * Add a new exam to the schedule
+ * @param {Object} data - { courseCode, courseName, examType, date, startTime, endTime, room, proctor, notes, userId, userName }
+ */
+function addExam(data) {
+  try {
+    const { courseCode, courseName, examType, date, startTime, endTime, room, proctor, notes, userId, userName } = data;
+    
+    if (!courseCode || !date || !startTime || !userId) {
+      return { error: 'Missing required fields (courseCode, date, startTime, userId)' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let examSheet = ss.getSheetByName('ExamSchedule');
+    
+    if (!examSheet) {
+      examSheet = ss.insertSheet('ExamSchedule');
+      examSheet.appendRow(['ExamID', 'CourseCode', 'CourseName', 'ExamType', 'Date', 'StartTime', 'EndTime', 'Room', 'Proctor', 'Notes', 'CreatedBy', 'CreatedByName', 'CreatedAt']);
+      examSheet.setFrozenRows(1);
+    }
+    
+    const examId = 'EXAM-' + Date.now();
+    const createdAt = new Date().toISOString();
+    
+    examSheet.appendRow([
+      examId,
+      courseCode,
+      courseName || '',
+      examType || 'Exam',
+      date,
+      startTime,
+      endTime || '',
+      room || '',
+      proctor || '',
+      notes || '',
+      userId,
+      userName || '',
+      createdAt
+    ]);
+    
+    return {
+      success: true,
+      exam: {
+        examId,
+        courseCode,
+        courseName: courseName || '',
+        examType: examType || 'Exam',
+        date,
+        startTime,
+        endTime: endTime || '',
+        room: room || '',
+        proctor: proctor || '',
+        notes: notes || '',
+        createdBy: userId,
+        createdByName: userName || '',
+        createdAt
+      }
+    };
+  } catch (error) {
+    return { error: 'Failed to add exam: ' + error.message };
+  }
+}
+
+/**
+ * Helper function to format time value from Google Sheets
+ * Handles Date objects, numbers (decimal fraction), and strings
+ * Uses Philippines timezone (Asia/Manila) for consistent display
+ */
+function formatTimeValue(timeVal) {
+  if (!timeVal && timeVal !== 0) return '';
+  
+  // If it's a Date object (Google Sheets stores times as Date with base date 1899-12-30)
+  if (timeVal instanceof Date) {
+    // Use Utilities.formatDate with Philippines timezone to get correct local time
+    try {
+      const formatted = Utilities.formatDate(timeVal, 'Asia/Manila', 'HH:mm');
+      return formatted;
+    } catch (e) {
+      // Fallback to getHours/getMinutes if formatDate fails
+      const hours = timeVal.getHours();
+      const minutes = timeVal.getMinutes();
+      return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+    }
+  }
+  
+  // If it's a number (decimal fraction of day, e.g., 0.333... = 8:00)
+  if (typeof timeVal === 'number') {
+    const totalMinutes = Math.round(timeVal * 24 * 60);
+    const hours = Math.floor(totalMinutes / 60) % 24;
+    const minutes = totalMinutes % 60;
+    return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+  }
+  
+  // If it's a string, normalize it to HH:MM format
+  const str = String(timeVal).trim();
+  if (str.includes(':')) {
+    const parts = str.split(':');
+    const hours = parseInt(parts[0]) || 0;
+    const minutes = parseInt(parts[1]) || 0;
+    return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+  }
+  
+  return str;
+}
+
+/**
+ * Get all exams or exams for a specific subject
+ * @param {string} subject - Optional course code to filter by
+ */
+function getExams(subject) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const examSheet = ss.getSheetByName('ExamSchedule');
+    
+    if (!examSheet) {
+      return { success: true, exams: [] };
+    }
+    
+    const data = examSheet.getDataRange().getValues();
+    if (data.length <= 1) {
+      return { success: true, exams: [] };
+    }
+    
+    const now = new Date();
+    const exams = [];
+    
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const courseCode = String(row[1]).trim();
+      
+      // Filter by subject if provided
+      if (subject && courseCode !== subject) {
+        continue;
+      }
+      
+      // Parse exam date and time to determine status
+      const examDateStr = row[4];
+      const startTimeStr = row[5];
+      const endTimeStr = row[6];
+      
+      let status = 'upcoming';
+      let examDateTime = null;
+      let examEndDateTime = null;
+      
+      try {
+        // Parse date - could be Date object or string
+        let examDate;
+        if (examDateStr instanceof Date) {
+          examDate = new Date(examDateStr.getFullYear(), examDateStr.getMonth(), examDateStr.getDate());
+        } else {
+          // Parse date string like "2025-12-09" - split and create date to avoid timezone issues
+          const dateStr = String(examDateStr);
+          if (dateStr.includes('-')) {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            examDate = new Date(year, month - 1, day); // month is 0-indexed
+          } else {
+            examDate = new Date(dateStr);
+          }
+        }
+        
+        // Parse start time - handle empty/invalid values
+        const startTimeParts = String(startTimeStr || '00:00').split(':');
+        const startHours = parseInt(startTimeParts[0]) || 0;
+        const startMinutes = parseInt(startTimeParts[1]) || 0;
+        
+        examDateTime = new Date(examDate);
+        examDateTime.setHours(startHours, startMinutes, 0, 0);
+        
+        // Parse end time - handle empty/invalid values
+        const endTimeParts = String(endTimeStr || '23:59').split(':');
+        const endHours = parseInt(endTimeParts[0]);
+        const endMinutes = parseInt(endTimeParts[1]) || 0;
+        
+        examEndDateTime = new Date(examDate);
+        if (isNaN(endHours)) {
+          examEndDateTime.setHours(23, 59, 59, 999);
+        } else {
+          examEndDateTime.setHours(endHours, endMinutes, 0, 0);
+        }
+        
+        // Handle case where end time equals or is before start time (default to end of day)
+        if (examEndDateTime.getTime() <= examDateTime.getTime()) {
+          examEndDateTime.setHours(23, 59, 59, 999);
+        }
+        
+        // Determine status
+        if (examDateTime && examEndDateTime) {
+          if (now < examDateTime) {
+            status = 'upcoming';
+          } else if (now >= examDateTime && now <= examEndDateTime) {
+            status = 'ongoing';
+          } else {
+            status = 'done';
+          }
+        } else if (examDateTime) {
+          // No end time - assume 2 hour duration
+          const assumedEnd = new Date(examDateTime.getTime() + 2 * 60 * 60 * 1000);
+          if (now < examDateTime) {
+            status = 'upcoming';
+          } else if (now >= examDateTime && now <= assumedEnd) {
+            status = 'ongoing';
+          } else {
+            status = 'done';
+          }
+        }
+      } catch (e) {
+        // If date parsing fails, default to upcoming
+        status = 'upcoming';
+      }
+      
+      exams.push({
+        examId: row[0],
+        courseCode: courseCode,
+        courseName: String(row[2]).trim(),
+        examType: String(row[3]).trim() || 'Exam',
+        date: examDateStr instanceof Date ? examDateStr.toISOString().split('T')[0] : String(examDateStr),
+        startTime: formatTimeValue(row[5]),
+        endTime: formatTimeValue(row[6]),
+        room: String(row[7]).trim(),
+        proctor: String(row[8]).trim(),
+        notes: String(row[9]).trim(),
+        createdBy: String(row[10]).trim(),
+        createdByName: String(row[11]).trim(),
+        createdAt: row[12],
+        status: status
+      });
+    }
+    
+    // Sort by date and time (upcoming first, then ongoing, then done)
+    exams.sort((a, b) => {
+      const statusOrder = { 'ongoing': 0, 'upcoming': 1, 'done': 2 };
+      if (statusOrder[a.status] !== statusOrder[b.status]) {
+        return statusOrder[a.status] - statusOrder[b.status];
+      }
+      // Then sort by date
+      return new Date(a.date + ' ' + a.startTime) - new Date(b.date + ' ' + b.startTime);
+    });
+    
+    return { success: true, exams };
+  } catch (error) {
+    return { error: 'Failed to get exams: ' + error.message };
+  }
+}
+
+/**
+ * Update an existing exam
+ * @param {Object} data - { examId, ...fields to update, userId }
+ */
+function updateExam(data) {
+  try {
+    const { examId, userId } = data;
+    
+    if (!examId) {
+      return { error: 'Missing examId' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const examSheet = ss.getSheetByName('ExamSchedule');
+    
+    if (!examSheet) {
+      return { error: 'ExamSchedule sheet not found' };
+    }
+    
+    const sheetData = examSheet.getDataRange().getValues();
+    
+    for (let i = 1; i < sheetData.length; i++) {
+      if (sheetData[i][0] === examId) {
+        // Check if user is the creator
+        if (userId && String(sheetData[i][10]) !== String(userId)) {
+          return { error: 'You can only edit exams you created' };
+        }
+        
+        // Update fields if provided
+        if (data.courseCode !== undefined) examSheet.getRange(i + 1, 2).setValue(data.courseCode);
+        if (data.courseName !== undefined) examSheet.getRange(i + 1, 3).setValue(data.courseName);
+        if (data.examType !== undefined) examSheet.getRange(i + 1, 4).setValue(data.examType);
+        if (data.date !== undefined) examSheet.getRange(i + 1, 5).setValue(data.date);
+        if (data.startTime !== undefined) examSheet.getRange(i + 1, 6).setValue(data.startTime);
+        if (data.endTime !== undefined) examSheet.getRange(i + 1, 7).setValue(data.endTime);
+        if (data.room !== undefined) examSheet.getRange(i + 1, 8).setValue(data.room);
+        if (data.proctor !== undefined) examSheet.getRange(i + 1, 9).setValue(data.proctor);
+        if (data.notes !== undefined) examSheet.getRange(i + 1, 10).setValue(data.notes);
+        
+        return { success: true, message: 'Exam updated' };
+      }
+    }
+    
+    return { error: 'Exam not found' };
+  } catch (error) {
+    return { error: 'Failed to update exam: ' + error.message };
+  }
+}
+
+/**
+ * Delete an exam
+ * @param {string} examId - Exam ID to delete
+ * @param {string} userId - User requesting deletion
+ */
+function deleteExam(examId, userId) {
+  try {
+    if (!examId) {
+      return { error: 'Missing examId' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const examSheet = ss.getSheetByName('ExamSchedule');
+    
+    if (!examSheet) {
+      return { error: 'ExamSchedule sheet not found' };
+    }
+    
+    const data = examSheet.getDataRange().getValues();
+    
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === examId) {
+        // Check if user is the creator
+        if (userId && String(data[i][10]) !== String(userId)) {
+          return { error: 'You can only delete exams you created' };
+        }
+        
+        examSheet.deleteRow(i + 1);
+        return { success: true, message: 'Exam deleted' };
+      }
+    }
+    
+    return { error: 'Exam not found' };
+  } catch (error) {
+    return { error: 'Failed to delete exam: ' + error.message };
+  }
 }
