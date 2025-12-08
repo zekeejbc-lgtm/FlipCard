@@ -1395,7 +1395,10 @@ function getExams(subject) {
       return { success: true, exams: [] };
     }
     
-    const data = examSheet.getDataRange().getValues();
+    const dataRange = examSheet.getDataRange();
+    const data = dataRange.getValues();
+    const displayData = dataRange.getDisplayValues(); // Get values as displayed in sheet
+    
     if (data.length <= 1) {
       return { success: true, exams: [] };
     }
@@ -1405,6 +1408,7 @@ function getExams(subject) {
     
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
+      const displayRow = displayData[i];
       const courseCode = String(row[1]).trim();
       
       // Filter by subject if provided
@@ -1412,10 +1416,12 @@ function getExams(subject) {
         continue;
       }
       
+      // Use display values for times (exactly as shown in sheet)
+      const startTimeDisplay = String(displayRow[5] || '').trim();
+      const endTimeDisplay = String(displayRow[6] || '').trim();
+      
       // Parse exam date and time to determine status
       const examDateStr = row[4];
-      const startTimeStr = row[5];
-      const endTimeStr = row[6];
       
       let status = 'upcoming';
       let examDateTime = null;
@@ -1437,16 +1443,16 @@ function getExams(subject) {
           }
         }
         
-        // Parse start time - handle empty/invalid values
-        const startTimeParts = String(startTimeStr || '00:00').split(':');
+        // Parse start time from display value
+        const startTimeParts = (startTimeDisplay || '00:00').split(':');
         const startHours = parseInt(startTimeParts[0]) || 0;
         const startMinutes = parseInt(startTimeParts[1]) || 0;
         
         examDateTime = new Date(examDate);
         examDateTime.setHours(startHours, startMinutes, 0, 0);
         
-        // Parse end time - handle empty/invalid values
-        const endTimeParts = String(endTimeStr || '23:59').split(':');
+        // Parse end time from display value
+        const endTimeParts = (endTimeDisplay || '23:59').split(':');
         const endHours = parseInt(endTimeParts[0]);
         const endMinutes = parseInt(endTimeParts[1]) || 0;
         
@@ -1493,8 +1499,8 @@ function getExams(subject) {
         courseName: String(row[2]).trim(),
         examType: String(row[3]).trim() || 'Exam',
         date: examDateStr instanceof Date ? examDateStr.toISOString().split('T')[0] : String(examDateStr),
-        startTime: formatTimeValue(row[5]),
-        endTime: formatTimeValue(row[6]),
+        startTime: startTimeDisplay || '00:00',
+        endTime: endTimeDisplay || '',
         room: String(row[7]).trim(),
         proctor: String(row[8]).trim(),
         notes: String(row[9]).trim(),
