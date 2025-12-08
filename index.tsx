@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import Dexie from 'dexie';
 
@@ -18,22 +18,18 @@ type Deck = {
 
 type AppView = 'HOME' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY' | 'SETTINGS';
 
-const STORAGE_KEY = 'flashcard_gas_url';
+const STORAGE_KEY_URL = 'flashcard_gas_url';
+const STORAGE_KEY_STATE = 'flashcard_session_state';
 
 // --- Database (Dexie) ---
 
-class FlashMasterDB extends Dexie {
-  decks!: Dexie.Table<Deck, string>; // name is primary key
+const db = new Dexie('FlashMasterDB') as Dexie & {
+  decks: Dexie.Table<Deck, string>;
+};
 
-  constructor() {
-    super('FlashMasterDB');
-    this.version(1).stores({
-      decks: 'name'
-    });
-  }
-}
-
-const db = new FlashMasterDB();
+db.version(1).stores({
+  decks: 'name'
+});
 
 // --- Mock Data (Fallback) ---
 const DEMO_DECKS: Deck[] = [
@@ -69,10 +65,11 @@ const Icon = ({ name, className = "" }: { name: string; className?: string }) =>
 // --- Main Application ---
 
 const App = () => {
+  // Global State
   const [view, setView] = useState<AppView>('HOME');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [gasUrl, setGasUrl] = useState(localStorage.getItem(STORAGE_KEY) || '');
+  const [gasUrl, setGasUrl] = useState(localStorage.getItem(STORAGE_KEY_URL) || '');
   const [decks, setDecks] = useState<Deck[]>([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   
@@ -83,42 +80,94 @@ const App = () => {
   const [isFlipped, setIsFlipped] = useState(false);
   const [scores, setScores] = useState<Record<string, 'correct' | 'incorrect'>>({});
 
-  useEffect(() => {
-    // Initial Load from DB
-    refreshDecksFromDB();
+  // --- Persistence & Initialization ---
 
-    // Online Status Listeners
+  useEffect(() => {
+    // 1. Initialize logic
+    const initApp = async () => {
+      // Load Decks from Dexie
+      let localDecks = await db.decks.toArray();
+      if (localDecks.length === 0 && !gasUrl) {
+        localDecks = DEMO_DECKS;
+      }
+      setDecks(localDecks);
+      setLoading(false);
+
+      // Restore Session if exists
+      const savedState = localStorage.getItem(STORAGE_KEY_STATE);
+      if (savedState) {
+        try {
+          const parsed = JSON.parse(savedState);
+          // Only restore if we have valid data
+          if (parsed.view && parsed.view !== 'HOME') {
+             setView(parsed.view);
+             if (parsed.activeDeck) setActiveDeck(parsed.activeDeck);
+             if (parsed.queue) setQueue(parsed.queue);
+             if (typeof parsed.currentIndex === 'number') setCurrentIndex(parsed.currentIndex);
+             if (parsed.scores) setScores(parsed.scores);
+          }
+        } catch (e) {
+          console.error("Failed to restore state", e);
+          localStorage.removeItem(STORAGE_KEY_STATE);
+        }
+      }
+
+      // Initial Sync if configured
+      if (gasUrl && navigator.onLine) {
+        syncDecks(gasUrl, false);
+      }
+    };
+
+    initApp();
+
+    // 2. Setup Listeners
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
+    
+    // Auto-sync when app comes back to foreground
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine && gasUrl) {
+        console.log("App focused, checking for updates...");
+        syncDecks(gasUrl, true);
+      }
+    };
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
-    // Auto-sync if URL exists
-    if (gasUrl && navigator.onLine) {
-      syncDecks();
-    }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, []); // Run once on mount
 
-  const refreshDecksFromDB = async () => {
-    const localDecks = await db.decks.toArray();
-    if (localDecks.length > 0) {
-      setDecks(localDecks);
-    } else {
-      // First time load or empty DB
-      if (!gasUrl) setDecks(DEMO_DECKS);
+  // --- Auto-Save State ---
+  useEffect(() => {
+    if (!loading) {
+      const stateToSave = {
+        view,
+        activeDeck,
+        queue,
+        currentIndex,
+        scores
+      };
+      localStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(stateToSave));
     }
-  };
+  }, [view, activeDeck, queue, currentIndex, scores, loading]);
 
-  const syncDecks = async () => {
-    if (!gasUrl || !navigator.onLine) return;
-    setSyncing(true);
+
+  // --- Logic ---
+
+  const syncDecks = async (url: string = gasUrl, silent = false) => {
+    if (!url || !navigator.onLine) return;
+    if (!silent) setSyncing(true);
+    
     try {
-      const response = await fetch(gasUrl);
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Network response was not ok");
+      
       const data = await response.json();
       
       // Transform Data
@@ -135,13 +184,26 @@ const App = () => {
       // Update DB
       await db.decks.bulkPut(parsedDecks);
       
-      // Update State
-      setDecks(parsedDecks);
+      // Check if we need to update state (simple check: length or name change)
+      // For a real app, deep compare is better, but this is sufficient to trigger re-render
+      setDecks(prev => {
+        // If we are currently viewing a deck, update its content in memory too if it changed
+        if (activeDeck) {
+            const updatedActive = parsedDecks.find(d => d.name === activeDeck.name);
+            if (updatedActive) {
+                // We update active deck reference silently so next session uses new cards
+                // But we don't disrupt current session queue
+                setActiveDeck(updatedActive); 
+            }
+        }
+        return parsedDecks;
+      });
+
     } catch (error) {
       console.error("Sync failed:", error);
-      alert("Sync failed. Using local data.");
+      if (!silent) alert("Sync failed. Using local data.");
     } finally {
-      setSyncing(false);
+      if (!silent) setSyncing(false);
     }
   };
 
@@ -156,7 +218,6 @@ const App = () => {
 
     if (mode === 'new') {
       newQueue = [...activeDeck.cards].sort(() => Math.random() - 0.5);
-      setScores({});
     } else if (mode === 'retry') {
       newQueue = activeDeck.cards.filter(c => scores[c.id] === 'incorrect');
     } else if (mode === 'smart') {
@@ -173,6 +234,7 @@ const App = () => {
       return;
     }
 
+    setScores({});
     setQueue(newQueue);
     setCurrentIndex(0);
     setIsFlipped(false);
@@ -192,6 +254,31 @@ const App = () => {
     }, 200);
   };
 
+  const handleSkip = () => {
+    setIsFlipped(false);
+    if (currentIndex < queue.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+    } else {
+      setView('SUMMARY');
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentIndex > 0) {
+      setIsFlipped(false);
+      setCurrentIndex(prev => prev - 1);
+    }
+  };
+
+  const resetHome = () => {
+     setView('HOME');
+     setActiveDeck(null);
+     setQueue([]);
+     setCurrentIndex(0);
+     setScores({});
+     localStorage.removeItem(STORAGE_KEY_STATE);
+  };
+
   // --- Views ---
 
   if (view === 'HOME') {
@@ -206,18 +293,7 @@ const App = () => {
             </div>
           </div>
           <div className="flex gap-2">
-            {gasUrl && (
-              <button 
-                onClick={syncDecks} 
-                disabled={syncing || !isOnline}
-                className={`p-2 bg-white rounded-full border border-stone-200 text-stone-600 shadow-sm transition-colors ${syncing ? 'animate-spin' : 'hover:bg-stone-50'}`}
-              >
-                <Icon name="sync" />
-              </button>
-            )}
-            <button onClick={() => setView('SETTINGS')} className="p-2 bg-white rounded-full border border-stone-200 text-stone-600 shadow-sm hover:bg-stone-50 transition-colors">
-              <Icon name="settings" />
-            </button>
+             {/* Settings button removed from here as requested */}
           </div>
         </header>
 
@@ -226,27 +302,40 @@ const App = () => {
             <span className="animate-pulse">Loading Decks...</span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {decks.length === 0 && (
-              <div className="col-span-full text-center p-8 bg-white rounded-2xl border border-stone-200 text-stone-500">
-                No decks found. Check settings.
-              </div>
-            )}
-            {decks.map(deck => (
-              <button 
-                key={deck.name}
-                onClick={() => openDeck(deck)}
-                className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col items-start gap-4 hover:border-stone-400 transition-all text-left group active:scale-[0.99] h-full"
-              >
-                <div className="w-12 h-12 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600 group-hover:bg-stone-800 group-hover:text-white transition-colors">
-                  <Icon name="style" />
+          <div className="flex-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-12">
+              {decks.length === 0 && (
+                <div className="col-span-full text-center p-8 bg-white rounded-2xl border border-stone-200 text-stone-500">
+                  No decks found. Set up your data source.
                 </div>
-                <div>
-                  <h3 className="font-semibold text-lg text-stone-800">{deck.name}</h3>
-                  <p className="text-sm text-stone-400 font-medium">{deck.cards.length} Cards</p>
-                </div>
-              </button>
-            ))}
+              )}
+              {decks.map(deck => (
+                <button 
+                  key={deck.name}
+                  onClick={() => openDeck(deck)}
+                  className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col items-start gap-4 hover:border-stone-400 transition-all text-left group active:scale-[0.99] h-full"
+                >
+                  <div className="w-12 h-12 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600 group-hover:bg-stone-800 group-hover:text-white transition-colors">
+                    <Icon name="style" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg text-stone-800">{deck.name}</h3>
+                    <p className="text-sm text-stone-400 font-medium">{deck.cards.length} Cards</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Footer Settings Link */}
+            <div className="text-center pb-8 pt-4 border-t border-stone-200 mt-auto">
+               <button 
+                 onClick={() => setView('SETTINGS')}
+                 className="text-stone-400 text-sm hover:text-stone-600 flex items-center justify-center gap-2 mx-auto px-4 py-2 rounded-lg hover:bg-stone-100 transition-colors"
+               >
+                 <Icon name="settings" className="text-lg" />
+                 <span>Manage Data Source</span>
+               </button>
+            </div>
           </div>
         )}
       </div>
@@ -256,11 +345,10 @@ const App = () => {
   if (view === 'DECK_OVERVIEW') {
     return (
       <div className="min-h-screen bg-[#F5F5F4] flex flex-col">
-        {/* Sticky Header */}
         <div className="sticky top-0 z-20 bg-[#F5F5F4]/95 backdrop-blur-sm border-b border-stone-200 px-6 py-4">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button onClick={() => setView('HOME')} className="p-2 -ml-2 text-stone-500 hover:text-stone-800 rounded-full transition-colors">
+              <button onClick={resetHome} className="p-2 -ml-2 text-stone-500 hover:text-stone-800 rounded-full transition-colors">
                 <Icon name="arrow_back" />
               </button>
               <div>
@@ -279,7 +367,6 @@ const App = () => {
           </div>
         </div>
 
-        {/* Card Grid - Responsive Layout */}
         <div className="flex-1 p-6 overflow-y-auto">
           <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {activeDeck?.cards.map((card, i) => (
@@ -306,7 +393,6 @@ const App = () => {
 
     return (
       <div className="min-h-screen bg-[#E7E5E4] flex flex-col relative overflow-hidden">
-        {/* Top Bar */}
         <div className="px-6 py-4 flex justify-between items-center bg-[#F5F5F4] z-10 border-b border-stone-200/50">
           <button onClick={() => setView('DECK_OVERVIEW')} className="text-stone-500 p-2 -ml-2 hover:text-stone-800">
             <Icon name="close" />
@@ -320,7 +406,6 @@ const App = () => {
           <div className="w-8" />
         </div>
 
-        {/* Card Area */}
         <div className="flex-1 flex flex-col items-center justify-center p-6 perspective-1000">
           <div 
             className="w-full max-w-sm aspect-[3/4] cursor-pointer group relative"
@@ -356,16 +441,30 @@ const App = () => {
           </div>
         </div>
 
-        {/* Controls */}
         <div className="bg-[#F5F5F4] p-6 pb-8 border-t border-stone-200">
           <div className="max-w-sm mx-auto h-16">
             {!isFlipped ? (
-              <button 
-                onClick={() => setIsFlipped(true)}
-                className="w-full h-full bg-stone-800 text-[#FDFBF7] rounded-2xl font-semibold shadow-lg shadow-stone-400/50 hover:bg-stone-900 active:scale-[0.98] transition-all"
-              >
-                Reveal Answer
-              </button>
+              <div className="flex gap-3 h-full">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handlePrev(); }}
+                  disabled={currentIndex === 0}
+                  className={`w-16 h-full rounded-2xl font-bold transition-all flex items-center justify-center ${currentIndex === 0 ? 'bg-stone-100 text-stone-300 cursor-not-allowed' : 'bg-stone-200 text-stone-600 hover:bg-stone-300 active:scale-[0.98]'}`}
+                >
+                  <Icon name="arrow_back" />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleSkip(); }}
+                  className="w-1/3 h-full bg-stone-200 text-stone-600 rounded-2xl font-bold hover:bg-stone-300 active:scale-[0.98] transition-all"
+                >
+                  Skip
+                </button>
+                <button 
+                  onClick={() => setIsFlipped(true)}
+                  className="flex-1 h-full bg-stone-800 text-[#FDFBF7] rounded-2xl font-semibold shadow-lg shadow-stone-400/50 hover:bg-stone-900 active:scale-[0.98] transition-all"
+                >
+                  Reveal
+                </button>
+              </div>
             ) : (
               <div className="grid grid-cols-2 gap-4 h-full">
                 <button 
@@ -391,8 +490,9 @@ const App = () => {
   if (view === 'SUMMARY') {
     const total = queue.length;
     const correct = queue.filter(c => scores[c.id] === 'correct').length;
-    const missed = total - correct;
-    const percentage = Math.round((correct / total) * 100);
+    const incorrect = queue.filter(c => scores[c.id] === 'incorrect').length;
+    const skipped = total - correct - incorrect;
+    const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
 
     return (
       <div className="min-h-screen bg-[#F5F5F4] p-6 flex items-center justify-center">
@@ -409,25 +509,30 @@ const App = () => {
           <h2 className="text-2xl font-bold text-stone-800 mb-2">Session Complete</h2>
           <p className="text-stone-500 text-sm mb-8">Good effort! Here is how you did.</p>
 
-          <div className="flex justify-center gap-8 mb-8 bg-stone-50 p-4 rounded-2xl border border-stone-100">
+          <div className="flex justify-center gap-6 mb-8 bg-stone-50 p-4 rounded-2xl border border-stone-100">
             <div>
               <div className="text-2xl font-bold text-emerald-600">{correct}</div>
               <div className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">Correct</div>
             </div>
             <div className="w-px bg-stone-200"></div>
             <div>
-              <div className="text-2xl font-bold text-red-500">{missed}</div>
+              <div className="text-2xl font-bold text-red-500">{incorrect}</div>
               <div className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">Missed</div>
+            </div>
+            <div className="w-px bg-stone-200"></div>
+            <div>
+              <div className="text-2xl font-bold text-stone-500">{skipped}</div>
+              <div className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">Skipped</div>
             </div>
           </div>
 
           <div className="space-y-3">
-            {missed > 0 && (
+            {incorrect > 0 && (
               <button 
                 onClick={() => startSession('retry')}
                 className="w-full py-4 bg-stone-800 text-[#FDFBF7] rounded-2xl font-semibold shadow-md active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
               >
-                <Icon name="refresh" /> Review Missed ({missed})
+                <Icon name="refresh" /> Review Missed ({incorrect})
               </button>
             )}
             <button 
@@ -452,7 +557,7 @@ const App = () => {
   return (
     <div className="min-h-screen bg-[#F5F5F4] p-6 max-w-md mx-auto">
       <div className="flex items-center gap-4 mb-8 mt-2">
-        <button onClick={() => setView('HOME')} className="p-2 -ml-2 text-stone-500 hover:bg-white rounded-full transition-colors">
+        <button onClick={resetHome} className="p-2 -ml-2 text-stone-500 hover:bg-white rounded-full transition-colors">
           <Icon name="arrow_back" />
         </button>
         <h1 className="text-xl font-bold text-stone-800">Settings</h1>
@@ -488,9 +593,9 @@ const App = () => {
 
       <button 
         onClick={() => {
-          localStorage.setItem(STORAGE_KEY, gasUrl);
-          syncDecks();
-          setView('HOME');
+          localStorage.setItem(STORAGE_KEY_URL, gasUrl);
+          syncDecks(gasUrl, false);
+          resetHome();
         }}
         className="w-full mt-6 py-4 bg-stone-800 text-[#FDFBF7] rounded-2xl font-bold shadow-lg active:scale-[0.98] transition-transform"
       >
