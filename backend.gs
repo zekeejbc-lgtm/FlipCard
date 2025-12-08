@@ -45,7 +45,7 @@ function doGet(e) {
     
     switch(action) {
       case 'getAll':
-        return jsonResponse(getAllData());
+        return jsonResponse(getAllData(e.parameter.userId));
       case 'getUser':
         return jsonResponse(getUser(e.parameter.idNumber));
       case 'getDecks':
@@ -59,7 +59,7 @@ function doGet(e) {
       case 'setupSheets':
         return jsonResponse(setupSheets());
       default:
-        return jsonResponse(getAllData());
+        return jsonResponse(getAllData(e.parameter.userId));
     }
   } catch (error) {
     return jsonResponse({ error: error.message });
@@ -227,6 +227,17 @@ function setupSheets() {
     results.push('Announcements sheet already exists');
   }
   
+  // 8. Setup AnnouncementDismissals sheet for tracking which users dismissed which announcements
+  let dismissalsSheet = ss.getSheetByName('AnnouncementDismissals');
+  if (!dismissalsSheet) {
+    dismissalsSheet = ss.insertSheet('AnnouncementDismissals');
+    dismissalsSheet.appendRow(['UserID', 'AnnouncementID', 'DismissedAt']);
+    dismissalsSheet.setFrozenRows(1);
+    results.push('Created AnnouncementDismissals sheet');
+  } else {
+    results.push('AnnouncementDismissals sheet already exists');
+  }
+  
   return { 
     success: true, 
     message: 'Setup complete', 
@@ -236,12 +247,13 @@ function setupSheets() {
 
 /**
  * Get all data needed by the app
+ * @param {string} userId - Optional user ID to check announcement dismissals
  */
-function getAllData() {
+function getAllData(userId) {
   const examsResult = getExams();
   const subjects = getSubjects();
   const cacheVersionResult = getCacheVersion();
-  const announcementResult = getActiveAnnouncement();
+  const announcementResult = getActiveAnnouncement(userId);
   
   // Build subjectInfo map for quick lookup
   const subjectInfo = {};
@@ -1758,8 +1770,9 @@ function createAnnouncement(data) {
 
 /**
  * Get the currently active announcement
+ * @param {string} userId - Optional user ID to check if they've dismissed the announcement
  */
-function getActiveAnnouncement() {
+function getActiveAnnouncement(userId) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('Announcements');
@@ -1777,10 +1790,17 @@ function getActiveAnnouncement() {
       const expiresAt = data[i][9] ? new Date(data[i][9]) : null;
       
       if (isActive && (!expiresAt || expiresAt > now)) {
+        const announcementId = data[i][0];
+        
+        // Check if this user has already dismissed this announcement (server-side)
+        if (userId && hasUserDismissedAnnouncement(userId, announcementId)) {
+          return { success: true, announcement: null };
+        }
+        
         return {
           success: true,
           announcement: {
-            id: data[i][0],
+            id: announcementId,
             type: data[i][1],
             title: data[i][2],
             message: data[i][3],
@@ -1798,6 +1818,35 @@ function getActiveAnnouncement() {
     return { success: true, announcement: null };
   } catch (error) {
     return { success: false, announcement: null, error: error.message };
+  }
+}
+
+/**
+ * Check if a user has dismissed an announcement (server-side)
+ * @param {string} userId - User ID
+ * @param {string} announcementId - Announcement ID
+ * @returns {boolean} - True if user has dismissed this announcement
+ */
+function hasUserDismissedAnnouncement(userId, announcementId) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('AnnouncementDismissals');
+    
+    if (!sheet) {
+      return false;
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(userId) && String(data[i][1]) === String(announcementId)) {
+        return true;
+      }
+    }
+    
+    return false;
+  } catch (error) {
+    return false;
   }
 }
 
@@ -1836,12 +1885,40 @@ function deactivateAnnouncement(announcementId, userId) {
 }
 
 /**
- * Record that a user dismissed an announcement (for tracking, optional)
+ * Record that a user dismissed an announcement (server-side tracking)
  * @param {string} announcementId - The announcement ID
  * @param {string} userId - User ID who dismissed
  */
 function dismissAnnouncement(announcementId, userId) {
-  // This just returns success - dismissal is tracked client-side in localStorage
-  // Could be extended to track dismissals in a sheet if needed
-  return { success: true, message: 'Dismissal recorded' };
+  try {
+    if (!announcementId || !userId) {
+      return { error: 'Missing announcementId or userId' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('AnnouncementDismissals');
+    
+    // Create sheet if it doesn't exist
+    if (!sheet) {
+      sheet = ss.insertSheet('AnnouncementDismissals');
+      sheet.appendRow(['UserID', 'AnnouncementID', 'DismissedAt']);
+      sheet.setFrozenRows(1);
+    }
+    
+    // Check if already dismissed (avoid duplicates)
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(userId) && String(data[i][1]) === String(announcementId)) {
+        return { success: true, message: 'Already dismissed' };
+      }
+    }
+    
+    // Add dismissal record
+    const now = new Date().toISOString();
+    sheet.appendRow([userId, announcementId, now]);
+    
+    return { success: true, message: 'Dismissal recorded' };
+  } catch (error) {
+    return { error: 'Failed to record dismissal: ' + error.message };
+  }
 }
