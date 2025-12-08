@@ -968,6 +968,46 @@ const App = () => {
     }
   }, []);
 
+  // --- Periodic Data Refresh (every hour) ---
+  
+  useEffect(() => {
+    const REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour in milliseconds
+    const LAST_REFRESH_KEY = 'flashmaster_last_refresh';
+    
+    const checkAndRefresh = () => {
+      const lastRefresh = localStorage.getItem(LAST_REFRESH_KEY);
+      const now = Date.now();
+      
+      if (!lastRefresh || (now - parseInt(lastRefresh)) > REFRESH_INTERVAL) {
+        console.log('Hourly refresh triggered');
+        localStorage.setItem(LAST_REFRESH_KEY, now.toString());
+        
+        if (navigator.onLine) {
+          syncData(false); // Silent refresh (no toast)
+        }
+      }
+    };
+    
+    // Check on mount
+    checkAndRefresh();
+    
+    // Set up interval for periodic checks (check every 5 minutes if tab is active)
+    const intervalId = setInterval(checkAndRefresh, 5 * 60 * 1000);
+    
+    // Also refresh when tab becomes visible after being hidden
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkAndRefresh();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   // PWA Install handlers
   const handleInstallClick = async () => {
     if (deferredPrompt) {
