@@ -954,12 +954,24 @@ const ResourceViewer = ({
   resource: Resource; 
   onClose: () => void;
 }) => {
-  const getEmbedUrl = (url: string) => {
+  const [iframeError, setIframeError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const getFileId = (url: string) => {
+    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1] || 
+                  url.match(/id=([a-zA-Z0-9_-]+)/)?.[1];
+    return match || null;
+  };
+
+  const getEmbedUrl = (url: string, useGoogleViewer = false) => {
     // Google Drive file
     if (url.includes('drive.google.com')) {
-      const fileId = url.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1] || 
-                     url.match(/id=([a-zA-Z0-9_-]+)/)?.[1];
+      const fileId = getFileId(url);
       if (fileId) {
+        if (useGoogleViewer) {
+          // Use Google Docs viewer as fallback (works better for PDFs)
+          return `https://docs.google.com/viewer?srcid=${fileId}&pid=explorer&efh=false&a=v&chrome=false&embedded=true`;
+        }
         return `https://drive.google.com/file/d/${fileId}/preview`;
       }
     }
@@ -973,8 +985,18 @@ const ResourceViewer = ({
     return url;
   };
 
+  const handleIframeLoad = () => {
+    setIsLoading(false);
+  };
+
+  const handleIframeError = () => {
+    setIsLoading(false);
+    setIframeError(true);
+  };
+
   const renderContent = () => {
-    const embedUrl = getEmbedUrl(resource.url);
+    const isPDF = resource.category === 'Lesson PDF' || resource.name.toLowerCase().endsWith('.pdf');
+    const embedUrl = getEmbedUrl(resource.url, iframeError && isPDF);
     
     if (resource.category === 'Video') {
       return (
@@ -983,6 +1005,7 @@ const ResourceViewer = ({
           className="w-full h-full rounded-lg"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
+          onLoad={handleIframeLoad}
         />
       );
     }
@@ -993,17 +1016,31 @@ const ResourceViewer = ({
           src={embedUrl} 
           alt={resource.name} 
           className="max-w-full max-h-full object-contain rounded-lg"
+          onLoad={handleIframeLoad}
+          onError={handleIframeError}
         />
       );
     }
     
     // Files (PDF, PPT, etc.)
     return (
-      <iframe
-        src={embedUrl}
-        className="w-full h-full rounded-lg bg-white"
-        title={resource.name}
-      />
+      <div className="w-full h-full relative">
+        {isLoading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-stone-800 rounded-lg">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-amber-500 border-t-transparent mb-4"></div>
+            <p className="text-white text-sm">Loading document...</p>
+            <p className="text-stone-400 text-xs mt-2">If loading takes too long, try "Open Externally"</p>
+          </div>
+        )}
+        <iframe
+          key={iframeError ? 'fallback' : 'primary'}
+          src={embedUrl}
+          className="w-full h-full rounded-lg bg-white"
+          title={resource.name}
+          onLoad={handleIframeLoad}
+          onError={handleIframeError}
+        />
+      </div>
     );
   };
 
