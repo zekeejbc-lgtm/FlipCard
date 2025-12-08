@@ -573,6 +573,56 @@ const UploadModal = ({
   );
 };
 
+// Alert Modal Component (single button, info/warning/error display)
+const AlertModal = ({
+  isOpen,
+  onClose,
+  title,
+  message,
+  buttonText = 'OK',
+  type = 'info'
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  message: string;
+  buttonText?: string;
+  type?: 'info' | 'warning' | 'error' | 'success';
+}) => {
+  if (!isOpen) return null;
+
+  const iconConfig = {
+    info: { icon: 'info', bg: 'bg-blue-100', color: 'text-blue-500' },
+    warning: { icon: 'warning', bg: 'bg-amber-100', color: 'text-amber-500' },
+    error: { icon: 'error', bg: 'bg-red-100', color: 'text-red-500' },
+    success: { icon: 'check_circle', bg: 'bg-emerald-100', color: 'text-emerald-500' }
+  };
+
+  const { icon, bg, color } = iconConfig[type];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl animate-in fade-in zoom-in duration-200">
+        <div className="p-6">
+          <div className={`w-12 h-12 ${bg} rounded-full flex items-center justify-center mx-auto mb-4`}>
+            <Icon name={icon} className={`text-2xl ${color}`} />
+          </div>
+          <h3 className="text-lg font-bold text-stone-800 text-center mb-2">{title}</h3>
+          <p className="text-stone-600 text-center text-sm whitespace-pre-line">{message}</p>
+        </div>
+        <div className="border-t border-stone-200">
+          <button
+            onClick={onClose}
+            className="w-full py-3 text-stone-800 font-medium hover:bg-stone-50 transition-colors"
+          >
+            {buttonText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Confirmation Modal Component
 const ConfirmModal = ({
   isOpen,
@@ -1123,6 +1173,13 @@ const App = () => {
   const [examToDelete, setExamToDelete] = useState<string | null>(null); // For delete confirmation
   const [examToEdit, setExamToEdit] = useState<Exam | null>(null); // For editing exam
   
+  // Generic Modal States
+  const [alertModal, setAlertModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'info' | 'warning' | 'error' | 'success' }>({ isOpen: false, title: '', message: '', type: 'info' });
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; confirmText: string; confirmColor: 'red' | 'green' | 'stone'; onConfirm: () => void }>({ isOpen: false, title: '', message: '', confirmText: 'Confirm', confirmColor: 'red', onConfirm: () => {} });
+  const [resourceToDelete, setResourceToDelete] = useState<Resource | null>(null); // For resource delete confirmation
+  const [showClearProgressConfirm, setShowClearProgressConfirm] = useState(false); // For clear deck progress confirmation
+  const [showAdminCacheConfirm, setShowAdminCacheConfirm] = useState(false); // For admin cache clear confirmation
+  
   // Navigation State
   const [activeSubject, setActiveSubject] = useState<string | null>(() => {
     return localStorage.getItem('flashmaster_lastSubject');
@@ -1614,10 +1671,6 @@ const App = () => {
   const handleAdminClearAllCache = async () => {
     if (!user || user.idNumber !== ADMIN_USER_ID) return;
     
-    if (!confirm('Are you sure you want to clear ALL cache for ALL users?\\n\\nThis will force everyone to reload fresh data on their next visit.')) {
-      return;
-    }
-    
     const toastId = addToast('Admin: Bumping cache version...', 'loading');
     
     try {
@@ -1663,7 +1716,7 @@ const App = () => {
   const openDeck = async (deck: Deck) => {
     // Show loading state
     setDeckLoading(deck.name);
-    const loadingToast = addToast('loading', `Loading ${deck.name}...`);
+    const loadingToast = addToast(`Loading ${deck.name}...`, 'loading');
     
     // Small delay to show loading state (prevents flash)
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -2081,7 +2134,7 @@ const App = () => {
     }
 
     if (newQueue.length === 0) {
-      alert("No cards to play!");
+      setAlertModal({ isOpen: true, title: 'No Cards', message: 'No cards available to play!', type: 'warning' });
       return;
     }
 
@@ -2270,7 +2323,7 @@ const App = () => {
                 </div>
                 {user.idNumber === ADMIN_USER_ID && (
                   <button
-                    onClick={handleAdminClearAllCache}
+                    onClick={() => setShowAdminCacheConfirm(true)}
                     className="flex items-center gap-1 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-200 text-xs rounded-lg transition-colors"
                     title="Admin: Clear all users cache"
                   >
@@ -2467,8 +2520,10 @@ const App = () => {
         return;
       }
       
-      if (!confirm(`Delete "${resource.name}"?`)) return;
-      
+      setResourceToDelete(resource);
+    };
+
+    const executeDeleteResource = async (resource: Resource) => {
       const toastId = addToast('Deleting resource...', 'loading');
       
       try {
@@ -3023,6 +3078,45 @@ const App = () => {
             </div>
           </div>
         )}
+
+        {/* Resource Delete Confirmation Modal */}
+        <ConfirmModal
+          isOpen={!!resourceToDelete}
+          title="Delete Resource"
+          message={`Are you sure you want to delete "${resourceToDelete?.name || resourceToDelete?.title}"? This action cannot be undone.`}
+          confirmText="Delete"
+          confirmColor="red"
+          onConfirm={async () => {
+            if (resourceToDelete) {
+              await executeDeleteResource(resourceToDelete);
+              setResourceToDelete(null);
+            }
+          }}
+          onClose={() => setResourceToDelete(null)}
+        />
+
+        {/* Admin Cache Clear Confirmation Modal */}
+        <ConfirmModal
+          isOpen={showAdminCacheConfirm}
+          title="Clear All Users' Cache"
+          message={"Are you sure you want to clear ALL cache for ALL users?\n\nThis will force everyone to reload fresh data on their next visit."}
+          confirmText="Clear All Cache"
+          confirmColor="red"
+          onConfirm={async () => {
+            setShowAdminCacheConfirm(false);
+            await handleAdminClearAllCache();
+          }}
+          onClose={() => setShowAdminCacheConfirm(false)}
+        />
+
+        {/* Generic Alert Modal */}
+        <AlertModal
+          isOpen={alertModal.isOpen}
+          title={alertModal.title}
+          message={alertModal.message}
+          type={alertModal.type}
+          onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        />
       </div>
     );
   }
@@ -3208,12 +3302,7 @@ const App = () => {
             </div>
             {hasProgress && (
               <button
-                onClick={() => {
-                  if (confirm('Clear all progress for this deck?')) {
-                    clearDeckProgress(activeDeck.name);
-                    setScores({});
-                  }
-                }}
+                onClick={() => setShowClearProgressConfirm(true)}
                 className="mt-2 text-xs text-stone-400 hover:text-red-500 flex items-center gap-1"
               >
                 <Icon name="delete" className="text-sm" /> Clear Progress
@@ -3256,6 +3345,23 @@ const App = () => {
             })}
           </div>
         </main>
+
+        {/* Clear Progress Confirmation Modal */}
+        <ConfirmModal
+          isOpen={showClearProgressConfirm}
+          title="Clear Progress"
+          message="Are you sure you want to clear all progress for this deck? This will reset your correct/incorrect answers."
+          confirmText="Clear Progress"
+          confirmColor="red"
+          onConfirm={() => {
+            if (activeDeck) {
+              clearDeckProgress(activeDeck.name);
+              setScores({});
+            }
+            setShowClearProgressConfirm(false);
+          }}
+          onClose={() => setShowClearProgressConfirm(false)}
+        />
       </div>
     );
   }
