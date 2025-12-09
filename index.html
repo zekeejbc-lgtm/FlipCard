@@ -9,8 +9,8 @@
   <meta name="theme-color" content="#292524">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="apple-touch-icon" href="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsrounded/school/default/48px.svg">
-  <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIkZsYXNoTWFzdGVyIiwKICAic2hvcnRfbmFtZSI6ICJGbGFzaE1hc3RlciIsCiAgInN0YXJ0X3VybCI6ICIvIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAiYmFja2dyb3VuZF9jb2xvciI6ICIjRjVGNUY0IiwKICAidGhlbWVfY29sb3IiOiAiIzI5MjUyNCIsCiAgImljb25zIjogWwogICAgewogICAgICAic3JjIjogImh0dHBzOi8vZm9udHMuZ3N0YXRpYy5jb20vcy9pL3Nob3J0LXRlcm0vcmVsZWFzZS9tYXRlcmlhbHN5bWJvbHNyb3VuZGVkL3NjaG9vbC9kZWZhdWx0LzQ4cHguc3ZnIiwKICAgICAgInNpemVzIjogIjE5MngxOTIiLAogICAgICAidHlwZSI6ICJpbWFnZS9zdmcreG1sIgogICAgfQogIF0KfQ==">
+  <link rel="apple-touch-icon" href="/icon-192.svg">
+  <link rel="manifest" href="/manifest.json">
 
   <!-- Tailwind & Fonts -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -197,5 +197,20 @@
     </script>
   </div>
   <script type="module" src="/index.tsx"></script>
+  
+  <!-- Service Worker Registration for PWA -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then((registration) => {
+            console.log('SW registered:', registration.scope);
+          })
+          .catch((error) => {
+            console.log('SW registration failed:', error);
+          });
+      });
+    }
+  </script>
 </body>
 </html>
