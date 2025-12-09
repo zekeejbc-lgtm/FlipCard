@@ -1537,10 +1537,13 @@ const App = () => {
       return () => clearTimeout(timer);
     }
 
-    // Listen for install prompt
+    // Listen for install prompt - store it globally so it persists
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      // Also store in window for persistence
+      (window as any).__pwaInstallPrompt = e;
+      console.log('PWA: Install prompt captured and ready');
     };
 
     // Listen for successful install
@@ -1548,9 +1551,15 @@ const App = () => {
       setIsAppInstalled(true);
       setShowInstallToast(false);
       setDeferredPrompt(null);
+      (window as any).__pwaInstallPrompt = null;
       localStorage.setItem('flashmaster_installed', 'true');
-      addToast('App installed successfully!', 'success');
+      addToast('App installed successfully! 🎉', 'success');
     };
+
+    // Check if prompt was already captured before this component mounted
+    if ((window as any).__pwaInstallPrompt) {
+      setDeferredPrompt((window as any).__pwaInstallPrompt);
+    }
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
     window.addEventListener('appinstalled', handleAppInstalled);
@@ -1562,7 +1571,7 @@ const App = () => {
   }, []);
 
   // --- Cache Management - Notify on new version ---
-  const APP_VERSION = '1.3.4'; // Increment this to trigger update notification
+  const APP_VERSION = '1.3.5'; // Increment this to trigger update notification
   
   useEffect(() => {
     const storedVersion = localStorage.getItem('flashmaster_version');
@@ -1659,32 +1668,59 @@ const App = () => {
 
   // PWA Install handlers
   const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      // Chrome/Edge - use the native install prompt
+    // Try to get the deferred prompt from state or window
+    const prompt = deferredPrompt || (window as any).__pwaInstallPrompt;
+    
+    if (prompt) {
+      // Chrome/Edge/Samsung - use the native install prompt
       try {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
+        prompt.prompt();
+        const { outcome } = await prompt.userChoice;
+        console.log('PWA: Install outcome:', outcome);
+        
         if (outcome === 'accepted') {
           setShowInstallToast(false);
-          addToast('Installing app...', 'success');
+          addToast('Installing FlashMaster... 📲', 'success');
+          localStorage.setItem('flashmaster_installed', 'true');
+        } else {
+          addToast('Installation cancelled', 'info');
         }
+        
         setDeferredPrompt(null);
+        (window as any).__pwaInstallPrompt = null;
       } catch (e) {
         console.error('Install prompt failed:', e);
-        addToast('Installation failed. Try from browser menu.', 'error');
+        // Show fallback instructions
+        showInstallInstructions();
       }
     } else {
-      // iOS Safari / other browsers - show instructions
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-      
-      if (isIOS) {
-        addToast('Tap the Share button (□↑) then "Add to Home Screen"', 'info', 8);
-      } else {
-        addToast('Use browser menu → "Install app" or "Add to Home Screen"', 'info', 6);
-      }
-      setShowInstallToast(false);
+      // No prompt available - show manual instructions
+      showInstallInstructions();
     }
+  };
+  
+  const showInstallInstructions = () => {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isAndroid = /Android/.test(navigator.userAgent);
+    const isChrome = /Chrome/.test(navigator.userAgent) && !/Edge|Edg/.test(navigator.userAgent);
+    const isFirefox = /Firefox/.test(navigator.userAgent);
+    const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+    
+    if (isIOS) {
+      // iOS Safari
+      addToast('Tap the Share button (□↑) at the bottom, then "Add to Home Screen"', 'info', 10);
+    } else if (isAndroid && isChrome) {
+      // Android Chrome - should have had prompt, but just in case
+      addToast('Tap the menu (⋮) then "Add to Home screen" or "Install app"', 'info', 8);
+    } else if (isAndroid && isFirefox) {
+      addToast('Tap the menu (⋮) then "Install"', 'info', 6);
+    } else if (isSafari) {
+      addToast('In Safari: File menu → "Add to Dock"', 'info', 6);
+    } else {
+      addToast('Look for "Install" or "Add to Home Screen" in your browser menu', 'info', 6);
+    }
+    
+    setShowInstallToast(false);
   };
 
   const handleDismissInstall = () => {
@@ -2285,7 +2321,8 @@ const App = () => {
     startDateTime.setHours(startHour, startMin, 0, 0);
     
     const endDateTime = new Date(examDate);
-    endDateTime.setHours(endHour || 23, endMin || 59, 0, 0);
+    // Set end time to the END of the minute (59 seconds, 999 ms) for proper comparison
+    endDateTime.setHours(endHour || 23, endMin || 59, 59, 999);
     
     // Handle case where end time equals or is before start time (use end of day instead)
     if (endDateTime.getTime() <= startDateTime.getTime()) {
@@ -2293,7 +2330,7 @@ const App = () => {
     }
     
     if (now < startDateTime) return 'upcoming';
-    if (now >= startDateTime && now <= endDateTime) return 'ongoing';
+    if (now <= endDateTime) return 'ongoing';
     return 'completed';
   };
 

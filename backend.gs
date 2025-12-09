@@ -1521,7 +1521,8 @@ function getExams(subject) {
         if (isNaN(endHours)) {
           examEndDateTime.setHours(23, 59, 59, 999);
         } else {
-          examEndDateTime.setHours(endHours, endMinutes, 0, 0);
+          // Set to end of the minute for proper comparison
+          examEndDateTime.setHours(endHours, endMinutes, 59, 999);
         }
         
         // Handle case where end time equals or is before start time (default to end of day)
@@ -1529,11 +1530,11 @@ function getExams(subject) {
           examEndDateTime.setHours(23, 59, 59, 999);
         }
         
-        // Determine status
+        // Determine status based on current time
         if (examDateTime && examEndDateTime) {
-          if (now < examDateTime) {
+          if (now.getTime() < examDateTime.getTime()) {
             status = 'upcoming';
-          } else if (now >= examDateTime && now <= examEndDateTime) {
+          } else if (now.getTime() <= examEndDateTime.getTime()) {
             status = 'ongoing';
           } else {
             status = 'done';
