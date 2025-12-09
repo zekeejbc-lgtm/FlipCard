@@ -529,8 +529,30 @@ function getAnalytics(idNumber) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const analyticsSheet = ss.getSheetByName('Analytics');
     
+    // If Analytics sheet doesn't exist, return empty but successful response
     if (!analyticsSheet) {
-      return { error: 'Analytics sheet not found' };
+      // Still try to get summary from user record
+      const userSheet = ss.getSheetByName('User');
+      let recordAnalytics = null;
+      
+      if (userSheet) {
+        const userData = userSheet.getDataRange().getValues();
+        for (let i = 1; i < userData.length; i++) {
+          if (String(userData[i][0]) === String(idNumber)) {
+            try {
+              const record = JSON.parse(userData[i][2] || '{}');
+              recordAnalytics = record.analytics || null;
+            } catch (e) {}
+            break;
+          }
+        }
+      }
+      
+      return { 
+        success: true, 
+        analytics: [],
+        summary: recordAnalytics
+      };
     }
     
     const data = analyticsSheet.getDataRange().getValues();
@@ -938,7 +960,8 @@ function getAllDecks() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = ss.getSheets();
   const result = {};
-  const specialSheets = ['User', 'Category', 'Resources', 'Analytics', 'DeckProgress', 'ExamSchedule'];
+  // All system/special sheets that should NOT be treated as flashcard decks
+  const specialSheets = ['User', 'Category', 'Resources', 'Analytics', 'DeckProgress', 'ExamSchedule', 'Announcements', 'AnnouncementDismissals'];
 
   for (let i = 0; i < sheets.length; i++) {
     const sheet = sheets[i];
@@ -957,15 +980,16 @@ function getAllDecks() {
       continue;
     }
     
-    // Get display name from C1, fallback to sheet name if empty
-    const displayName = (data[0][2] && String(data[0][2]).trim() !== '') 
-      ? String(data[0][2]).trim() 
-      : sheetName;
+    // IMPORTANT: Only include sheets that have BOTH C1 (title) AND D1 (subject) properly set
+    // This prevents system sheets or misconfigured sheets from showing up
+    const displayName = data[0][2] ? String(data[0][2]).trim() : '';
+    const subject = data[0][3] ? String(data[0][3]).trim() : '';
     
-    // Get subject/category from D1, default to "Uncategorized"
-    const subject = (data[0][3] && String(data[0][3]).trim() !== '') 
-      ? String(data[0][3]).trim() 
-      : 'Uncategorized';
+    // Skip sheets that don't have proper flashcard configuration
+    // A valid flashcard sheet MUST have a title in C1 and a subject in D1
+    if (!displayName || !subject) {
+      continue;
+    }
 
     const cards = [];
     
@@ -1786,10 +1810,26 @@ function getActiveAnnouncement(userId) {
     
     // Find active announcement that hasn't expired
     for (let i = 1; i < data.length; i++) {
-      const isActive = data[i][5] === true || data[i][5] === 'TRUE';
-      const expiresAt = data[i][9] ? new Date(data[i][9]) : null;
+      const isActive = data[i][5] === true || data[i][5] === 'TRUE' || String(data[i][5]).toLowerCase() === 'true';
       
-      if (isActive && (!expiresAt || expiresAt > now)) {
+      // Parse expiration date - handle various formats
+      let expiresAt = null;
+      if (data[i][9]) {
+        if (data[i][9] instanceof Date) {
+          expiresAt = data[i][9];
+        } else {
+          expiresAt = new Date(data[i][9]);
+        }
+        // Check if date is valid
+        if (isNaN(expiresAt.getTime())) {
+          expiresAt = null;
+        }
+      }
+      
+      // Check if announcement is active and not expired
+      const isNotExpired = !expiresAt || expiresAt.getTime() > now.getTime();
+      
+      if (isActive && isNotExpired) {
         const announcementId = data[i][0];
         
         // Check if this user has already dismissed this announcement (server-side)

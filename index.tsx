@@ -1562,7 +1562,7 @@ const App = () => {
   }, []);
 
   // --- Cache Management - Notify on new version ---
-  const APP_VERSION = '1.3.3'; // Increment this to trigger update notification
+  const APP_VERSION = '1.3.4'; // Increment this to trigger update notification
   
   useEffect(() => {
     const storedVersion = localStorage.getItem('flashmaster_version');
@@ -1660,15 +1660,29 @@ const App = () => {
   // PWA Install handlers
   const handleInstallClick = async () => {
     if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setShowInstallToast(false);
+      // Chrome/Edge - use the native install prompt
+      try {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          setShowInstallToast(false);
+          addToast('Installing app...', 'success');
+        }
+        setDeferredPrompt(null);
+      } catch (e) {
+        console.error('Install prompt failed:', e);
+        addToast('Installation failed. Try from browser menu.', 'error');
       }
-      setDeferredPrompt(null);
     } else {
-      // Fallback for browsers that don't support beforeinstallprompt
-      addToast('Add to Home Screen from your browser menu', 'info');
+      // iOS Safari / other browsers - show instructions
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      
+      if (isIOS) {
+        addToast('Tap the Share button (□↑) then "Add to Home Screen"', 'info', 8);
+      } else {
+        addToast('Use browser menu → "Install app" or "Add to Home Screen"', 'info', 6);
+      }
       setShowInstallToast(false);
     }
   };
@@ -1878,11 +1892,22 @@ const App = () => {
         })
       });
       const data = await response.json();
+      
+      // Handle both success case and error case (no analytics sheet yet)
       if (data.success) {
+        setUserAnalytics(data);
+      } else if (data.error) {
+        // If analytics sheet doesn't exist or other error, show empty state
+        console.log('Analytics fetch result:', data.error);
+        setUserAnalytics({ success: true, analytics: [], summary: null });
+      } else {
+        // Fallback - set with whatever data we got
         setUserAnalytics(data);
       }
     } catch (error) {
       console.error('Failed to fetch analytics:', error);
+      // Set empty state on error so user sees "No Analytics Yet" instead of infinite loading
+      setUserAnalytics({ success: true, analytics: [], summary: null });
     } finally {
       setLoadingAnalytics(false);
     }
