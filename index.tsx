@@ -4451,91 +4451,220 @@ const App = () => {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Overall Stats */}
+              {/* Overall Stats with Donut Chart */}
               {userAnalytics.summary?.analytics && (
                 <div className="bg-white rounded-2xl p-6 border border-stone-200">
                   <h2 className="font-bold text-stone-800 mb-4">Overall Progress</h2>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {(() => {
-                      const subjects = userAnalytics.summary.analytics.subjects || {};
-                      let totalAttempts = 0;
-                      let totalCorrect = 0;
-                      let totalDecks = 0;
-                      Object.values(subjects).forEach((s: any) => {
-                        totalAttempts += s.totalAttempts || 0;
-                        totalCorrect += s.correct || 0;
-                        totalDecks += Object.keys(s.decks || {}).length;
-                      });
-                      const avgScore = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
-                      return (
-                        <>
-                          <div className="text-center p-4 bg-stone-50 rounded-xl">
-                            <div className="text-2xl font-bold text-stone-800">{Object.keys(subjects).length}</div>
-                            <div className="text-xs text-stone-500">Subjects</div>
+                  {(() => {
+                    const subjects = userAnalytics.summary.analytics.subjects || {};
+                    let totalAttempts = 0;
+                    let totalCorrect = 0;
+                    let totalIncorrect = 0;
+                    let totalDecks = 0;
+                    Object.values(subjects).forEach((s: any) => {
+                      totalAttempts += s.totalAttempts || 0;
+                      totalCorrect += s.correct || 0;
+                      totalIncorrect += s.incorrect || 0;
+                      totalDecks += Object.keys(s.decks || {}).length;
+                    });
+                    const avgScore = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
+                    const correctPercent = totalAttempts > 0 ? (totalCorrect / totalAttempts) * 100 : 0;
+                    
+                    // SVG Donut Chart calculations
+                    const radius = 60;
+                    const circumference = 2 * Math.PI * radius;
+                    const correctOffset = circumference - (correctPercent / 100) * circumference;
+                    
+                    return (
+                      <div className="flex flex-col md:flex-row items-center gap-6">
+                        {/* Donut Chart */}
+                        <div className="relative w-40 h-40 flex-shrink-0">
+                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 160 160">
+                            {/* Background circle */}
+                            <circle
+                              cx="80"
+                              cy="80"
+                              r={radius}
+                              fill="none"
+                              stroke="#fecaca"
+                              strokeWidth="20"
+                            />
+                            {/* Correct portion */}
+                            <circle
+                              cx="80"
+                              cy="80"
+                              r={radius}
+                              fill="none"
+                              stroke="#10b981"
+                              strokeWidth="20"
+                              strokeDasharray={circumference}
+                              strokeDashoffset={correctOffset}
+                              strokeLinecap="round"
+                              className="transition-all duration-1000"
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-3xl font-bold text-stone-800">{avgScore}%</span>
+                            <span className="text-xs text-stone-500">Accuracy</span>
                           </div>
-                          <div className="text-center p-4 bg-stone-50 rounded-xl">
-                            <div className="text-2xl font-bold text-stone-800">{totalDecks}</div>
-                            <div className="text-xs text-stone-500">Decks Played</div>
+                        </div>
+                        
+                        {/* Stats Grid */}
+                        <div className="flex-1 grid grid-cols-2 gap-3 w-full">
+                          <div className="text-center p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                            <div className="text-2xl font-bold text-emerald-600">{totalCorrect}</div>
+                            <div className="text-xs text-emerald-700">Correct</div>
                           </div>
-                          <div className="text-center p-4 bg-stone-50 rounded-xl">
+                          <div className="text-center p-4 bg-red-50 rounded-xl border border-red-100">
+                            <div className="text-2xl font-bold text-red-500">{totalIncorrect}</div>
+                            <div className="text-xs text-red-600">Incorrect</div>
+                          </div>
+                          <div className="text-center p-4 bg-stone-50 rounded-xl border border-stone-200">
                             <div className="text-2xl font-bold text-stone-800">{totalAttempts}</div>
-                            <div className="text-xs text-stone-500">Total Cards</div>
+                            <div className="text-xs text-stone-500">Cards Reviewed</div>
                           </div>
-                          <div className="text-center p-4 bg-emerald-50 rounded-xl">
-                            <div className="text-2xl font-bold text-emerald-600">{avgScore}%</div>
-                            <div className="text-xs text-stone-500">Avg Score</div>
+                          <div className="text-center p-4 bg-blue-50 rounded-xl border border-blue-100">
+                            <div className="text-2xl font-bold text-blue-600">{totalDecks}</div>
+                            <div className="text-xs text-blue-700">Decks Studied</div>
                           </div>
-                        </>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Subject Performance Bar Chart */}
+              {userAnalytics.summary?.analytics?.subjects && Object.keys(userAnalytics.summary.analytics.subjects).length > 0 && (
+                <div className="bg-white rounded-2xl p-6 border border-stone-200">
+                  <h2 className="font-bold text-stone-800 mb-4">Performance by Subject</h2>
+                  <div className="space-y-4">
+                    {Object.entries(userAnalytics.summary.analytics.subjects).map(([subject, data]: [string, any]) => {
+                      const accuracy = data.totalAttempts > 0 ? Math.round((data.correct / data.totalAttempts) * 100) : 0;
+                      const subjectName = subjectInfo[subject]?.name || subject;
+                      return (
+                        <div key={subject} className="space-y-1">
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="font-medium text-stone-700 truncate flex-1">{subjectName}</span>
+                            <span className="text-stone-500 ml-2">{accuracy}%</span>
+                          </div>
+                          <div className="h-6 bg-stone-100 rounded-lg overflow-hidden flex">
+                            <div 
+                              className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-lg flex items-center justify-end pr-2 text-xs font-medium text-white transition-all duration-500"
+                              style={{ width: `${Math.max(accuracy, 8)}%` }}
+                            >
+                              {accuracy > 15 && `${data.correct}`}
+                            </div>
+                            {data.incorrect > 0 && (
+                              <div 
+                                className="h-full bg-gradient-to-r from-red-400 to-red-500 flex items-center justify-start pl-2 text-xs font-medium text-white"
+                                style={{ width: `${Math.max(100 - accuracy, 8)}%` }}
+                              >
+                                {(100 - accuracy) > 15 && `${data.incorrect}`}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex justify-between text-xs text-stone-400">
+                            <span>{data.correct} correct</span>
+                            <span>{data.incorrect} incorrect</span>
+                          </div>
+                        </div>
                       );
-                    })()}
+                    })}
+                  </div>
+                  
+                  {/* Legend */}
+                  <div className="flex justify-center gap-6 mt-4 pt-4 border-t border-stone-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded bg-emerald-500"></div>
+                      <span className="text-xs text-stone-500">Correct</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded bg-red-500"></div>
+                      <span className="text-xs text-stone-500">Incorrect</span>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Per Subject */}
+              {/* Deck Details - Expandable Cards */}
               {userAnalytics.summary?.analytics?.subjects && Object.entries(userAnalytics.summary.analytics.subjects).map(([subject, data]: [string, any]) => (
                 <div key={subject} className="bg-white rounded-2xl p-6 border border-stone-200">
                   <div className="flex justify-between items-center mb-4">
-                    <h2 className="font-bold text-stone-800">{subject}</h2>
-                    <span className="text-sm text-stone-500">
-                      {data.totalAttempts > 0 ? Math.round((data.correct / data.totalAttempts) * 100) : 0}% accuracy
+                    <h2 className="font-bold text-stone-800">{subjectInfo[subject]?.name || subject}</h2>
+                    <span className="text-sm px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full font-medium">
+                      {data.totalAttempts > 0 ? Math.round((data.correct / data.totalAttempts) * 100) : 0}%
                     </span>
                   </div>
-                  
-                  {/* Progress bar */}
-                  <div className="h-2 bg-stone-100 rounded-full mb-4 overflow-hidden">
-                    <div 
-                      className="h-full bg-emerald-500 rounded-full transition-all"
-                      style={{ width: `${data.totalAttempts > 0 ? (data.correct / data.totalAttempts) * 100 : 0}%` }}
-                    ></div>
-                  </div>
 
-                  <div className="flex gap-4 text-sm mb-4">
-                    <span className="text-emerald-600"><strong>{data.correct}</strong> correct</span>
-                    <span className="text-red-500"><strong>{data.incorrect}</strong> incorrect</span>
-                    <span className="text-stone-500">{Object.keys(data.decks || {}).length} decks</span>
+                  {/* Mini donut for this subject */}
+                  <div className="flex items-center gap-4 mb-4">
+                    {(() => {
+                      const accuracy = data.totalAttempts > 0 ? (data.correct / data.totalAttempts) * 100 : 0;
+                      const r = 24;
+                      const c = 2 * Math.PI * r;
+                      const offset = c - (accuracy / 100) * c;
+                      return (
+                        <div className="relative w-16 h-16 flex-shrink-0">
+                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 64 64">
+                            <circle cx="32" cy="32" r={r} fill="none" stroke="#fecaca" strokeWidth="8" />
+                            <circle cx="32" cy="32" r={r} fill="none" stroke="#10b981" strokeWidth="8"
+                              strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round" />
+                          </svg>
+                        </div>
+                      );
+                    })()}
+                    <div className="flex-1 grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <div className="text-lg font-bold text-emerald-600">{data.correct}</div>
+                        <div className="text-xs text-stone-400">Correct</div>
+                      </div>
+                      <div>
+                        <div className="text-lg font-bold text-red-500">{data.incorrect}</div>
+                        <div className="text-xs text-stone-400">Wrong</div>
+                      </div>
+                      <div>
+                        <div className="text-lg font-bold text-stone-700">{Object.keys(data.decks || {}).length}</div>
+                        <div className="text-xs text-stone-400">Decks</div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Decks breakdown */}
                   {data.decks && Object.entries(data.decks).length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-xs text-stone-400 uppercase tracking-wide">Decks</p>
-                      {Object.entries(data.decks).map(([deckName, deckData]: [string, any]) => (
-                        <div key={deckName} className="flex justify-between items-center p-3 bg-stone-50 rounded-lg text-sm">
-                          <span className="font-medium text-stone-700 truncate flex-1">{deckName}</span>
-                          <div className="flex items-center gap-3 text-xs">
-                            <span className="text-emerald-600">{deckData.correct}✓</span>
-                            <span className="text-red-500">{deckData.incorrect}✗</span>
-                            <span className="bg-stone-200 px-2 py-0.5 rounded text-stone-600">Best: {deckData.bestScore}%</span>
+                      <p className="text-xs text-stone-400 uppercase tracking-wide">Decks Studied</p>
+                      {Object.entries(data.decks).map(([deckName, deckData]: [string, any]) => {
+                        const deckAccuracy = (deckData.correct + deckData.incorrect) > 0 
+                          ? Math.round((deckData.correct / (deckData.correct + deckData.incorrect)) * 100) 
+                          : 0;
+                        return (
+                          <div key={deckName} className="p-3 bg-stone-50 rounded-xl">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="font-medium text-stone-700 truncate flex-1 text-sm">{deckName}</span>
+                              <span className="text-xs bg-stone-200 px-2 py-0.5 rounded-full text-stone-600 ml-2">
+                                Best: {deckData.bestScore}%
+                              </span>
+                            </div>
+                            <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-emerald-500 rounded-full"
+                                style={{ width: `${deckAccuracy}%` }}
+                              ></div>
+                            </div>
+                            <div className="flex justify-between mt-1 text-xs text-stone-400">
+                              <span>{deckData.correct} correct, {deckData.incorrect} wrong</span>
+                              <span>{deckAccuracy}%</span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
               ))}
 
-              {/* Detailed Table */}
+              {/* Session History Table */}
               {userAnalytics.analytics && userAnalytics.analytics.length > 0 && (
                 <div className="bg-white rounded-2xl p-6 border border-stone-200">
                   <h2 className="font-bold text-stone-800 mb-4">Session History</h2>
@@ -4545,7 +4674,7 @@ const App = () => {
                         <tr className="border-b border-stone-200">
                           <th className="text-left py-2 text-stone-500 font-medium">Subject</th>
                           <th className="text-left py-2 text-stone-500 font-medium">Deck</th>
-                          <th className="text-right py-2 text-stone-500 font-medium">Attempts</th>
+                          <th className="text-right py-2 text-stone-500 font-medium">Cards</th>
                           <th className="text-right py-2 text-stone-500 font-medium">Best</th>
                           <th className="text-right py-2 text-stone-500 font-medium">Avg</th>
                           <th className="text-right py-2 text-stone-500 font-medium">Last Played</th>
@@ -4554,10 +4683,10 @@ const App = () => {
                       <tbody>
                         {userAnalytics.analytics.map((row: any, idx: number) => (
                           <tr key={idx} className="border-b border-stone-100">
-                            <td className="py-2 text-stone-700">{row.subject}</td>
+                            <td className="py-2 text-stone-700">{subjectInfo[row.subject]?.name || row.subject}</td>
                             <td className="py-2 text-stone-700 truncate max-w-32">{row.deck}</td>
                             <td className="py-2 text-right text-stone-600">{row.totalAttempts}</td>
-                            <td className="py-2 text-right text-emerald-600">{row.bestScore}%</td>
+                            <td className="py-2 text-right text-emerald-600 font-medium">{row.bestScore}%</td>
                             <td className="py-2 text-right text-stone-600">{row.averageScore}%</td>
                             <td className="py-2 text-right text-stone-400 text-xs">
                               {row.lastPlayed ? new Date(row.lastPlayed).toLocaleDateString() : '-'}
