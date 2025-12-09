@@ -1,4 +1,4 @@
-# FlashMaster 📚
+# CumLaude! 📚
 
 A modern flashcard web app that syncs with Google Sheets via Google Apps Script.
 
@@ -53,7 +53,7 @@ Example:
 
 #### Connect to Your App
 
-1. Open your deployed FlashMaster app
+1. Open your deployed CumLaude! app
 2. Click "Manage Data Source" at the bottom
 3. Paste your Google Apps Script Web App URL
 4. Click "Save & Return"

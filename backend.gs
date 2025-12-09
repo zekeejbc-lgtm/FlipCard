@@ -1,5 +1,5 @@
 /**
- * FlashMaster Google Apps Script Backend
+ * CumLaude! Google Apps Script Backend
  * 
  * SHEETS STRUCTURE:
  * 

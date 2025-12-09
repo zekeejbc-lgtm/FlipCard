@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>FlashMaster</title>
+  <title>CumLaude!</title>
   
   <!-- PWA Setup -->
   <meta name="theme-color" content="#292524">
@@ -110,7 +110,7 @@
         <span class="material-symbols-rounded" style="font-size: 32px; color: white;">school</span>
       </div>
       <div style="width: 48px; height: 48px; border: 3px solid #e7e5e4; border-top-color: #292524; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-      <p style="margin-top: 16px; color: #57534e; font-size: 14px; font-weight: 500;">Loading FlashMaster...</p>
+      <p style="margin-top: 16px; color: #57534e; font-size: 14px; font-weight: 500;">Loading CumLaude!...</p>
       <p id="loading-status" style="margin-top: 8px; color: #a8a29e; font-size: 12px;">Initializing app...</p>
       <button id="recovery-btn" style="display: none; margin-top: 24px; padding: 12px 24px; background: #292524; color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15);" onclick="clearAllAndReload()">
         Clear Cache & Reload
@@ -162,9 +162,9 @@
       async function clearAllAndReload() {
         try {
           // Clear localStorage except user data
-          var userData = localStorage.getItem('flashmaster_user');
+          var userData = localStorage.getItem('cumlaude_user');
           localStorage.clear();
-          if (userData) localStorage.setItem('flashmaster_user', userData);
+          if (userData) localStorage.setItem('cumlaude_user', userData);
           
           // Unregister service workers
           if ('serviceWorker' in navigator) {
@@ -184,7 +184,7 @@
           
           // Clear IndexedDB
           if (window.indexedDB) {
-            indexedDB.deleteDatabase('FlashMasterDB');
+            indexedDB.deleteDatabase('CumLaudeDB');
           }
           
           // Force reload

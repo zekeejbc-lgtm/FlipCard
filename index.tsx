@@ -98,13 +98,13 @@ type SubjectInfo = {
 // --- Constants ---
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxnlS12um9vSaZqrC4oS6MZbl0AVAZyop3G9Qd2uAZmtj1VMP6ZiP0APtd-mFYBGpA/exec';
-const STORAGE_KEY_USER = 'flashmaster_user';
+const STORAGE_KEY_USER = 'cumlaude_user';
 const STORAGE_KEY_STATE = 'flashcard_session_state';
-const STORAGE_KEY_CACHE_VERSION = 'flashmaster_cache_version';
+const STORAGE_KEY_CACHE_VERSION = 'cumlaude_cache_version';
 
 // --- Database ---
 
-const db = new Dexie('FlashMasterDB') as Dexie & {
+const db = new Dexie('CumLaudeDB') as Dexie & {
   decks: Dexie.Table<Deck, string>;
   categories: Dexie.Table<{ subject: string; items: CategoryItem[] }, string>;
   resources: Dexie.Table<{ subject: string; items: Resource[] }, string>;
@@ -117,7 +117,7 @@ db.version(2).stores({
 });
 
 // Progress storage key prefix
-const PROGRESS_KEY_PREFIX = 'flashmaster_deck_progress_';
+const PROGRESS_KEY_PREFIX = 'cumlaude_deck_progress_';
 
 // --- Components ---
 
@@ -1335,7 +1335,7 @@ const App = () => {
 
   // Data State
   const [view, setView] = useState<AppView>(() => {
-    const saved = localStorage.getItem('flashmaster_lastView');
+    const saved = localStorage.getItem('cumlaude_lastView');
     return (saved as AppView) || 'HOME';
   });
   const [loading, setLoading] = useState(true);
@@ -1377,10 +1377,10 @@ const App = () => {
   
   // Navigation State
   const [activeSubject, setActiveSubject] = useState<string | null>(() => {
-    return localStorage.getItem('flashmaster_lastSubject');
+    return localStorage.getItem('cumlaude_lastSubject');
   });
   const [activeTab, setActiveTab] = useState<'Flashcards' | 'Resources' | 'Exams'>(() => {
-    const saved = localStorage.getItem('flashmaster_lastTab');
+    const saved = localStorage.getItem('cumlaude_lastTab');
     return (saved as 'Flashcards' | 'Resources' | 'Exams') || 'Flashcards';
   });
   const [activeDeck, setActiveDeck] = useState<Deck | null>(null);
@@ -1390,17 +1390,17 @@ const App = () => {
 
   // Save navigation state to localStorage
   useEffect(() => {
-    localStorage.setItem('flashmaster_lastView', view);
+    localStorage.setItem('cumlaude_lastView', view);
   }, [view]);
 
   useEffect(() => {
     if (activeSubject) {
-      localStorage.setItem('flashmaster_lastSubject', activeSubject);
+      localStorage.setItem('cumlaude_lastSubject', activeSubject);
     }
   }, [activeSubject]);
 
   useEffect(() => {
-    localStorage.setItem('flashmaster_lastTab', activeTab);
+    localStorage.setItem('cumlaude_lastTab', activeTab);
   }, [activeTab]);
 
   // Real-time exam countdown - refresh every second
@@ -1451,7 +1451,7 @@ const App = () => {
       setDecks(cachedDecks);
       
       // Load cached subjects
-      const cachedSubjects = localStorage.getItem('flashmaster_subjects');
+      const cachedSubjects = localStorage.getItem('cumlaude_subjects');
       if (cachedSubjects) {
         try {
           setApiSubjects(JSON.parse(cachedSubjects));
@@ -1461,7 +1461,7 @@ const App = () => {
       }
       
       // Load cached subject info (code to name mapping)
-      const cachedSubjectInfo = localStorage.getItem('flashmaster_subjectInfo');
+      const cachedSubjectInfo = localStorage.getItem('cumlaude_subjectInfo');
       if (cachedSubjectInfo) {
         try {
           setSubjectInfo(JSON.parse(cachedSubjectInfo));
@@ -1471,7 +1471,7 @@ const App = () => {
       }
       
       // Load cached exams
-      const cachedExams = localStorage.getItem('flashmaster_exams');
+      const cachedExams = localStorage.getItem('cumlaude_exams');
       if (cachedExams) {
         try {
           setExams(JSON.parse(cachedExams));
@@ -1491,8 +1491,8 @@ const App = () => {
       }
       
       // Validate restored view - if SUBJECT view but no subject, go HOME
-      const savedView = localStorage.getItem('flashmaster_lastView') as AppView;
-      const savedSubject = localStorage.getItem('flashmaster_lastSubject');
+      const savedView = localStorage.getItem('cumlaude_lastView') as AppView;
+      const savedSubject = localStorage.getItem('cumlaude_lastSubject');
       if (savedView === 'SUBJECT' && !savedSubject) {
         setView('HOME');
       }
@@ -1524,12 +1524,12 @@ const App = () => {
     // Check if already installed
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
                          (window.navigator as any).standalone === true;
-    const dismissedInstall = localStorage.getItem('flashmaster_install_dismissed');
+    const dismissedInstall = localStorage.getItem('cumlaude_install_dismissed');
     
     if (isStandalone) {
       setIsAppInstalled(true);
-      localStorage.setItem('flashmaster_installed', 'true');
-    } else if (!dismissedInstall && !localStorage.getItem('flashmaster_installed')) {
+      localStorage.setItem('cumlaude_installed', 'true');
+    } else if (!dismissedInstall && !localStorage.getItem('cumlaude_installed')) {
       // Show install prompt after 3 seconds
       const timer = setTimeout(() => {
         setShowInstallToast(true);
@@ -1552,7 +1552,7 @@ const App = () => {
       setShowInstallToast(false);
       setDeferredPrompt(null);
       (window as any).__pwaInstallPrompt = null;
-      localStorage.setItem('flashmaster_installed', 'true');
+      localStorage.setItem('cumlaude_installed', 'true');
       addToast('App installed successfully! 🎉', 'success');
     };
 
@@ -1574,11 +1574,11 @@ const App = () => {
   const APP_VERSION = '1.3.5'; // Increment this to trigger update notification
   
   useEffect(() => {
-    const storedVersion = localStorage.getItem('flashmaster_version');
+    const storedVersion = localStorage.getItem('cumlaude_version');
     
     if (!storedVersion) {
       // First time user - just set the version
-      localStorage.setItem('flashmaster_version', APP_VERSION);
+      localStorage.setItem('cumlaude_version', APP_VERSION);
     } else if (storedVersion !== APP_VERSION) {
       // New version detected - show update toast
       setNewVersionAvailable(APP_VERSION);
@@ -1610,7 +1610,7 @@ const App = () => {
       }
       
       // Update stored version
-      localStorage.setItem('flashmaster_version', APP_VERSION);
+      localStorage.setItem('cumlaude_version', APP_VERSION);
       
       removeToast(loadingToast);
       addToast('Update complete! Refreshing...', 'success');
@@ -1630,7 +1630,7 @@ const App = () => {
   
   useEffect(() => {
     const REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour in milliseconds
-    const LAST_REFRESH_KEY = 'flashmaster_last_refresh';
+    const LAST_REFRESH_KEY = 'cumlaude_last_refresh';
     
     const checkAndRefresh = () => {
       const lastRefresh = localStorage.getItem(LAST_REFRESH_KEY);
@@ -1680,8 +1680,8 @@ const App = () => {
         
         if (outcome === 'accepted') {
           setShowInstallToast(false);
-          addToast('Installing FlashMaster... 📲', 'success');
-          localStorage.setItem('flashmaster_installed', 'true');
+          addToast('Installing CumLaude!... 📲', 'success');
+          localStorage.setItem('cumlaude_installed', 'true');
         } else {
           addToast('Installation cancelled', 'info');
         }
@@ -1725,7 +1725,7 @@ const App = () => {
 
   const handleDismissInstall = () => {
     setShowInstallToast(false);
-    localStorage.setItem('flashmaster_install_dismissed', Date.now().toString());
+    localStorage.setItem('cumlaude_install_dismissed', Date.now().toString());
   };
 
   // --- Data Sync ---
@@ -1849,19 +1849,19 @@ const App = () => {
       // Process subjects from Category sheet (now with code and name)
       if (data.subjects && Array.isArray(data.subjects)) {
         setApiSubjects(data.subjects.map((s: any) => typeof s === 'string' ? s : s.code));
-        localStorage.setItem('flashmaster_subjects', JSON.stringify(data.subjects.map((s: any) => typeof s === 'string' ? s : s.code)));
+        localStorage.setItem('cumlaude_subjects', JSON.stringify(data.subjects.map((s: any) => typeof s === 'string' ? s : s.code)));
       }
       
       // Process subject info (code to name mapping)
       if (data.subjectInfo && typeof data.subjectInfo === 'object') {
         setSubjectInfo(data.subjectInfo);
-        localStorage.setItem('flashmaster_subjectInfo', JSON.stringify(data.subjectInfo));
+        localStorage.setItem('cumlaude_subjectInfo', JSON.stringify(data.subjectInfo));
       }
       
       // Process exams
       if (data.exams && Array.isArray(data.exams)) {
         setExams(data.exams);
-        localStorage.setItem('flashmaster_exams', JSON.stringify(data.exams));
+        localStorage.setItem('cumlaude_exams', JSON.stringify(data.exams));
       }
 
       // Process active announcement from backend (dismissal is now tracked server-side)
@@ -2762,7 +2762,7 @@ const App = () => {
                 <Icon name="download" className="text-2xl" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold">Install FlashMaster</p>
+                <p className="font-semibold">Install CumLaude!</p>
                 <p className="text-sm text-stone-300">Get faster access & offline support</p>
               </div>
               <div className="flex gap-2 flex-shrink-0">
@@ -3058,7 +3058,7 @@ const App = () => {
                 <Icon name="school" className="text-white" />
               </div>
               <div>
-                <h1 className="font-bold text-stone-800">FlashMaster</h1>
+                <h1 className="font-bold text-stone-800">CumLaude!</h1>
                 <div className="flex items-center gap-1.5">
                   <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-stone-400'}`}></span>
                   <span className="text-xs text-stone-500">{isOnline ? 'Online' : 'Offline'}</span>

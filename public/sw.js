@@ -1,5 +1,5 @@
-// FlashMaster Service Worker
-const CACHE_NAME = 'flashmaster-v1';
+// CumLaude! Service Worker
+const CACHE_NAME = 'cumlaude-v1';
 
 // Assets to cache on install
 const STATIC_ASSETS = [
