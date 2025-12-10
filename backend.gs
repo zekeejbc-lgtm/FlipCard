@@ -788,7 +788,7 @@ function deleteResource(resourceUrl, userId) {
 }
 
 /**
- * Add a resource by external link (user uploads to Drive manually)
+ * Add a resource by external link (user uploads to Drive manually or YouTube)
  * @param {Object} data - Resource data with link
  */
 function addResourceByLink(data) {
@@ -800,9 +800,12 @@ function addResourceByLink(data) {
       return { error: 'Missing required fields' };
     }
     
-    // Validate that it's a Google Drive link
-    if (!link.includes('drive.google.com') && !link.includes('docs.google.com')) {
-      return { error: 'Please provide a valid Google Drive link' };
+    // Validate that it's a Google Drive or YouTube link
+    const isGoogleDrive = link.includes('drive.google.com') || link.includes('docs.google.com');
+    const isYouTube = link.includes('youtube.com') || link.includes('youtu.be');
+    
+    if (!isGoogleDrive && !isYouTube) {
+      return { error: 'Please provide a valid Google Drive or YouTube link' };
     }
     
     // Save to Resources sheet
@@ -840,20 +843,33 @@ function addResourceByLink(data) {
 }
 
 /**
- * Extract file ID from Google Drive URL
+ * Extract file ID from Google Drive or YouTube URL
  */
 function extractFileIdFromUrl(url) {
   // Handle different Google Drive URL formats
-  const patterns = [
+  const drivePatterns = [
     /\/file\/d\/([a-zA-Z0-9_-]+)/,
     /id=([a-zA-Z0-9_-]+)/,
     /\/open\?id=([a-zA-Z0-9_-]+)/
   ];
   
-  for (const pattern of patterns) {
+  for (const pattern of drivePatterns) {
     const match = url.match(pattern);
     if (match) {
       return match[1];
+    }
+  }
+  
+  // Handle YouTube URL formats
+  const youtubePatterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/
+  ];
+  
+  for (const pattern of youtubePatterns) {
+    const match = url.match(pattern);
+    if (match) {
+      return 'yt-' + match[1];
     }
   }
   
