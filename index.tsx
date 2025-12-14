@@ -5450,7 +5450,7 @@ const App = () => {
                   <button onClick={resetHome} className="p-1.5 hover:bg-stone-100 rounded-full flex-shrink-0">
                     <Icon name="arrow_back" className="text-stone-600 text-xl" />
                   </button>
-                  <h1 className="font-bold text-stone-800 text-base truncate">Calendar</h1>
+                  <h1 className="font-bold text-stone-800 text-base truncate">Schedule</h1>
                 </div>
                 <button
                   onClick={() => setView('EXAMS')}
@@ -5510,7 +5510,7 @@ const App = () => {
                     <Icon name="arrow_back" className="text-stone-600" />
                   </button>
                   <div>
-                    <h1 className="font-bold text-stone-800 text-lg">Calendar</h1>
+                    <h1 className="font-bold text-stone-800 text-lg">Schedule</h1>
                     <p className="text-xs text-stone-500">See all scheduled activities</p>
                   </div>
                 </div>
@@ -5641,74 +5641,96 @@ const App = () => {
               </div>
             )}
 
-            {(selectedEvents.length > 0 ? selectedEvents : monthEvents).sort((a, b) => {
-              const statusA = getExamStatus(a);
-              const statusB = getExamStatus(b);
-              
-              // Status priority: upcoming/ongoing first, completed last
-              const statusOrder: Record<string, number> = { 'upcoming': 0, 'ongoing': 0, 'completed': 1 };
-              const statusPriorityA = statusOrder[statusA] ?? 0;
-              const statusPriorityB = statusOrder[statusB] ?? 0;
-              
-              if (statusPriorityA !== statusPriorityB) {
-                return statusPriorityA - statusPriorityB;
-              }
-              
-              // Within same status, sort by time (nearest first)
-              const getStartTime = (exam: Exam) => {
-                const dateStr = String(exam.date);
-                let examDate: Date;
-                if (dateStr.includes('-')) {
-                  const [year, month, day] = dateStr.split('-').map(Number);
-                  examDate = new Date(year, month - 1, day);
-                } else {
-                  examDate = new Date(dateStr);
+            {(() => {
+              const sortedEvents = (selectedEvents.length > 0 ? selectedEvents : monthEvents).sort((a, b) => {
+                const statusA = getExamStatus(a);
+                const statusB = getExamStatus(b);
+                
+                // Status priority: upcoming/ongoing first, completed last
+                const statusOrder: Record<string, number> = { 'upcoming': 0, 'ongoing': 0, 'completed': 1 };
+                const statusPriorityA = statusOrder[statusA] ?? 0;
+                const statusPriorityB = statusOrder[statusB] ?? 0;
+                
+                if (statusPriorityA !== statusPriorityB) {
+                  return statusPriorityA - statusPriorityB;
                 }
-                const { hour, min } = parseTimeString(exam.startTime);
-                examDate.setHours(hour, min, 0, 0);
-                return examDate.getTime();
-              };
+                
+                // Within same status, sort by time (nearest first)
+                const getStartTime = (exam: Exam) => {
+                  const dateStr = String(exam.date);
+                  let examDate: Date;
+                  if (dateStr.includes('-')) {
+                    const [year, month, day] = dateStr.split('-').map(Number);
+                    examDate = new Date(year, month - 1, day);
+                  } else {
+                    examDate = new Date(dateStr);
+                  }
+                  const { hour, min } = parseTimeString(exam.startTime);
+                  examDate.setHours(hour, min, 0, 0);
+                  return examDate.getTime();
+                };
+                
+                return getStartTime(a) - getStartTime(b);
+              });
               
-              return getStartTime(a) - getStartTime(b);
-            }).map((exam) => {
-              const colors = getExamTypeColor(exam.examType);
-              const status = getExamStatus(exam);
+              // Find index where completed exams start
+              const completedStartIndex = sortedEvents.findIndex(exam => getExamStatus(exam) === 'completed');
+              
               return (
-                <div
-                  key={exam.examId}
-                  className="p-2 sm:p-3 mb-2 last:mb-0 rounded-xl border border-stone-200 bg-white hover:shadow-sm transition-all cursor-pointer"
-                  onClick={() => setSelectedExam(exam)}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
-                      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${colors.bg} ${colors.text}`}>
-                        <Icon name="event" className="text-lg sm:text-xl" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-stone-800 text-sm sm:text-base">{exam.courseCode}</span>
-                          <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ${colors.bg} ${colors.text}`}>
-                            {exam.examType}
-                          </span>
+                <>
+                  {sortedEvents.map((exam, index) => {
+                    // Show divider before completed items
+                    const showDivider = completedStartIndex !== -1 && index === completedStartIndex;
+                    
+                    const colors = getExamTypeColor(exam.examType);
+                    const status = getExamStatus(exam);
+                    return (
+                      <div key={exam.examId}>
+                        {showDivider && (
+                          <div className="my-4 flex items-center gap-3">
+                            <div className="flex-1 h-px bg-stone-200"></div>
+                            <span className="text-xs font-semibold text-stone-400">COMPLETED</span>
+                            <div className="flex-1 h-px bg-stone-200"></div>
+                          </div>
+                        )}
+                        <div
+                          className="p-2 sm:p-3 mb-2 last:mb-0 rounded-xl border border-stone-200 bg-white hover:shadow-sm transition-all cursor-pointer"
+                          onClick={() => setSelectedExam(exam)}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
+                              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${colors.bg} ${colors.text}`}>
+                                <Icon name="event" className="text-lg sm:text-xl" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-semibold text-stone-800 text-sm sm:text-base">{exam.courseCode}</span>
+                                  <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ${colors.bg} ${colors.text}`}>
+                                    {exam.examType}
+                                  </span>
+                                </div>
+                                {exam.courseName && <p className="text-xs sm:text-sm text-stone-500 line-clamp-1">{exam.courseName}</p>}
+                                <p className="text-[11px] sm:text-xs text-stone-500 mt-1">
+                                  {formatExamDate(exam.date)} • {formatExamTime(exam.startTime)}{exam.endTime ? ` - ${formatExamTime(exam.endTime)}` : ''}
+                                </p>
+                                {exam.room && <p className="text-[11px] sm:text-xs text-stone-400">Room: {exam.room}</p>}
+                                {exam.notes && <p className="text-[11px] sm:text-xs text-stone-400 italic line-clamp-2">"{exam.notes}"</p>}
+                              </div>
+                            </div>
+                            <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold flex-shrink-0 ${
+                              status === 'ongoing' ? 'bg-green-100 text-green-700' :
+                              status === 'upcoming' ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-600'
+                            }`}>
+                              {status === 'ongoing' ? 'Now' : status === 'upcoming' ? 'Soon' : 'Done'}
+                            </span>
+                          </div>
                         </div>
-                        {exam.courseName && <p className="text-xs sm:text-sm text-stone-500 line-clamp-1">{exam.courseName}</p>}
-                        <p className="text-[11px] sm:text-xs text-stone-500 mt-1">
-                          {formatExamDate(exam.date)} • {formatExamTime(exam.startTime)}{exam.endTime ? ` - ${formatExamTime(exam.endTime)}` : ''}
-                        </p>
-                        {exam.room && <p className="text-[11px] sm:text-xs text-stone-400">Room: {exam.room}</p>}
-                        {exam.notes && <p className="text-[11px] sm:text-xs text-stone-400 italic line-clamp-2">"{exam.notes}"</p>}
                       </div>
-                    </div>
-                    <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold flex-shrink-0 ${
-                      status === 'ongoing' ? 'bg-green-100 text-green-700' :
-                      status === 'upcoming' ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-600'
-                    }`}>
-                      {status === 'ongoing' ? 'Now' : status === 'upcoming' ? 'Soon' : 'Done'}
-                    </span>
-                  </div>
-                </div>
+                    );
+                  })}
+                </>
               );
-            })}
+            })()}
           </div>
         </main>
 
