@@ -6074,80 +6074,77 @@ const App = () => {
             </div>
           )}
 
-          <h2 className="text-lg font-bold text-stone-800 mb-4">Subjects</h2>
-          
-          {loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {/* Skeleton Loading Cards with Shimmer */}
-              {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                <div key={i} className="bg-white p-4 rounded-xl border border-stone-200">
-                  <div className="w-10 h-10 skeleton-shimmer rounded-lg mb-3"></div>
-                  <div className="h-5 skeleton-shimmer rounded w-16 mb-2"></div>
-                  <div className="h-3 skeleton-shimmer rounded w-full mb-2"></div>
-                  <div className="h-3 skeleton-shimmer rounded w-20"></div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {displaySubjects.map(subject => {
-                const deckCount = decks.filter(d => d.subject === subject).length;
-                const resourceCount = (resources[subject] || []).length;
-                const info = subjectInfo[subject];
-                const courseName = info?.name || null;
-                return (
-                  <button
-                    key={subject}
-                    onClick={() => openSubject(subject)}
-                    className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-stone-400 hover:shadow-md transition-all group"
-                  >
-                    <div className="w-10 h-10 bg-stone-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-stone-800 group-hover:text-white transition-colors">
-                      <Icon name="book_2" />
-                    </div>
-                    <h3 className="font-semibold text-stone-800">{subject}</h3>
-                    {courseName && (
-                      <p className="text-xs text-stone-500 mt-0.5 line-clamp-2">{courseName}</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-1 text-xs text-stone-400">
-                      <span>{deckCount} {deckCount === 1 ? 'deck' : 'decks'}</span>
-                      {resourceCount > 0 && (
-                        <>
-                          <span>•</span>
-                          <span className="flex items-center gap-0.5">
-                            <Icon name="folder" className="text-xs" />
-                            {resourceCount}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Uncategorized Decks Section */}
-          {decks.filter(d => !d.subject || d.subject === 'Uncategorized' || !displaySubjects.includes(d.subject)).length > 0 && (
+          {/* Subjects Section - Only show when logged in */}
+          {user && !user.isGuest ? (
             <>
-              <h2 className="text-lg font-bold text-stone-800 mb-4 mt-8">Uncategorized</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {decks.filter(d => !d.subject || d.subject === 'Uncategorized' || !displaySubjects.includes(d.subject)).map(deck => (
-                  <button
-                    key={deck.name}
-                    onClick={() => openDeck(deck)}
-                    className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-stone-400 transition-all flex items-center gap-3"
-                  >
-                    <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
-                      <Icon name="style" />
+              <h2 className="text-lg font-bold text-stone-800 mb-4">Subjects</h2>
+              
+              {loading ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {/* Skeleton Loading Cards with Shimmer */}
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+                    <div key={i} className="bg-white p-4 rounded-xl border border-stone-200">
+                      <div className="w-10 h-10 skeleton-shimmer rounded-lg mb-3"></div>
+                      <div className="h-5 skeleton-shimmer rounded w-16 mb-2"></div>
+                      <div className="h-3 skeleton-shimmer rounded w-full mb-2"></div>
+                      <div className="h-3 skeleton-shimmer rounded w-20"></div>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-stone-800">{deck.name}</h3>
-                      <p className="text-xs text-stone-400">{deck.cards.length} cards</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {displaySubjects.map(subject => {
+                    const deckCount = decks.filter(d => d.subject === subject).length;
+                    const resourceCount = (resources[subject] || []).length;
+                    const info = subjectInfo[subject];
+                    const courseName = info?.name || null;
+                    return (
+                      <button
+                        key={subject}
+                        onClick={() => openSubject(subject)}
+                        className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-stone-400 hover:shadow-md transition-all group"
+                      >
+                        <div className="w-10 h-10 bg-stone-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-stone-800 group-hover:text-white transition-colors">
+                          <Icon name="book_2" />
+                        </div>
+                        <h3 className="font-semibold text-stone-800">{subject}</h3>
+                        {courseName && (
+                          <p className="text-xs text-stone-500 mt-0.5 line-clamp-2">{courseName}</p>
+                        )}
+                        <div className="flex items-center gap-2 mt-1 text-xs text-stone-400">
+                          <span>{deckCount} {deckCount === 1 ? 'deck' : 'decks'}</span>
+                          {resourceCount > 0 && (
+                            <>
+                              <span>•</span>
+                              <span className="flex items-center gap-0.5">
+                                <Icon name="folder" className="text-xs" />
+                                {resourceCount}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </>
+          ) : (
+            /* Login Prompt for non-logged in users */
+            <div className="bg-stone-100 border-2 border-dashed border-stone-300 rounded-2xl p-8 text-center">
+              <div className="w-16 h-16 bg-stone-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Icon name="lock" className="text-3xl text-stone-500" />
+              </div>
+              <h3 className="text-xl font-bold text-stone-800 mb-2">Sign in to view subjects</h3>
+              <p className="text-stone-500 mb-4">Log in to access your courses and flashcards</p>
+              <button
+                onClick={() => setShowLogin(true)}
+                className="px-6 py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-colors inline-flex items-center gap-2"
+              >
+                <Icon name="login" />
+                Sign In
+              </button>
+            </div>
           )}
 
           {/* Quick Stats Row */}
