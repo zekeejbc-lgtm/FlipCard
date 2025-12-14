@@ -5700,14 +5700,16 @@ const App = () => {
             
             {/* Desktop Navigation */}
             <div className="hidden sm:flex items-center gap-2">
-              <button
-                onClick={() => setView('CALENDAR')}
-                className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
-                title="Schedule"
-              >
-                <Icon name="event" className="text-stone-600" />
-              </button>
-              {user && user.section && (
+              {user && !user.isGuest && (
+                <button
+                  onClick={() => setView('CALENDAR')}
+                  className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
+                  title="Schedule"
+                >
+                  <Icon name="event" className="text-stone-600" />
+                </button>
+              )}
+              {user && !user.isGuest && user.section && (
                 <button
                   onClick={() => setView('CLASS')}
                   className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
@@ -5716,7 +5718,7 @@ const App = () => {
                   <Icon name="groups" className="text-stone-600" />
                 </button>
               )}
-              {user && (
+              {user && !user.isGuest && (
                 <button
                   onClick={() => { setUserAnalytics(null); setView('ANALYTICS'); }}
                   className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
@@ -5725,13 +5727,15 @@ const App = () => {
                   <Icon name="analytics" className="text-stone-600" />
                 </button>
               )}
-              <button
-                onClick={() => setShowNotificationSettings(true)}
-                className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
-                title="Notification Settings"
-              >
-                <Icon name="notifications" className="text-stone-600" />
-              </button>
+              {user && !user.isGuest && (
+                <button
+                  onClick={() => setShowNotificationSettings(true)}
+                  className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
+                  title="Notification Settings"
+                >
+                  <Icon name="notifications" className="text-stone-600" />
+                </button>
+              )}
               {user ? (
                 <button
                   onClick={() => setShowProfile(true)}
@@ -5826,15 +5830,17 @@ const App = () => {
               )}
               
               <div className="p-2">
-                <button
-                  onClick={() => { setView('CALENDAR'); setShowMobileMenu(false); }}
-                  className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
-                >
-                  <Icon name="event" className="text-stone-600" />
-                  <span className="font-medium text-stone-700">Schedule</span>
-                </button>
+                {user && !user.isGuest && (
+                  <button
+                    onClick={() => { setView('CALENDAR'); setShowMobileMenu(false); }}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                  >
+                    <Icon name="event" className="text-stone-600" />
+                    <span className="font-medium text-stone-700">Schedule</span>
+                  </button>
+                )}
                 
-                {user && user.section && (
+                {user && !user.isGuest && user.section && (
                   <button
                     onClick={() => { setView('CLASS'); setShowMobileMenu(false); }}
                     className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
@@ -5845,7 +5851,7 @@ const App = () => {
                   </button>
                 )}
                 
-                {user && (
+                {user && !user.isGuest && (
                   <button
                     onClick={() => { setUserAnalytics(null); setView('ANALYTICS'); setShowMobileMenu(false); }}
                     className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
@@ -5855,45 +5861,50 @@ const App = () => {
                   </button>
                 )}
                 
-                <button
-                  onClick={() => { setShowNotificationSettings(true); setShowMobileMenu(false); }}
-                  className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
-                >
-                  <Icon name="notifications" className="text-stone-600" />
-                  <span className="font-medium text-stone-700">Notifications</span>
-                </button>
+                {user && !user.isGuest && (
+                  <button
+                    onClick={() => { setShowNotificationSettings(true); setShowMobileMenu(false); }}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                  >
+                    <Icon name="notifications" className="text-stone-600" />
+                    <span className="font-medium text-stone-700">Notifications</span>
+                  </button>
+                )}
                 
-                <button
-                  onClick={() => { setView('ALL_RESOURCES'); setShowMobileMenu(false); }}
-                  className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
-                >
-                  <Icon name="folder_open" className="text-stone-600" />
-                  <span className="font-medium text-stone-700">All Resources</span>
-                </button>
+                {user && !user.isGuest && (
+                  <button
+                    onClick={() => { setView('ALL_RESOURCES'); setShowMobileMenu(false); }}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                  >
+                    <Icon name="folder_open" className="text-stone-600" />
+                    <span className="font-medium text-stone-700">All Resources</span>
+                  </button>
+                )}
 
-                {/* Coming Soon Items */}
-                <div className="mt-2 pt-2 border-t border-stone-100">
-                  <p className="px-3 py-1 text-xs text-stone-400 font-medium">Coming Soon</p>
-                  
-                  <button
-                    onClick={() => { setView('FINANCE'); setShowMobileMenu(false); }}
-                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
-                  >
-                    <Icon name="payments" className="text-amber-500" />
-                    <span className="font-medium text-stone-700">Finance</span>
-                    <span className="ml-auto px-1.5 py-0.5 bg-amber-100 text-amber-600 text-[10px] font-bold rounded">SOON</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => { setView('ATTENDANCE'); setShowMobileMenu(false); }}
-                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
-                  >
-                    <Icon name="fact_check" className="text-cyan-500" />
-                    <span className="font-medium text-stone-700">Attendance</span>
-                    <span className="ml-auto px-1.5 py-0.5 bg-cyan-100 text-cyan-600 text-[10px] font-bold rounded">SOON</span>
-                  </button>
-                  
-                  <button
+                {/* Coming Soon Items - only show when logged in */}
+                {user && !user.isGuest && (
+                  <div className="mt-2 pt-2 border-t border-stone-100">
+                    <p className="px-3 py-1 text-xs text-stone-400 font-medium">Coming Soon</p>
+                    
+                    <button
+                      onClick={() => { setView('FINANCE'); setShowMobileMenu(false); }}
+                      className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                    >
+                      <Icon name="payments" className="text-amber-500" />
+                      <span className="font-medium text-stone-700">Finance</span>
+                      <span className="ml-auto px-1.5 py-0.5 bg-amber-100 text-amber-600 text-[10px] font-bold rounded">SOON</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => { setView('ATTENDANCE'); setShowMobileMenu(false); }}
+                      className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                    >
+                      <Icon name="fact_check" className="text-cyan-500" />
+                      <span className="font-medium text-stone-700">Attendance</span>
+                      <span className="ml-auto px-1.5 py-0.5 bg-cyan-100 text-cyan-600 text-[10px] font-bold rounded">SOON</span>
+                    </button>
+                    
+                    <button
                     onClick={() => { setView('SCHEDULE'); setShowMobileMenu(false); }}
                     className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
                   >
@@ -5901,9 +5912,10 @@ const App = () => {
                     <span className="font-medium text-stone-700">Class Schedule</span>
                     <span className="ml-auto px-1.5 py-0.5 bg-violet-100 text-violet-600 text-[10px] font-bold rounded">SOON</span>
                   </button>
-                </div>
+                  </div>
+                )}
                 
-                {user && (
+                {user && !user.isGuest && (
                   <button
                     onClick={() => { setShowProfile(true); setShowMobileMenu(false); }}
                     className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
@@ -5914,7 +5926,7 @@ const App = () => {
                 )}
               </div>
               
-              {!user && (
+              {(!user || user.isGuest) && (
                 <div className="p-4 border-t border-stone-100 mt-auto">
                   <button
                     onClick={() => { setShowLogin(true); setShowMobileMenu(false); }}
@@ -6147,77 +6159,78 @@ const App = () => {
             </div>
           )}
 
-          {/* Quick Stats Row */}
-          <div className={`grid ${user && user.section ? 'grid-cols-3' : 'grid-cols-2'} gap-3 mt-8`}>
-            {/* Exams Quick View */}
-            <button
-              onClick={() => setView('CALENDAR')}
-              className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-amber-300 hover:shadow-md transition-all"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
-                  <Icon name="event" />
-                </div>
-                {exams.filter(e => getExamStatus(e) === 'ongoing').length > 0 && (
-                  <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-medium animate-pulse">
-                    {exams.filter(e => getExamStatus(e) === 'ongoing').length} NOW
-                  </span>
-                )}
-              </div>
-              <h3 className="font-semibold text-stone-800">Schedule</h3>
-              <p className="text-xs text-stone-400 mt-1">
-                {exams.filter(e => getExamStatus(e) === 'upcoming').length} upcoming
-                {exams.filter(e => getExamStatus(e) === 'completed').length > 0 && ` • ${exams.filter(e => getExamStatus(e) === 'completed').length} done`}
-              </p>
-            </button>
-
-            {/* Class Quick View - only show if user has section */}
-            {user && user.section && (
+          {/* Quick Stats Row - Only show when logged in */}
+          {user && !user.isGuest && (
+            <div className={`grid ${user.section ? 'grid-cols-3' : 'grid-cols-2'} gap-3 mt-8`}>
+              {/* Exams Quick View */}
               <button
-                onClick={() => setView('CLASS')}
-                className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-purple-300 hover:shadow-md transition-all"
+                onClick={() => setView('CALENDAR')}
+                className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-amber-300 hover:shadow-md transition-all"
               >
-                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 mb-2">
-                  <Icon name="groups" />
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
+                    <Icon name="event" />
+                  </div>
+                  {exams.filter(e => getExamStatus(e) === 'ongoing').length > 0 && (
+                    <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-medium animate-pulse">
+                      {exams.filter(e => getExamStatus(e) === 'ongoing').length} NOW
+                    </span>
+                  )}
                 </div>
-                <h3 className="font-semibold text-stone-800">My Class</h3>
+                <h3 className="font-semibold text-stone-800">Schedule</h3>
                 <p className="text-xs text-stone-400 mt-1">
-                  Section {user.section}
+                  {exams.filter(e => getExamStatus(e) === 'upcoming').length} upcoming
+                  {exams.filter(e => getExamStatus(e) === 'completed').length > 0 && ` • ${exams.filter(e => getExamStatus(e) === 'completed').length} done`}
                 </p>
               </button>
-            )}
 
-            {/* Resources Quick View */}
-            {(() => {
-              const totalResources = Object.values(resources).reduce((sum, arr) => sum + arr.length, 0);
-              return (
+              {/* Class Quick View - only show if user has section */}
+              {user.section && (
                 <button
-                  onClick={() => setView('ALL_RESOURCES')}
-                  className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-blue-300 hover:shadow-md transition-all"
+                  onClick={() => setView('CLASS')}
+                  className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-purple-300 hover:shadow-md transition-all"
                 >
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mb-2">
-                    <Icon name="folder_open" />
+                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 mb-2">
+                    <Icon name="groups" />
                   </div>
-                  <h3 className="font-semibold text-stone-800">Resources</h3>
+                  <h3 className="font-semibold text-stone-800">My Class</h3>
                   <p className="text-xs text-stone-400 mt-1">
-                    {totalResources} files across {Object.keys(resources).length} subjects
+                    Section {user.section}
                   </p>
                 </button>
-              );
-            })()}
+              )}
 
-            {/* Finance Quick View */}
-            <button
-              onClick={() => setView('FINANCE')}
-              className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-amber-300 hover:shadow-md transition-all relative overflow-hidden"
-            >
-              <div className="absolute top-2 right-2">
-                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-600 text-[10px] font-bold rounded">SOON</span>
-              </div>
-              <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600 mb-2">
-                <Icon name="payments" />
-              </div>
-              <h3 className="font-semibold text-stone-800">Finance</h3>
+              {/* Resources Quick View */}
+              {(() => {
+                const totalResources = Object.values(resources).reduce((sum, arr) => sum + arr.length, 0);
+                return (
+                  <button
+                    onClick={() => setView('ALL_RESOURCES')}
+                    className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-blue-300 hover:shadow-md transition-all"
+                  >
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mb-2">
+                      <Icon name="folder_open" />
+                    </div>
+                    <h3 className="font-semibold text-stone-800">Resources</h3>
+                    <p className="text-xs text-stone-400 mt-1">
+                      {totalResources} files across {Object.keys(resources).length} subjects
+                    </p>
+                  </button>
+                );
+              })()}
+
+              {/* Finance Quick View */}
+              <button
+                onClick={() => setView('FINANCE')}
+                className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-amber-300 hover:shadow-md transition-all relative overflow-hidden"
+              >
+                <div className="absolute top-2 right-2">
+                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-600 text-[10px] font-bold rounded">SOON</span>
+                </div>
+                <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600 mb-2">
+                  <Icon name="payments" />
+                </div>
+                <h3 className="font-semibold text-stone-800">Finance</h3>
               <p className="text-xs text-stone-400 mt-1">
                 Track payments & dues
               </p>
@@ -6256,10 +6269,11 @@ const App = () => {
                 Weekly timetable
               </p>
             </button>
-          </div>
+            </div>
+          )}
 
-          {/* Upcoming Exam Preview (show only if there are upcoming exams) */}
-          {exams.filter(e => getExamStatus(e) === 'upcoming' || getExamStatus(e) === 'ongoing').length > 0 && (
+          {/* Upcoming Exam Preview (show only if there are upcoming exams AND logged in) */}
+          {user && !user.isGuest && exams.filter(e => getExamStatus(e) === 'upcoming' || getExamStatus(e) === 'ongoing').length > 0 && (
             <>
               <h2 className="text-lg font-bold text-stone-800 mb-4 mt-8 flex items-center justify-between">
                 <span className="flex items-center gap-2">
