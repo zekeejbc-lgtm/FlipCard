@@ -5459,33 +5459,6 @@ const App = () => {
                   <Icon name="view_list" className="text-lg" />
                 </button>
               </div>
-              
-              <div className="flex items-center justify-center gap-1">
-                <button
-                  onClick={() => { const today = new Date(); today.setDate(1); setCalendarMonth(today); setCalendarSelectedDate(new Date()); }}
-                  className="p-1.5 bg-white border border-stone-200 rounded-lg hover:border-stone-400"
-                  title="Today"
-                >
-                  <Icon name="today" className="text-base" />
-                </button>
-                <button
-                  onClick={() => setShowDateJump(true)}
-                  className="p-1.5 bg-white border border-stone-200 rounded-lg hover:border-stone-400"
-                  title="Jump to date"
-                >
-                  <Icon name="calendar_month" className="text-base" />
-                </button>
-                <button
-                  onClick={() => {
-                    setPrefillExamDate(calendarSelectedDate ? toDateKey(calendarSelectedDate) : null);
-                    user ? setShowAddExam(true) : setShowLogin(true);
-                  }}
-                  className="p-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
-                  title="Add exam"
-                >
-                  <Icon name="add" className="text-base" />
-                </button>
-              </div>
             </div>
 
             {/* Desktop: Full layout with text labels */}
@@ -5561,6 +5534,22 @@ const App = () => {
               >
                 <Icon name="calendar_today" className="text-sm" />
                 Jump
+              </button>
+            </div>
+            <div className="sm:hidden flex items-center gap-1">
+              <button
+                onClick={() => { const today = new Date(); today.setDate(1); setCalendarMonth(today); setCalendarSelectedDate(new Date()); }}
+                className="p-1.5 bg-white border border-stone-200 rounded-lg hover:border-stone-400"
+                title="Today"
+              >
+                <Icon name="today" className="text-base" />
+              </button>
+              <button
+                onClick={() => setShowDateJump(true)}
+                className="p-1.5 bg-white border border-stone-200 rounded-lg hover:border-stone-400"
+                title="Jump to date"
+              >
+                <Icon name="calendar_month" className="text-base" />
               </button>
             </div>
           </div>
