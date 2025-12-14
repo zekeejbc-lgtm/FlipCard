@@ -2157,7 +2157,7 @@ const ProfilePage = ({
         <div className="sticky top-0 bg-white border-b border-stone-100 p-4 flex items-center justify-between z-10">
           <h2 className="text-xl font-bold text-stone-800">{editing ? 'Edit Profile' : 'Profile'}</h2>
           <div className="flex items-center gap-2">
-            {!user.isGuest && !editing && (
+            {!editing && (
               <button 
                 onClick={() => setEditing(true)} 
                 className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
@@ -2418,11 +2418,6 @@ const ProfilePage = ({
                     {user.role.replace('class-', '').replace(/-/g, ' ')}
                   </span>
                 )}
-                {user.isGuest && (
-                  <span className="mt-2 px-3 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
-                    Guest Account
-                  </span>
-                )}
               </div>
             </div>
 
@@ -2450,7 +2445,7 @@ const ProfilePage = ({
                   <p className="text-xs text-stone-500">Email</p>
                   <p className="text-sm font-medium text-stone-800 truncate">{user.email || '-'}</p>
                 </div>
-                {!user.isGuest && <Icon name="edit" className="text-stone-300 text-sm" />}
+                <Icon name="edit" className="text-stone-300 text-sm" />
               </div>
               
               <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all">
@@ -2461,7 +2456,7 @@ const ProfilePage = ({
                   <p className="text-xs text-stone-500">School Email</p>
                   <p className="text-sm font-medium text-stone-800 truncate">{user.schoolEmail || '-'}</p>
                 </div>
-                {!user.isGuest && <Icon name="edit" className="text-stone-300 text-sm" />}
+                <Icon name="edit" className="text-stone-300 text-sm" />
               </div>
               
               <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all">
@@ -2474,7 +2469,7 @@ const ProfilePage = ({
                     {user.birthday ? new Date(user.birthday).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}
                   </p>
                 </div>
-                {!user.isGuest && <Icon name="edit" className="text-stone-300 text-sm" />}
+                <Icon name="edit" className="text-stone-300 text-sm" />
               </div>
               
               {/* Academic Info - read only */}
@@ -2510,15 +2505,6 @@ const ProfilePage = ({
 
             {/* Actions */}
             <div className="p-4 border-t border-stone-100 space-y-3">
-              {user.isGuest && (
-                <button
-                  onClick={() => {/* Navigate to registration */}}
-                  className="w-full py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
-                >
-                  <Icon name="person_add" />
-                  Complete Registration
-                </button>
-              )}
               <button
                 onClick={onLogout}
                 className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-semibold hover:bg-red-100 transition-all flex items-center justify-center gap-2"
@@ -3349,19 +3335,6 @@ const LoginModal = ({
     }
   };
 
-  const handleGuestLogin = () => {
-    const guestUser: User = {
-      idNumber: `guest-${Date.now()}`,
-      name: 'Guest User',
-      record: {},
-      isGuest: true
-    };
-    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(guestUser));
-    onLogin(guestUser);
-    addToast('Logged in as guest. Some features may be limited.', 'info');
-    onClose();
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -3451,23 +3424,6 @@ const LoginModal = ({
                     Sign In
                   </>
                 )}
-              </button>
-
-              <div className="relative my-4">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-stone-200"></div>
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white text-stone-500">or</span>
-                </div>
-              </div>
-
-              <button
-                onClick={handleGuestLogin}
-                className="w-full py-3 border border-stone-300 text-stone-700 rounded-xl font-semibold hover:bg-stone-50 transition-all flex items-center justify-center gap-2"
-              >
-                <Icon name="person_outline" />
-                Continue as Guest
               </button>
 
               <div className="text-center pt-4">
@@ -3622,11 +3578,6 @@ const App = () => {
   const [showLogin, setShowLogin] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [guestActionCount, setGuestActionCount] = useState(0);
-  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
-
-  // Guest action limit
-  const GUEST_ACTION_LIMIT = 5;
 
   // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -3767,20 +3718,6 @@ const App = () => {
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('');
 
-  // Guest action check helper
-  const checkGuestAction = (): boolean => {
-    if (!user?.isGuest) return true;
-    
-    const newCount = guestActionCount + 1;
-    setGuestActionCount(newCount);
-    
-    if (newCount >= GUEST_ACTION_LIMIT) {
-      setShowGuestPrompt(true);
-      return false;
-    }
-    return true;
-  };
-
   // --- Initialization ---
 
   useEffect(() => {
@@ -3794,7 +3731,7 @@ const App = () => {
           setUser(parsedUser);
           
           // Refresh user profile from backend if online (to get updated section, role, etc.)
-          if (!parsedUser.isGuest && navigator.onLine) {
+          if (navigator.onLine) {
             try {
               const response = await fetch(GAS_URL, {
                 method: 'POST',
@@ -4330,7 +4267,6 @@ const App = () => {
 
   const handleLogout = () => {
     setUser(null);
-    setGuestActionCount(0);
     localStorage.removeItem(STORAGE_KEY_USER);
   };
 
@@ -5361,7 +5297,7 @@ const App = () => {
         <LoginModal 
           isOpen={showLogin} 
           onClose={() => setShowLogin(false)} 
-          onLogin={(u) => { setUser(u); setGuestActionCount(0); }}
+          onLogin={(u) => { setUser(u); }}
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
@@ -5378,50 +5314,6 @@ const App = () => {
             }}
             onUpdate={(updatedUser) => setUser(updatedUser)}
           />
-        )}
-
-        {/* Guest User Prompt Modal */}
-        {showGuestPrompt && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Icon name="person_add" className="text-3xl text-amber-600" />
-                </div>
-                <h2 className="text-xl font-bold text-stone-800 mb-2">Create Your Account</h2>
-                <p className="text-stone-500 text-sm">
-                  You've used {guestActionCount} of {GUEST_ACTION_LIMIT} guest actions. 
-                  Register now to unlock unlimited access and save your progress!
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <button
-                  onClick={() => {
-                    setShowGuestPrompt(false);
-                    setShowLogin(true);
-                  }}
-                  className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-all flex items-center justify-center gap-2"
-                >
-                  <Icon name="person_add" />
-                  Register / Login
-                </button>
-                <button
-                  onClick={() => setShowGuestPrompt(false)}
-                  className="w-full py-3 border border-stone-300 text-stone-600 rounded-xl font-semibold hover:bg-stone-50 transition-all"
-                >
-                  Continue as Guest
-                </button>
-              </div>
-
-              <div className="mt-4 p-3 bg-stone-50 rounded-xl">
-                <p className="text-xs text-stone-500 text-center">
-                  <Icon name="info" className="text-sm align-text-bottom mr-1" />
-                  Registered users can save progress, submit resources, and add exam schedules.
-                </p>
-              </div>
-            </div>
-          </div>
         )}
 
         {/* Admin Announcement Panel */}
@@ -5700,7 +5592,7 @@ const App = () => {
             
             {/* Desktop Navigation */}
             <div className="hidden sm:flex items-center gap-2">
-              {user && !user.isGuest && (
+              {user && (
                 <button
                   onClick={() => setView('CALENDAR')}
                   className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
@@ -5709,7 +5601,7 @@ const App = () => {
                   <Icon name="event" className="text-stone-600" />
                 </button>
               )}
-              {user && !user.isGuest && user.section && (
+              {user && user.section && (
                 <button
                   onClick={() => setView('CLASS')}
                   className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
@@ -5718,7 +5610,7 @@ const App = () => {
                   <Icon name="groups" className="text-stone-600" />
                 </button>
               )}
-              {user && !user.isGuest && (
+              {user && (
                 <button
                   onClick={() => { setUserAnalytics(null); setView('ANALYTICS'); }}
                   className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
@@ -5727,7 +5619,7 @@ const App = () => {
                   <Icon name="analytics" className="text-stone-600" />
                 </button>
               )}
-              {user && !user.isGuest && (
+              {user && (
                 <button
                   onClick={() => setShowNotificationSettings(true)}
                   className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
@@ -5750,9 +5642,6 @@ const App = () => {
                   <span className="text-sm font-medium text-stone-700">
                     {user.name.split(' ')[0]}
                   </span>
-                  {user.isGuest && (
-                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded">Guest</span>
-                  )}
                 </button>
               ) : (
                 <button
@@ -5830,7 +5719,7 @@ const App = () => {
               )}
               
               <div className="p-2">
-                {user && !user.isGuest && (
+                {user && (
                   <button
                     onClick={() => { setView('CALENDAR'); setShowMobileMenu(false); }}
                     className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
@@ -5840,7 +5729,7 @@ const App = () => {
                   </button>
                 )}
                 
-                {user && !user.isGuest && user.section && (
+                {user && user.section && (
                   <button
                     onClick={() => { setView('CLASS'); setShowMobileMenu(false); }}
                     className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
@@ -5851,7 +5740,7 @@ const App = () => {
                   </button>
                 )}
                 
-                {user && !user.isGuest && (
+                {user && (
                   <button
                     onClick={() => { setUserAnalytics(null); setView('ANALYTICS'); setShowMobileMenu(false); }}
                     className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
@@ -5861,7 +5750,7 @@ const App = () => {
                   </button>
                 )}
                 
-                {user && !user.isGuest && (
+                {user && (
                   <button
                     onClick={() => { setShowNotificationSettings(true); setShowMobileMenu(false); }}
                     className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
@@ -5871,7 +5760,7 @@ const App = () => {
                   </button>
                 )}
                 
-                {user && !user.isGuest && (
+                {user && (
                   <button
                     onClick={() => { setView('ALL_RESOURCES'); setShowMobileMenu(false); }}
                     className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
@@ -5882,7 +5771,7 @@ const App = () => {
                 )}
 
                 {/* Coming Soon Items - only show when logged in */}
-                {user && !user.isGuest && (
+                {user && (
                   <div className="mt-2 pt-2 border-t border-stone-100">
                     <p className="px-3 py-1 text-xs text-stone-400 font-medium">Coming Soon</p>
                     
@@ -5915,7 +5804,7 @@ const App = () => {
                   </div>
                 )}
                 
-                {user && !user.isGuest && (
+                {user && (
                   <button
                     onClick={() => { setShowProfile(true); setShowMobileMenu(false); }}
                     className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
@@ -5926,7 +5815,7 @@ const App = () => {
                 )}
               </div>
               
-              {(!user || user.isGuest) && (
+              {!user && (
                 <div className="p-4 border-t border-stone-100 mt-auto">
                   <button
                     onClick={() => { setShowLogin(true); setShowMobileMenu(false); }}
@@ -6087,7 +5976,7 @@ const App = () => {
           )}
 
           {/* Subjects Section - Only show when logged in */}
-          {user && !user.isGuest ? (
+          {user ? (
             <>
               <h2 className="text-lg font-bold text-stone-800 mb-4">Subjects</h2>
               
@@ -6160,7 +6049,7 @@ const App = () => {
           )}
 
           {/* Quick Stats Row - Only show when logged in */}
-          {user && !user.isGuest && (
+          {user && (
             <div className={`grid ${user.section ? 'grid-cols-3' : 'grid-cols-2'} gap-3 mt-8`}>
               {/* Exams Quick View */}
               <button
@@ -6273,7 +6162,7 @@ const App = () => {
           )}
 
           {/* Upcoming Exam Preview (show only if there are upcoming exams AND logged in) */}
-          {user && !user.isGuest && exams.filter(e => getExamStatus(e) === 'upcoming' || getExamStatus(e) === 'ongoing').length > 0 && (
+          {user && exams.filter(e => getExamStatus(e) === 'upcoming' || getExamStatus(e) === 'ongoing').length > 0 && (
             <>
               <h2 className="text-lg font-bold text-stone-800 mb-4 mt-8 flex items-center justify-between">
                 <span className="flex items-center gap-2">
