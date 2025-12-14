@@ -44,7 +44,7 @@ const firebaseConfig = {
 
 ### A. Update `index.tsx` (around line 2480)
 
-Replace the `FIREBASE_CONFIG` object:
+Replace the `FIREBASE_CONFIG` object AND add the VAPID key:
 
 ```typescript
 const FIREBASE_CONFIG = {
@@ -55,6 +55,9 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "YOUR_SENDER_ID",  // ← Paste your messagingSenderId
   appId: "YOUR_APP_ID"              // ← Paste your appId
 };
+
+// IMPORTANT: Add this VAPID key (from Step 3)
+const VAPID_KEY = "YOUR_VAPID_KEY";  // ← Paste the key pair from Firebase Cloud Messaging
 ```
 
 ### B. Update `public/sw.js` (around line 64)

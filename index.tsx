@@ -1399,6 +1399,8 @@ const App = () => {
   const [prefillExamDate, setPrefillExamDate] = useState<string | null>(null);
   const [showDateJump, setShowDateJump] = useState(false);
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<'default' | 'granted' | 'denied'>('default');
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   // Save navigation state to localStorage
   useEffect(() => {
@@ -2487,17 +2489,31 @@ const App = () => {
     messagingSenderId: "56596622764",
     appId: "1:56596622764:web:05ec45b90f51e096e09e09"
   };
+  
+  // VAPID key for Web Push - Get this from Firebase Console:
+  // Project Settings > Cloud Messaging > Web Push certificates > Generate key pair
+  const VAPID_KEY = "BL7BTB7fXiUHWFXMiWRESw_1MkEFiGBr_OMMVKB0sc5TpOs04r2TcK5UC14odQ8qE3r-DqlbnHiYg8UH8qns1hA";
 
   const requestNotificationPermission = async () => {
     if (!('Notification' in window)) return false;
-    if (Notification.permission === 'granted') return true;
+    if (Notification.permission === 'granted') {
+      setNotificationPermission('granted');
+      return true;
+    }
     const perm = await Notification.requestPermission();
+    setNotificationPermission(perm as 'granted' | 'denied' | 'default');
     return perm === 'granted';
   };
 
   const registerPush = async () => {
     try {
-      if (!('serviceWorker' in navigator)) return;
+      console.log('🔔 Starting notification registration...');
+      
+      if (!('serviceWorker' in navigator)) {
+        console.error('Service Worker not supported');
+        addToast('Notifications not supported in this browser.', 'error');
+        return;
+      }
       
       // Check if Firebase is configured
       if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.includes('YOUR_')) {
@@ -2506,37 +2522,74 @@ const App = () => {
         return;
       }
 
+      console.log('🔑 Requesting notification permission...');
       const permission = await requestNotificationPermission();
       if (!permission) {
-        addToast('Notifications blocked. Enable to get deadline alerts.', 'info');
+        console.warn('Permission denied or blocked');
+        addToast('Notifications blocked. Please enable in browser settings.', 'error');
+        return;
+      }
+      console.log('✅ Permission granted!');
+
+      // Ensure service worker is registered and ready
+      console.log('⚙️ Ensuring service worker is ready...');
+      let registration;
+      try {
+        registration = await navigator.serviceWorker.register('/sw.js');
+        console.log('✅ Service worker registered:', registration.scope);
+        // Wait for the service worker to be active
+        await navigator.serviceWorker.ready;
+        console.log('✅ Service worker is active and ready!');
+      } catch (swError) {
+        console.error('❌ Service worker registration failed:', swError);
+        addToast('Service worker registration failed. Please check console.', 'error');
         return;
       }
 
       // Initialize Firebase (will be loaded from CDN)
-      if (typeof window.firebase === 'undefined') {
-        addToast('Loading Firebase...', 'loading');
+      const windowWithFirebase = window as any;
+      if (!windowWithFirebase.firebase) {
+        console.error('Firebase not loaded from CDN');
+        addToast('Firebase not loaded. Please refresh the page.', 'error');
         return;
       }
 
-      const firebase = (window as any).firebase;
+      const firebase = windowWithFirebase.firebase;
       
       if (!firebase.apps.length) {
+        console.log('🔥 Initializing Firebase...');
         firebase.initializeApp(FIREBASE_CONFIG);
       }
 
+      console.log('📱 Getting FCM messaging instance...');
       const messaging = firebase.messaging();
       
-      // Get FCM token
-      const token = await messaging.getToken({
-        vapidKey: FIREBASE_CONFIG.apiKey // FCM uses API key
-      });
+      console.log('🎫 Requesting FCM token...');
+      // Get FCM token - service worker is now guaranteed to be ready
+      // Note: You need to generate a VAPID key from Firebase Console if you haven't already
+      const tokenOptions: any = { serviceWorkerRegistration: registration };
+      
+      // Only add VAPID key if it's configured (not the placeholder)
+      if (VAPID_KEY && !VAPID_KEY.includes('XqJxM7LnE9')) {
+        tokenOptions.vapidKey = VAPID_KEY;
+      }
+      
+      const token = await messaging.getToken(tokenOptions);
+      
+      console.log('🎫 Token received:', token ? 'Yes' : 'No');
 
       if (token) {
+        console.log('💾 Saving token locally and to backend...');
         localStorage.setItem('cumlaude_fcm_token', token);
+        setNotificationPermission('granted');
         
         // Save to backend
         try {
-          await fetch(GAS_URL, {
+          console.log('📡 Sending to backend...');
+          console.log('User ID:', user?.idNumber);
+          console.log('User Name:', user?.name);
+          
+          const response = await fetch(GAS_URL, {
             method: 'POST',
             body: JSON.stringify({
               action: 'savePushSubscription',
@@ -2545,32 +2598,62 @@ const App = () => {
               subscription: { token, type: 'fcm' }
             })
           });
+          const result = await response.json();
+          console.log('✅ Backend response:', result);
+          
+          if (result.error) {
+            console.error('❌ Backend error:', result.error);
+            addToast('Notifications enabled locally, but backend save failed.', 'error');
+            setNotificationsEnabled(true); // Still enabled locally
+          } else {
+            console.log('✅ Successfully saved to backend!');
+            addToast('Notifications enabled successfully!', 'success');
+            setNotificationsEnabled(true);
+          }
         } catch (e) {
-          console.error('Failed to save token to backend:', e);
+          console.error('❌ Failed to save token to backend:', e);
+          addToast('Notifications enabled locally, but backend save failed.', 'error');
         }
         
-        addToast('Notifications enabled. We will alert you for upcoming deadlines.', 'success');
-        
+        console.log('👂 Setting up foreground message listener...');
         // Listen for foreground messages
         messaging.onMessage((payload: any) => {
-          console.log('Foreground message:', payload);
+          console.log('📬 Foreground message:', payload);
           const title = payload.notification?.title || 'CumLaude!';
           const body = payload.notification?.body || 'New notification';
           addToast(`${title}: ${body}`, 'info');
         });
+      } else {
+        console.error('❌ No token received');
+        addToast('Could not get notification token. Please try again.', 'error');
       }
     } catch (e) {
-      console.error('Push registration failed', e);
-      addToast('Could not enable notifications. Check settings.', 'error');
+      console.error('❌ Push registration failed:', e);
+      addToast('Could not enable notifications: ' + (e as Error).message, 'error');
     }
   };
 
   useEffect(() => {
+    // Pre-register service worker on app load for faster push notification setup
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => console.log('✅ Service worker pre-registered:', reg.scope))
+        .catch(err => console.warn('⚠️ Service worker pre-registration failed:', err));
     }
   }, []);
 
+  useEffect(() => {
+    // Check initial notification permission and enabled state
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission as 'granted' | 'denied' | 'default');
+    }
+    // Check if FCM token exists (means notifications were enabled)
+    const fcmToken = localStorage.getItem('cumlaude_fcm_token');
+    if (fcmToken) {
+      setNotificationsEnabled(true);
+    }
+  }, []);
+  
   useEffect(() => {
     // Auto-register removed - user must enable via settings
   }, [user]);
@@ -3255,21 +3338,38 @@ const App = () => {
                       Get notified about upcoming exams and deadlines even when the app is closed.
                     </p>
                     <p className="text-xs text-blue-600 mb-3">
-                      Current status: <strong>{Notification.permission === 'granted' ? '✓ Enabled' : Notification.permission === 'denied' ? '✗ Blocked' : '○ Not enabled'}</strong>
+                      Current status: <strong>{notificationsEnabled ? '✓ Enabled' : notificationPermission === 'denied' ? '✗ Blocked' : '○ Not enabled'}</strong>
                     </p>
-                    {Notification.permission === 'granted' ? (
+                    {notificationsEnabled ? (
                       <div className="space-y-2">
                         <p className="text-sm text-green-700">✓ Notifications are enabled!</p>
                         <button
                           onClick={async () => {
-                            if (navigator.serviceWorker) {
-                              const reg = await navigator.serviceWorker.ready;
-                              const sub = await reg.pushManager.getSubscription();
-                              if (sub) {
-                                await sub.unsubscribe();
-                                localStorage.removeItem('cumlaude_push_subscription');
-                                addToast('Notifications disabled. Refresh to re-enable.', 'info');
+                            try {
+                              console.log('🔕 Disabling notifications...');
+                              // Remove FCM token from localStorage
+                              localStorage.removeItem('cumlaude_fcm_token');
+                              localStorage.removeItem('cumlaude_push_subscription');
+                              
+                              // Update state
+                              setNotificationsEnabled(false);
+                              
+                              // Optional: Delete token from Firebase
+                              const windowWithFirebase = window as any;
+                              if (windowWithFirebase.firebase && windowWithFirebase.firebase.apps.length > 0) {
+                                const messaging = windowWithFirebase.firebase.messaging();
+                                await messaging.deleteToken();
+                                console.log('✅ FCM token deleted');
                               }
+                              
+                              addToast('Notifications disabled successfully.', 'success');
+                            } catch (e) {
+                              console.error('Error disabling notifications:', e);
+                              // Still disable locally even if deletion fails
+                              localStorage.removeItem('cumlaude_fcm_token');
+                              localStorage.removeItem('cumlaude_push_subscription');
+                              setNotificationsEnabled(false);
+                              addToast('Notifications disabled.', 'info');
                             }
                           }}
                           className="w-full py-2 px-4 bg-red-100 text-red-700 rounded-xl text-sm font-medium hover:bg-red-200 transition-colors"
@@ -3277,7 +3377,7 @@ const App = () => {
                           Disable Notifications
                         </button>
                       </div>
-                    ) : Notification.permission === 'denied' ? (
+                    ) : notificationPermission === 'denied' ? (
                       <div className="bg-red-100 border border-red-200 rounded-lg p-3">
                         <p className="text-sm text-red-700 mb-2">Notifications are blocked in your browser settings.</p>
                         <p className="text-xs text-red-600">To enable: Go to browser settings → Site settings → Notifications</p>
@@ -3285,10 +3385,15 @@ const App = () => {
                     ) : (
                       <button
                         onClick={() => {
+                          if (!user) {
+                            addToast('Please login first to enable notifications.', 'error');
+                            return;
+                          }
                           registerPush();
+                          // Close modal after a short delay
                           setTimeout(() => {
                             setShowNotificationSettings(false);
-                          }, 1000);
+                          }, 1500);
                         }}
                         className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
                       >
