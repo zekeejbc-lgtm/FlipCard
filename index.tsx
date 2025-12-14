@@ -941,11 +941,11 @@ const AddExamModal = ({
             </button>
           </div>
           
-          <p className="text-sm text-stone-500 mb-4">Schedule an exam for {subjectName || subject}</p>
+          <p className="text-sm text-stone-500 mb-4">Schedule for {subjectName || subject}</p>
           
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">Exam Type *</label>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Type *</label>
               <select 
                 value={examType}
                 onChange={(e) => setExamType(e.target.value)}
@@ -1035,7 +1035,7 @@ const AddExamModal = ({
             {submitting ? (
               <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Adding...</>
             ) : (
-              <><Icon name="event" /> Add Exam</>
+              <><Icon name="event" /> Add</>
             )}
           </button>
         </div>
@@ -3840,7 +3840,7 @@ const App = () => {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Exam Type *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Type *</label>
                     <select name="examType" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
                       <option value="LE Deadline">LE Deadline</option>
                       <option value="Quiz">Quiz</option>
@@ -3885,7 +3885,7 @@ const App = () => {
                   </div>
                   
                   <button type="submit" className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 flex items-center justify-center gap-2">
-                    <Icon name="event" /> Add Exam
+                    <Icon name="event" /> Add
                   </button>
                 </form>
               </div>
@@ -3941,7 +3941,7 @@ const App = () => {
                 className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
               >
                 <Icon name="add" className="text-sm" />
-                Add Exam
+                Add
               </button>
             )}
           </div>
@@ -4316,7 +4316,7 @@ const App = () => {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Exam Type *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Type *</label>
                     <select name="examType" required defaultValue={examToEdit.examType} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
                       <option value="LE Deadline">LE Deadline</option>
                       <option value="Quiz">Quiz</option>
@@ -5566,7 +5566,7 @@ const App = () => {
                     className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 flex items-center gap-1"
                   >
                     <Icon name="add" className="text-base" />
-                    Add Exam
+                    Add
                   </button>
                 </div>
               </div>
@@ -5753,7 +5753,7 @@ const App = () => {
                   }}
                   className="px-4 py-2 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900"
                 >
-                  Add Exam
+                  Add
                 </button>
               </div>
             </div>
@@ -5926,7 +5926,7 @@ const App = () => {
               className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
             >
               <Icon name="add" className="text-sm" />
-              Add Exam
+              Add
             </button>
           </div>
         </header>
@@ -5982,7 +5982,7 @@ const App = () => {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Exam Type *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Type *</label>
                     <select name="examType" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
                       <option value="LE Deadline">LE Deadline</option>
                       <option value="Quiz">Quiz</option>
@@ -6027,7 +6027,7 @@ const App = () => {
                   </div>
                   
                   <button type="submit" className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 flex items-center justify-center gap-2">
-                    <Icon name="event" /> Add Exam
+                    <Icon name="event" /> Add
                   </button>
                 </form>
               </div>
@@ -6045,7 +6045,7 @@ const App = () => {
                 onClick={() => { setPrefillExamDate(null); user ? setShowAddExam(true) : setShowLogin(true); }}
                 className="px-6 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors"
               >
-                Add Exam
+                Add
               </button>
             </div>
           ) : (
@@ -6264,7 +6264,7 @@ const App = () => {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Exam Type *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Type *</label>
                     <select name="examType" required defaultValue={examToEdit.examType} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
                       <option value="LE Deadline">LE Deadline</option>
                       <option value="Quiz">Quiz</option>
