@@ -5641,7 +5641,36 @@ const App = () => {
               </div>
             )}
 
-            {(selectedEvents.length > 0 ? selectedEvents : monthEvents).map((exam) => {
+            {(selectedEvents.length > 0 ? selectedEvents : monthEvents).sort((a, b) => {
+              const statusA = getExamStatus(a);
+              const statusB = getExamStatus(b);
+              
+              // Status priority: upcoming/ongoing first, completed last
+              const statusOrder: Record<string, number> = { 'upcoming': 0, 'ongoing': 0, 'completed': 1 };
+              const statusPriorityA = statusOrder[statusA] ?? 0;
+              const statusPriorityB = statusOrder[statusB] ?? 0;
+              
+              if (statusPriorityA !== statusPriorityB) {
+                return statusPriorityA - statusPriorityB;
+              }
+              
+              // Within same status, sort by time (nearest first)
+              const getStartTime = (exam: Exam) => {
+                const dateStr = String(exam.date);
+                let examDate: Date;
+                if (dateStr.includes('-')) {
+                  const [year, month, day] = dateStr.split('-').map(Number);
+                  examDate = new Date(year, month - 1, day);
+                } else {
+                  examDate = new Date(dateStr);
+                }
+                const { hour, min } = parseTimeString(exam.startTime);
+                examDate.setHours(hour, min, 0, 0);
+                return examDate.getTime();
+              };
+              
+              return getStartTime(a) - getStartTime(b);
+            }).map((exam) => {
               const colors = getExamTypeColor(exam.examType);
               const status = getExamStatus(exam);
               return (
