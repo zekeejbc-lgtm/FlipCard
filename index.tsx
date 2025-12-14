@@ -5524,26 +5524,45 @@ const App = () => {
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4">
-          {/* Month Navigation */}
+        <main className="max-w-5xl mx-auto px-4 py-3 space-y-3">
+          {/* Month Navigation with controls */}
           <div className="flex items-center justify-between gap-3">
-            <button
-              onClick={() => changeMonth(-1)}
-              className="p-2 hover:bg-stone-200 rounded-full transition-colors"
-              aria-label="Previous month"
-            >
-              <Icon name="chevron_left" className="text-stone-600" />
-            </button>
-            <div className="px-4 py-2 bg-stone-100 rounded-xl text-sm font-semibold text-stone-700 min-w-[160px] text-center">
-              {formatMonthLabel}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => changeMonth(-1)}
+                className="p-2 hover:bg-stone-200 rounded-full transition-colors"
+                aria-label="Previous month"
+              >
+                <Icon name="chevron_left" className="text-stone-600" />
+              </button>
+              <div className="px-4 py-2 bg-stone-100 rounded-xl text-sm font-semibold text-stone-700 min-w-[160px] text-center">
+                {formatMonthLabel}
+              </div>
+              <button
+                onClick={() => changeMonth(1)}
+                className="p-2 hover:bg-stone-200 rounded-full transition-colors"
+                aria-label="Next month"
+              >
+                <Icon name="chevron_right" className="text-stone-600" />
+              </button>
             </div>
-            <button
-              onClick={() => changeMonth(1)}
-              className="p-2 hover:bg-stone-200 rounded-full transition-colors"
-              aria-label="Next month"
-            >
-              <Icon name="chevron_right" className="text-stone-600" />
-            </button>
+            <div className="hidden sm:flex items-center gap-2">
+              <button
+                onClick={() => { const today = new Date(); today.setDate(1); setCalendarMonth(today); setCalendarSelectedDate(new Date()); }}
+                className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400"
+                title="Today"
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setShowDateJump(true)}
+                className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400 flex items-center gap-1"
+                title="Jump to date"
+              >
+                <Icon name="calendar_today" className="text-sm" />
+                Jump
+              </button>
+            </div>
           </div>
 
           {/* Calendar Grid */}
