@@ -5337,74 +5337,146 @@ const App = () => {
         />
 
         <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
-          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <button onClick={resetHome} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
-                <Icon name="arrow_back" className="text-stone-600" />
-              </button>
-              <div>
-                <h1 className="font-bold text-stone-800 text-lg">Calendar</h1>
-                <p className="text-xs text-stone-500">See all scheduled activities</p>
+          <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 py-2 sm:py-3">
+            {/* Mobile: Compact two-row layout */}
+            <div className="sm:hidden space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <button onClick={resetHome} className="p-1.5 hover:bg-stone-100 rounded-full flex-shrink-0">
+                    <Icon name="arrow_back" className="text-stone-600 text-xl" />
+                  </button>
+                  <h1 className="font-bold text-stone-800 text-base truncate">Calendar</h1>
+                </div>
+                <button
+                  onClick={() => setView('EXAMS')}
+                  className="p-1.5 bg-stone-800 text-white rounded-lg hover:bg-stone-900 flex-shrink-0"
+                >
+                  <Icon name="view_list" className="text-lg" />
+                </button>
+              </div>
+              
+              <div className="flex items-center justify-between gap-1">
+                <div className="flex items-center gap-0.5">
+                  <button onClick={() => changeMonth(-1)} className="p-1.5 hover:bg-stone-100 rounded-lg">
+                    <Icon name="chevron_left" className="text-stone-600 text-lg" />
+                  </button>
+                  <div className="px-2 py-1.5 bg-stone-100 rounded-lg text-[11px] font-semibold text-stone-700 min-w-[100px] text-center">
+                    {formatMonthLabel}
+                  </div>
+                  <button onClick={() => changeMonth(1)} className="p-1.5 hover:bg-stone-100 rounded-lg">
+                    <Icon name="chevron_right" className="text-stone-600 text-lg" />
+                  </button>
+                </div>
+                
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => { const today = new Date(); today.setDate(1); setCalendarMonth(today); setCalendarSelectedDate(new Date()); }}
+                    className="p-1.5 bg-white border border-stone-200 rounded-lg hover:border-stone-400"
+                    title="Today"
+                  >
+                    <Icon name="today" className="text-base" />
+                  </button>
+                  <button
+                    onClick={() => setShowDateJump(true)}
+                    className="p-1.5 bg-white border border-stone-200 rounded-lg hover:border-stone-400"
+                    title="Jump to date"
+                  >
+                    <Icon name="calendar_month" className="text-base" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPrefillExamDate(calendarSelectedDate ? toDateKey(calendarSelectedDate) : null);
+                      user ? setShowAddExam(true) : setShowLogin(true);
+                    }}
+                    className="p-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                    title="Add exam"
+                  >
+                    <Icon name="add" className="text-base" />
+                  </button>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => changeMonth(-1)}
-                className="p-2 hover:bg-stone-100 rounded-full"
-                aria-label="Previous month"
-              >
-                <Icon name="chevron_left" className="text-stone-600" />
-              </button>
-              <div className="px-3 py-2 bg-stone-100 rounded-xl text-sm font-semibold text-stone-700">
-                {formatMonthLabel}
+
+            {/* Desktop: Full layout with text labels */}
+            <div className="hidden sm:block">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-3">
+                  <button onClick={resetHome} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
+                    <Icon name="arrow_back" className="text-stone-600" />
+                  </button>
+                  <div>
+                    <h1 className="font-bold text-stone-800 text-lg">Calendar</h1>
+                    <p className="text-xs text-stone-500">See all scheduled activities</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setView('EXAMS')}
+                  className="px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-semibold hover:bg-stone-900 flex items-center gap-2"
+                >
+                  <Icon name="view_list" className="text-base" />
+                  List View
+                </button>
               </div>
-              <button
-                onClick={() => changeMonth(1)}
-                className="p-2 hover:bg-stone-100 rounded-full"
-                aria-label="Next month"
-              >
-                <Icon name="chevron_right" className="text-stone-600" />
-              </button>
-              <button
-                onClick={() => { const today = new Date(); today.setDate(1); setCalendarMonth(today); setCalendarSelectedDate(new Date()); }}
-                className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400"
-              >
-                Today
-              </button>
-              <button
-                onClick={() => setShowDateJump(true)}
-                className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400 flex items-center gap-1"
-                title="Jump to date"
-              >
-                <Icon name="calendar_today" className="text-sm" />
-              </button>
-              <button
-                onClick={() => {
-                  setPrefillExamDate(calendarSelectedDate ? toDateKey(calendarSelectedDate) : null);
-                  user ? setShowAddExam(true) : setShowLogin(true);
-                }}
-                className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700"
-              >
-                Add Exam
-              </button>
-              <button
-                onClick={() => setView('EXAMS')}
-                className="px-3 py-2 bg-stone-800 text-white rounded-xl text-sm font-semibold hover:bg-stone-900"
-              >
-                List View
-              </button>
+              
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => changeMonth(-1)}
+                    className="p-2 hover:bg-stone-100 rounded-full"
+                    aria-label="Previous month"
+                  >
+                    <Icon name="chevron_left" className="text-stone-600" />
+                  </button>
+                  <div className="px-4 py-2 bg-stone-100 rounded-xl text-sm font-semibold text-stone-700 min-w-[160px] text-center">
+                    {formatMonthLabel}
+                  </div>
+                  <button
+                    onClick={() => changeMonth(1)}
+                    className="p-2 hover:bg-stone-100 rounded-full"
+                    aria-label="Next month"
+                  >
+                    <Icon name="chevron_right" className="text-stone-600" />
+                  </button>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { const today = new Date(); today.setDate(1); setCalendarMonth(today); setCalendarSelectedDate(new Date()); }}
+                    className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400"
+                  >
+                    Today
+                  </button>
+                  <button
+                    onClick={() => setShowDateJump(true)}
+                    className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400 flex items-center gap-1"
+                  >
+                    <Icon name="calendar_today" className="text-sm" />
+                    Jump
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPrefillExamDate(calendarSelectedDate ? toDateKey(calendarSelectedDate) : null);
+                      user ? setShowAddExam(true) : setShowLogin(true);
+                    }}
+                    className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 flex items-center gap-1"
+                  >
+                    <Icon name="add" className="text-base" />
+                    Add Exam
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </header>
 
-        <main className="max-w-5xl mx-auto p-4 space-y-4">
-          <div className="bg-white rounded-2xl border border-stone-200 p-4 shadow-sm">
-            <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold text-stone-500 mb-2">
+        <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4">
+          <div className="bg-white rounded-2xl border border-stone-200 p-3 sm:p-4 shadow-sm overflow-x-auto">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-[10px] sm:text-xs font-semibold text-stone-500 mb-2 min-w-[280px]">
               {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d) => (
                 <div key={d} className="uppercase tracking-wide">{d}</div>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-2">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 min-w-[280px]">
               {gridDays.map(({ date, inMonth }) => {
                 const key = toDateKey(date);
                 const isToday = key === todayKey;
@@ -5416,31 +5488,26 @@ const App = () => {
                     key={key + inMonth}
                     onClick={() => handleDaySelect(date)}
                     onDoubleClick={() => handleDaySelect(date)}
-                    className={`relative p-3 rounded-xl text-left border transition-all min-h-[72px] focus:outline-none focus:ring-2 focus:ring-stone-400 ${
+                    className={`relative p-1.5 sm:p-3 rounded-lg sm:rounded-xl text-left border transition-all min-h-[48px] sm:min-h-[72px] focus:outline-none focus:ring-2 focus:ring-stone-400 ${
                       inMonth ? 'bg-white border-stone-200' : 'bg-stone-50 border-stone-100 text-stone-300'
-                    } ${isToday ? 'ring-2 ring-emerald-200' : ''} ${isSelected ? 'border-stone-800 shadow-sm' : ''}`}
+                    } ${isToday ? 'ring-2 ring-emerald-400 bg-emerald-50' : ''} ${isSelected ? 'border-stone-800 shadow-sm' : ''}`}
                   >
-                    <div className={`text-sm font-semibold ${inMonth ? 'text-stone-800' : 'text-stone-400'}`}>
+                    <div className={`text-xs sm:text-sm font-semibold ${isToday ? 'text-emerald-700' : inMonth ? 'text-stone-800' : 'text-stone-400'}`}>
                       {date.getDate()}
                     </div>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {colorsForDots.slice(0, 4).map((dot, idx) => (
-                        <span key={idx} className={`w-2 h-2 rounded-full ${dot}`} />
+                    <div className="flex flex-wrap gap-0.5 sm:gap-1 mt-1 sm:mt-2">
+                      {colorsForDots.slice(0, 3).map((dot, idx) => (
+                        <span key={idx} className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${dot}`} />
                       ))}
-                      {colorsForDots.length > 4 && (
-                        <span className="text-[10px] text-stone-400">+{colorsForDots.length - 4}</span>
+                      {colorsForDots.length > 3 && (
+                        <span className="text-[9px] sm:text-[10px] text-stone-400">+{colorsForDots.length - 3}</span>
                       )}
                     </div>
-                    {isToday && (
-                      <span className="absolute top-2 right-2 text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-semibold">
-                        Today
-                      </span>
-                    )}
                   </button>
                 );
               })}
             </div>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs text-stone-500">
+            <div className="mt-3 flex flex-wrap gap-1 sm:gap-2 text-[10px] sm:text-xs text-stone-500">
               {['Midterm Exam','Final Exam','Quiz','LE Deadline','Reporting','Performance','Presentation','Submission'].map(label => {
                 const colors = getExamTypeColor(label);
                 return (
@@ -5453,19 +5520,19 @@ const App = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div>
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-3 sm:p-4">
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs text-stone-400">Scheduled</p>
-                <h3 className="font-bold text-stone-800">{selectedLabel}</h3>
+                <h3 className="font-bold text-stone-800 text-sm sm:text-base truncate">{selectedLabel}</h3>
               </div>
-              <span className="text-sm text-stone-500">{selectedEvents.length || monthEvents.length} items</span>
+              <span className="text-xs sm:text-sm text-stone-500 flex-shrink-0">{selectedEvents.length || monthEvents.length} items</span>
             </div>
 
             {(selectedEvents.length === 0 && monthEvents.length === 0) && (
-              <div className="text-center py-12 text-stone-500">
-                <Icon name="event" className="text-4xl text-stone-300 mb-2" />
-                <p>No scheduled items for this period.</p>
+              <div className="text-center py-8 sm:py-12 text-stone-500">
+                <Icon name="event" className="text-3xl sm:text-4xl text-stone-300 mb-2" />
+                <p className="text-sm">No scheduled items for this period.</p>
               </div>
             )}
 
@@ -5475,34 +5542,34 @@ const App = () => {
               return (
                 <div
                   key={exam.examId}
-                  className="p-3 mb-2 last:mb-0 rounded-xl border border-stone-200 bg-white hover:shadow-sm transition-all"
+                  className="p-2 sm:p-3 mb-2 last:mb-0 rounded-xl border border-stone-200 bg-white hover:shadow-sm transition-all cursor-pointer"
                   onClick={() => setSelectedExam(exam)}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colors.bg} ${colors.text}`}>
-                        <Icon name="event" className="text-xl" />
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
+                      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${colors.bg} ${colors.text}`}>
+                        <Icon name="event" className="text-lg sm:text-xl" />
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-stone-800">{exam.courseCode}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
+                          <span className="font-semibold text-stone-800 text-sm sm:text-base">{exam.courseCode}</span>
+                          <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ${colors.bg} ${colors.text}`}>
                             {exam.examType}
                           </span>
                         </div>
-                        {exam.courseName && <p className="text-sm text-stone-500 line-clamp-1">{exam.courseName}</p>}
-                        <p className="text-xs text-stone-500 mt-1">
+                        {exam.courseName && <p className="text-xs sm:text-sm text-stone-500 line-clamp-1">{exam.courseName}</p>}
+                        <p className="text-[11px] sm:text-xs text-stone-500 mt-1">
                           {formatExamDate(exam.date)} • {formatExamTime(exam.startTime)}{exam.endTime ? ` - ${formatExamTime(exam.endTime)}` : ''}
                         </p>
-                        {exam.room && <p className="text-xs text-stone-400">Room: {exam.room}</p>}
-                        {exam.notes && <p className="text-xs text-stone-400 italic line-clamp-2">"{exam.notes}"</p>}
+                        {exam.room && <p className="text-[11px] sm:text-xs text-stone-400">Room: {exam.room}</p>}
+                        {exam.notes && <p className="text-[11px] sm:text-xs text-stone-400 italic line-clamp-2">"{exam.notes}"</p>}
                       </div>
                     </div>
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                    <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold flex-shrink-0 ${
                       status === 'ongoing' ? 'bg-green-100 text-green-700' :
                       status === 'upcoming' ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-600'
                     }`}>
-                      {status === 'ongoing' ? 'Ongoing' : status === 'upcoming' ? 'Upcoming' : 'Completed'}
+                      {status === 'ongoing' ? 'Now' : status === 'upcoming' ? 'Soon' : 'Done'}
                     </span>
                   </div>
                 </div>
