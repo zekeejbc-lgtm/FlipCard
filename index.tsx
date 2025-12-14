@@ -5460,45 +5460,31 @@ const App = () => {
                 </button>
               </div>
               
-              <div className="flex items-center justify-between gap-1">
-                <div className="flex items-center gap-0.5">
-                  <button onClick={() => changeMonth(-1)} className="p-1.5 hover:bg-stone-100 rounded-lg">
-                    <Icon name="chevron_left" className="text-stone-600 text-lg" />
-                  </button>
-                  <div className="px-2 py-1.5 bg-stone-100 rounded-lg text-[11px] font-semibold text-stone-700 min-w-[100px] text-center">
-                    {formatMonthLabel}
-                  </div>
-                  <button onClick={() => changeMonth(1)} className="p-1.5 hover:bg-stone-100 rounded-lg">
-                    <Icon name="chevron_right" className="text-stone-600 text-lg" />
-                  </button>
-                </div>
-                
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => { const today = new Date(); today.setDate(1); setCalendarMonth(today); setCalendarSelectedDate(new Date()); }}
-                    className="p-1.5 bg-white border border-stone-200 rounded-lg hover:border-stone-400"
-                    title="Today"
-                  >
-                    <Icon name="today" className="text-base" />
-                  </button>
-                  <button
-                    onClick={() => setShowDateJump(true)}
-                    className="p-1.5 bg-white border border-stone-200 rounded-lg hover:border-stone-400"
-                    title="Jump to date"
-                  >
-                    <Icon name="calendar_month" className="text-base" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setPrefillExamDate(calendarSelectedDate ? toDateKey(calendarSelectedDate) : null);
-                      user ? setShowAddExam(true) : setShowLogin(true);
-                    }}
-                    className="p-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
-                    title="Add exam"
-                  >
-                    <Icon name="add" className="text-base" />
-                  </button>
-                </div>
+              <div className="flex items-center justify-center gap-1">
+                <button
+                  onClick={() => { const today = new Date(); today.setDate(1); setCalendarMonth(today); setCalendarSelectedDate(new Date()); }}
+                  className="p-1.5 bg-white border border-stone-200 rounded-lg hover:border-stone-400"
+                  title="Today"
+                >
+                  <Icon name="today" className="text-base" />
+                </button>
+                <button
+                  onClick={() => setShowDateJump(true)}
+                  className="p-1.5 bg-white border border-stone-200 rounded-lg hover:border-stone-400"
+                  title="Jump to date"
+                >
+                  <Icon name="calendar_month" className="text-base" />
+                </button>
+                <button
+                  onClick={() => {
+                    setPrefillExamDate(calendarSelectedDate ? toDateKey(calendarSelectedDate) : null);
+                    user ? setShowAddExam(true) : setShowLogin(true);
+                  }}
+                  className="p-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                  title="Add exam"
+                >
+                  <Icon name="add" className="text-base" />
+                </button>
               </div>
             </div>
 
@@ -5523,58 +5509,58 @@ const App = () => {
                 </button>
               </div>
               
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => changeMonth(-1)}
-                    className="p-2 hover:bg-stone-100 rounded-full"
-                    aria-label="Previous month"
-                  >
-                    <Icon name="chevron_left" className="text-stone-600" />
-                  </button>
-                  <div className="px-4 py-2 bg-stone-100 rounded-xl text-sm font-semibold text-stone-700 min-w-[160px] text-center">
-                    {formatMonthLabel}
-                  </div>
-                  <button
-                    onClick={() => changeMonth(1)}
-                    className="p-2 hover:bg-stone-100 rounded-full"
-                    aria-label="Next month"
-                  >
-                    <Icon name="chevron_right" className="text-stone-600" />
-                  </button>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { const today = new Date(); today.setDate(1); setCalendarMonth(today); setCalendarSelectedDate(new Date()); }}
-                    className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400"
-                  >
-                    Today
-                  </button>
-                  <button
-                    onClick={() => setShowDateJump(true)}
-                    className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400 flex items-center gap-1"
-                  >
-                    <Icon name="calendar_today" className="text-sm" />
-                    Jump
-                  </button>
-                  <button
-                    onClick={() => {
-                      setPrefillExamDate(calendarSelectedDate ? toDateKey(calendarSelectedDate) : null);
-                      user ? setShowAddExam(true) : setShowLogin(true);
-                    }}
-                    className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 flex items-center gap-1"
-                  >
-                    <Icon name="add" className="text-base" />
-                    Add
-                  </button>
-                </div>
-              </div>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={() => { const today = new Date(); today.setDate(1); setCalendarMonth(today); setCalendarSelectedDate(new Date()); }}
+                  className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400"
+                >
+                  Today
+                </button>
+                <button
+                  onClick={() => setShowDateJump(true)}
+                  className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400 flex items-center gap-1"
+                >
+                  <Icon name="calendar_today" className="text-sm" />
+                  Jump
+                </button>
+                <button
+                  onClick={() => {
+                    setPrefillExamDate(calendarSelectedDate ? toDateKey(calendarSelectedDate) : null);
+                    user ? setShowAddExam(true) : setShowLogin(true);
+                  }}
+                  className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 flex items-center gap-1"
+                >
+                  <Icon name="add" className="text-base" />
+                  Add
+                </button>
             </div>
+          </div>
           </div>
         </header>
 
         <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4">
+          {/* Month Navigation */}
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={() => changeMonth(-1)}
+              className="p-2 hover:bg-stone-200 rounded-full transition-colors"
+              aria-label="Previous month"
+            >
+              <Icon name="chevron_left" className="text-stone-600" />
+            </button>
+            <div className="px-4 py-2 bg-stone-100 rounded-xl text-sm font-semibold text-stone-700 min-w-[160px] text-center">
+              {formatMonthLabel}
+            </div>
+            <button
+              onClick={() => changeMonth(1)}
+              className="p-2 hover:bg-stone-200 rounded-full transition-colors"
+              aria-label="Next month"
+            >
+              <Icon name="chevron_right" className="text-stone-600" />
+            </button>
+          </div>
+
+          {/* Calendar Grid */}
           <div className="bg-white rounded-2xl border border-stone-200 p-3 sm:p-4 shadow-sm overflow-x-auto">
             <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-[10px] sm:text-xs font-semibold text-stone-500 mb-2 min-w-[280px]">
               {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d) => (
