@@ -992,7 +992,7 @@ function getAllDecks() {
   const sheets = ss.getSheets();
   const result = {};
   // All system/special sheets that should NOT be treated as flashcard decks
-  const specialSheets = ['User', 'Category', 'Resources', 'Analytics', 'DeckProgress', 'ExamSchedule', 'Announcements', 'AnnouncementDismissals'];
+  const specialSheets = ['User', 'Category', 'Resources', 'Analytics', 'DeckProgress', 'ExamSchedule', 'Announcements', 'AnnouncementDismissals', 'PushSubscriptions', 'PushQueue'];
 
   for (let i = 0; i < sheets.length; i++) {
     const sheet = sheets[i];
