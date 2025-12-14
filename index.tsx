@@ -5490,7 +5490,7 @@ const App = () => {
 
             {/* Desktop: Full layout with text labels */}
             <div className="hidden sm:block">
-              <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <button onClick={resetHome} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
                     <Icon name="arrow_back" className="text-stone-600" />
@@ -5500,41 +5500,27 @@ const App = () => {
                     <p className="text-xs text-stone-500">See all scheduled activities</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setView('EXAMS')}
-                  className="px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-semibold hover:bg-stone-900 flex items-center gap-2"
-                >
-                  <Icon name="view_list" className="text-base" />
-                  List View
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setView('EXAMS')}
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-stone-200 text-stone-700 rounded-xl text-sm font-medium hover:border-stone-400 transition-colors"
+                  >
+                    <Icon name="calendar_month" className="text-sm" />
+                    Calendar
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPrefillExamDate(null);
+                      user ? setShowAddExam(true) : setShowLogin(true);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
+                  >
+                    <Icon name="add" className="text-sm" />
+                    Add
+                  </button>
+                </div>
               </div>
-              
-              <div className="flex items-center justify-center gap-2">
-                <button
-                  onClick={() => { const today = new Date(); today.setDate(1); setCalendarMonth(today); setCalendarSelectedDate(new Date()); }}
-                  className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400"
-                >
-                  Today
-                </button>
-                <button
-                  onClick={() => setShowDateJump(true)}
-                  className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400 flex items-center gap-1"
-                >
-                  <Icon name="calendar_today" className="text-sm" />
-                  Jump
-                </button>
-                <button
-                  onClick={() => {
-                    setPrefillExamDate(calendarSelectedDate ? toDateKey(calendarSelectedDate) : null);
-                    user ? setShowAddExam(true) : setShowLogin(true);
-                  }}
-                  className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 flex items-center gap-1"
-                >
-                  <Icon name="add" className="text-base" />
-                  Add
-                </button>
             </div>
-          </div>
           </div>
         </header>
 
