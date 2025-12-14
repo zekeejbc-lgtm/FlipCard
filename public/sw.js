@@ -57,3 +57,57 @@ self.addEventListener('fetch', (event) => {
       })
   );
 });
+
+// Firebase Cloud Messaging background handler
+importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js');
+
+// Initialize Firebase in service worker
+firebase.initializeApp({
+  apiKey: "AIzaSyD9igTpHd8LsXCZhGarVB2PnrO2aszNQGc",
+  authDomain: "cumlaude-push.firebaseapp.com",
+  projectId: "cumlaude-push",
+  storageBucket: "cumlaude-push.firebasestorage.app",
+  messagingSenderId: "56596622764",
+  appId: "1:56596622764:web:05ec45b90f51e096e09e09"
+});
+
+const messaging = firebase.messaging();
+
+// Handle background push messages
+messaging.onBackgroundMessage((payload) => {
+  console.log('Background message received:', payload);
+  
+  const title = payload.notification?.title || 'CumLaude!';
+  const options = {
+    body: payload.notification?.body || 'You have a new notification',
+    icon: '/icon-192.svg',
+    badge: '/icon-192.svg',
+    data: payload.data || {},
+    requireInteraction: true
+  };
+
+  return self.registration.showNotification(title, options);
+});
+
+// Handle notification clicks
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) {
+          if (client.url.includes(targetUrl)) {
+            return client.focus();
+          }
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+      return undefined;
+    })
+  );
+});

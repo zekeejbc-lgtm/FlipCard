@@ -47,7 +47,7 @@ type Toast = {
   progress?: number;
 };
 
-type AppView = 'HOME' | 'SUBJECT' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY' | 'RESOURCE_VIEW' | 'ANALYTICS' | 'EXAMS' | 'ALL_RESOURCES';
+type AppView = 'HOME' | 'SUBJECT' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY' | 'RESOURCE_VIEW' | 'ANALYTICS' | 'EXAMS' | 'ALL_RESOURCES' | 'CALENDAR';
 
 type DeckProgress = {
   deckName: string;
@@ -1388,6 +1388,18 @@ const App = () => {
   const [activeResource, setActiveResource] = useState<Resource | null>(null);
   const [previousView, setPreviousView] = useState<AppView>('HOME'); // Track where we came from
 
+  // Calendar View State
+  const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d;
+  });
+  const [calendarSelectedDate, setCalendarSelectedDate] = useState<Date | null>(() => new Date());
+  const [calendarDetailDate, setCalendarDetailDate] = useState<Date | null>(null);
+  const [prefillExamDate, setPrefillExamDate] = useState<string | null>(null);
+  const [showDateJump, setShowDateJump] = useState(false);
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+
   // Save navigation state to localStorage
   useEffect(() => {
     localStorage.setItem('cumlaude_lastView', view);
@@ -2444,6 +2456,124 @@ const App = () => {
     const hour12 = hour % 12 || 12;
     return `${hour12}:${min.toString().padStart(2, '0')} ${ampm}`;
   };
+
+  const getExamTypeColor = (examType: string) => {
+    const colors: Record<string, { bg: string; text: string; dot: string }> = {
+      'Midterm Exam': { bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500' },
+      'Final Exam': { bg: 'bg-indigo-50', text: 'text-indigo-700', dot: 'bg-indigo-500' },
+      'Quiz': { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
+      'LE Deadline': { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
+      'Reporting': { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
+      'Performance': { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+      'Presentation': { bg: 'bg-pink-50', text: 'text-pink-700', dot: 'bg-pink-500' },
+      'Submission': { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500' },
+      'Exam': { bg: 'bg-stone-100', text: 'text-stone-700', dot: 'bg-stone-500' }
+    };
+    return colors[examType] || { bg: 'bg-stone-100', text: 'text-stone-700', dot: 'bg-stone-400' };
+  };
+
+  const toDateKey = (dateInput: string | Date) => {
+    const d = typeof dateInput === 'string' ? new Date(dateInput) : new Date(dateInput);
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString().split('T')[0];
+  };
+
+  // --- Push Notifications (Firebase Cloud Messaging) ---
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyD9igTpHd8LsXCZhGarVB2PnrO2aszNQGc",
+    authDomain: "cumlaude-push.firebaseapp.com",
+    projectId: "cumlaude-push",
+    storageBucket: "cumlaude-push.firebasestorage.app",
+    messagingSenderId: "56596622764",
+    appId: "1:56596622764:web:05ec45b90f51e096e09e09"
+  };
+
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) return false;
+    if (Notification.permission === 'granted') return true;
+    const perm = await Notification.requestPermission();
+    return perm === 'granted';
+  };
+
+  const registerPush = async () => {
+    try {
+      if (!('serviceWorker' in navigator)) return;
+      
+      // Check if Firebase is configured
+      if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.includes('YOUR_')) {
+        console.warn('Firebase not configured. See setup instructions.');
+        addToast('Notifications require Firebase setup. Check console for instructions.', 'info');
+        return;
+      }
+
+      const permission = await requestNotificationPermission();
+      if (!permission) {
+        addToast('Notifications blocked. Enable to get deadline alerts.', 'info');
+        return;
+      }
+
+      // Initialize Firebase (will be loaded from CDN)
+      if (typeof window.firebase === 'undefined') {
+        addToast('Loading Firebase...', 'loading');
+        return;
+      }
+
+      const firebase = (window as any).firebase;
+      
+      if (!firebase.apps.length) {
+        firebase.initializeApp(FIREBASE_CONFIG);
+      }
+
+      const messaging = firebase.messaging();
+      
+      // Get FCM token
+      const token = await messaging.getToken({
+        vapidKey: FIREBASE_CONFIG.apiKey // FCM uses API key
+      });
+
+      if (token) {
+        localStorage.setItem('cumlaude_fcm_token', token);
+        
+        // Save to backend
+        try {
+          await fetch(GAS_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+              action: 'savePushSubscription',
+              userId: user?.idNumber,
+              userName: user?.name,
+              subscription: { token, type: 'fcm' }
+            })
+          });
+        } catch (e) {
+          console.error('Failed to save token to backend:', e);
+        }
+        
+        addToast('Notifications enabled. We will alert you for upcoming deadlines.', 'success');
+        
+        // Listen for foreground messages
+        messaging.onMessage((payload: any) => {
+          console.log('Foreground message:', payload);
+          const title = payload.notification?.title || 'CumLaude!';
+          const body = payload.notification?.body || 'New notification';
+          addToast(`${title}: ${body}`, 'info');
+        });
+      }
+    } catch (e) {
+      console.error('Push registration failed', e);
+      addToast('Could not enable notifications. Check settings.', 'error');
+    }
+  };
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    // Auto-register removed - user must enable via settings
+  }, [user]);
   
   const addExamToBackend = async (exam: { courseCode: string; courseName: string; examType: string; date: string; startTime: string; endTime: string; room: string; proctor: string; notes: string }) => {
     if (!user) {
@@ -3068,7 +3198,7 @@ const App = () => {
             
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setView('EXAMS')}
+                onClick={() => setView('CALENDAR')}
                 className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
                 title="Schedule"
               >
@@ -3084,6 +3214,13 @@ const App = () => {
                 </button>
               )}
               <button
+                onClick={() => setShowNotificationSettings(true)}
+                className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
+                title="Notification Settings"
+              >
+                <Icon name="notifications" className="text-stone-600" />
+              </button>
+              <button
                 onClick={() => user ? handleLogout() : setShowLogin(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors"
               >
@@ -3095,6 +3232,95 @@ const App = () => {
             </div>
           </div>
         </header>
+
+        {/* Notification Settings Modal */}
+        {showNotificationSettings && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-stone-800">Notification Settings</h2>
+                  <button onClick={() => setShowNotificationSettings(false)} className="p-2 hover:bg-stone-100 rounded-full">
+                    <Icon name="close" className="text-stone-500" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Icon name="info" className="text-blue-600" />
+                      <h3 className="font-semibold text-blue-800">Push Notifications</h3>
+                    </div>
+                    <p className="text-sm text-blue-700 mb-3">
+                      Get notified about upcoming exams and deadlines even when the app is closed.
+                    </p>
+                    <p className="text-xs text-blue-600 mb-3">
+                      Current status: <strong>{Notification.permission === 'granted' ? '✓ Enabled' : Notification.permission === 'denied' ? '✗ Blocked' : '○ Not enabled'}</strong>
+                    </p>
+                    {Notification.permission === 'granted' ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-green-700">✓ Notifications are enabled!</p>
+                        <button
+                          onClick={async () => {
+                            if (navigator.serviceWorker) {
+                              const reg = await navigator.serviceWorker.ready;
+                              const sub = await reg.pushManager.getSubscription();
+                              if (sub) {
+                                await sub.unsubscribe();
+                                localStorage.removeItem('cumlaude_push_subscription');
+                                addToast('Notifications disabled. Refresh to re-enable.', 'info');
+                              }
+                            }
+                          }}
+                          className="w-full py-2 px-4 bg-red-100 text-red-700 rounded-xl text-sm font-medium hover:bg-red-200 transition-colors"
+                        >
+                          Disable Notifications
+                        </button>
+                      </div>
+                    ) : Notification.permission === 'denied' ? (
+                      <div className="bg-red-100 border border-red-200 rounded-lg p-3">
+                        <p className="text-sm text-red-700 mb-2">Notifications are blocked in your browser settings.</p>
+                        <p className="text-xs text-red-600">To enable: Go to browser settings → Site settings → Notifications</p>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          registerPush();
+                          setTimeout(() => {
+                            setShowNotificationSettings(false);
+                          }, 1000);
+                        }}
+                        className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Icon name="notifications_active" />
+                        Enable Notifications
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Icon name="warning" className="text-amber-600 text-sm" />
+                      <p className="text-xs font-semibold text-amber-800">Note</p>
+                    </div>
+                    <p className="text-xs text-amber-700">
+                      Notification delivery requires an active internet connection and backend configuration (VAPID keys).
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-stone-200">
+                <button
+                  onClick={() => setShowNotificationSettings(false)}
+                  className="w-full py-2 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <main className="max-w-5xl mx-auto p-4">
@@ -3210,7 +3436,7 @@ const App = () => {
           <div className="grid grid-cols-2 gap-3 mt-8">
             {/* Exams Quick View */}
             <button
-              onClick={() => setView('EXAMS')}
+              onClick={() => setView('CALENDAR')}
               className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-amber-300 hover:shadow-md transition-all"
             >
               <div className="flex items-center justify-between mb-2">
@@ -3257,7 +3483,7 @@ const App = () => {
                 <span className="flex items-center gap-2">
                   <Icon name="event" className="text-amber-500" /> Next Exams
                 </span>
-                <button onClick={() => setView('EXAMS')} className="text-sm text-stone-500 hover:text-stone-700">
+                <button onClick={() => setView('CALENDAR')} className="text-sm text-stone-500 hover:text-stone-700">
                   View all →
                 </button>
               </h2>
@@ -3458,6 +3684,109 @@ const App = () => {
           updateToast={updateToast}
           removeToast={removeToast}
         />
+
+        {showAddExam && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-stone-800">Add Exam</h2>
+                  <button onClick={() => { setShowAddExam(false); setPrefillExamDate(null); }} className="p-2 hover:bg-stone-100 rounded-full">
+                    <Icon name="close" className="text-stone-500" />
+                  </button>
+                </div>
+                
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target as HTMLFormElement;
+                  const formData = new FormData(form);
+                  
+                  const success = await addExamToBackend({
+                    courseCode: formData.get('courseCode') as string,
+                    courseName: formData.get('courseName') as string || subjectInfo[formData.get('courseCode') as string]?.name || '',
+                    examType: formData.get('examType') as string,
+                    date: formData.get('date') as string,
+                    startTime: formData.get('startTime') as string,
+                    endTime: formData.get('endTime') as string,
+                    room: formData.get('room') as string,
+                    proctor: formData.get('proctor') as string,
+                    notes: formData.get('notes') as string
+                  });
+                  
+                  if (success) {
+                    setShowAddExam(false);
+                    setPrefillExamDate(null);
+                    form.reset();
+                  }
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Code *</label>
+                    <select name="courseCode" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
+                      <option value="">Select a course</option>
+                      {displaySubjects.map(s => (
+                        <option key={s} value={s}>{s} {subjectInfo[s]?.name ? `- ${subjectInfo[s].name}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Name</label>
+                    <input type="text" name="courseName" placeholder="e.g., Introduction to Language" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Exam Type *</label>
+                    <select name="examType" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
+                      <option value="LE Deadline">LE Deadline</option>
+                      <option value="Quiz">Quiz</option>
+                      <option value="Midterm Exam">Midterm Exam</option>
+                      <option value="Final Exam">Final Exam</option>
+                      <option value="Reporting">Reporting</option>
+                      <option value="Performance">Performance</option>
+                      <option value="Presentation">Presentation</option>
+                      <option value="Submission">Submission</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Date *</label>
+                    <input type="date" name="date" required defaultValue={prefillExamDate || ''} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time *</label>
+                      <input type="time" name="startTime" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time *</label>
+                      <input type="time" name="endTime" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Room *</label>
+                    <input type="text" name="room" required placeholder="e.g., Room 101" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Proctor</label>
+                    <input type="text" name="proctor" placeholder="e.g., Prof. Santos" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Notes</label>
+                    <textarea name="notes" rows={2} placeholder="Additional notes..." className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500 resize-none" />
+                  </div>
+                  
+                  <button type="submit" className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 flex items-center justify-center gap-2">
+                    <Icon name="event" /> Add Exam
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
         <UploadModal 
           isOpen={showUpload} 
           onClose={() => setShowUpload(false)} 
@@ -4945,6 +5274,447 @@ const App = () => {
     );
   }
 
+  if (view === 'CALENDAR') {
+    const monthStart = new Date(calendarMonth);
+    monthStart.setDate(1);
+    const year = monthStart.getFullYear();
+    const month = monthStart.getMonth();
+    const startDay = monthStart.getDay();
+    const todayKey = toDateKey(new Date());
+    const selectedKey = calendarSelectedDate ? toDateKey(calendarSelectedDate) : null;
+
+    const eventsByDay: Record<string, Exam[]> = {};
+    exams.forEach((exam) => {
+      const key = toDateKey(exam.date);
+      if (!eventsByDay[key]) eventsByDay[key] = [];
+      eventsByDay[key].push(exam);
+    });
+
+    const gridDays = Array.from({ length: 42 }, (_, idx) => {
+      const date = new Date(year, month, idx - startDay + 1);
+      return { date, inMonth: date.getMonth() === month };
+    });
+
+    const selectedEvents = selectedKey ? (eventsByDay[selectedKey] || []) : [];
+    const monthEvents = exams
+      .filter((e) => {
+        const d = new Date(e.date);
+        return d.getMonth() === month && d.getFullYear() === year;
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    const changeMonth = (delta: number) => {
+      const next = new Date(year, month + delta, 1);
+      setCalendarMonth(next);
+      setCalendarSelectedDate(next);
+    };
+
+    const formatMonthLabel = new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const selectedLabel = selectedKey
+      ? new Date(selectedKey).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+      : 'All events this month';
+
+    const detailEvents = calendarDetailDate ? (eventsByDay[toDateKey(calendarDetailDate)] || []) : [];
+    const detailLabel = calendarDetailDate
+      ? calendarDetailDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+      : '';
+
+    const handleDaySelect = (date: Date) => {
+      setCalendarSelectedDate(date);
+      setCalendarDetailDate(date);
+    };
+
+    return (
+      <div className="min-h-screen bg-[#F5F5F4]">
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <LoginModal 
+          isOpen={showLogin} 
+          onClose={() => setShowLogin(false)} 
+          onLogin={setUser}
+          addToast={addToast}
+          updateToast={updateToast}
+          removeToast={removeToast}
+        />
+
+        <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
+          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button onClick={resetHome} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
+                <Icon name="arrow_back" className="text-stone-600" />
+              </button>
+              <div>
+                <h1 className="font-bold text-stone-800 text-lg">Calendar</h1>
+                <p className="text-xs text-stone-500">See all scheduled activities</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => changeMonth(-1)}
+                className="p-2 hover:bg-stone-100 rounded-full"
+                aria-label="Previous month"
+              >
+                <Icon name="chevron_left" className="text-stone-600" />
+              </button>
+              <div className="px-3 py-2 bg-stone-100 rounded-xl text-sm font-semibold text-stone-700">
+                {formatMonthLabel}
+              </div>
+              <button
+                onClick={() => changeMonth(1)}
+                className="p-2 hover:bg-stone-100 rounded-full"
+                aria-label="Next month"
+              >
+                <Icon name="chevron_right" className="text-stone-600" />
+              </button>
+              <button
+                onClick={() => { const today = new Date(); today.setDate(1); setCalendarMonth(today); setCalendarSelectedDate(new Date()); }}
+                className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400"
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setShowDateJump(true)}
+                className="px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-medium hover:border-stone-400 flex items-center gap-1"
+                title="Jump to date"
+              >
+                <Icon name="calendar_today" className="text-sm" />
+              </button>
+              <button
+                onClick={() => {
+                  setPrefillExamDate(calendarSelectedDate ? toDateKey(calendarSelectedDate) : null);
+                  user ? setShowAddExam(true) : setShowLogin(true);
+                }}
+                className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700"
+              >
+                Add Exam
+              </button>
+              <button
+                onClick={() => setView('EXAMS')}
+                className="px-3 py-2 bg-stone-800 text-white rounded-xl text-sm font-semibold hover:bg-stone-900"
+              >
+                List View
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-5xl mx-auto p-4 space-y-4">
+          <div className="bg-white rounded-2xl border border-stone-200 p-4 shadow-sm">
+            <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold text-stone-500 mb-2">
+              {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d) => (
+                <div key={d} className="uppercase tracking-wide">{d}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-2">
+              {gridDays.map(({ date, inMonth }) => {
+                const key = toDateKey(date);
+                const isToday = key === todayKey;
+                const isSelected = key === selectedKey;
+                const dayEvents = eventsByDay[key] || [];
+                const colorsForDots = Array.from(new Set(dayEvents.map(e => getExamTypeColor(e.examType).dot)));
+                return (
+                  <button
+                    key={key + inMonth}
+                    onClick={() => handleDaySelect(date)}
+                    onDoubleClick={() => handleDaySelect(date)}
+                    className={`relative p-3 rounded-xl text-left border transition-all min-h-[72px] focus:outline-none focus:ring-2 focus:ring-stone-400 ${
+                      inMonth ? 'bg-white border-stone-200' : 'bg-stone-50 border-stone-100 text-stone-300'
+                    } ${isToday ? 'ring-2 ring-emerald-200' : ''} ${isSelected ? 'border-stone-800 shadow-sm' : ''}`}
+                  >
+                    <div className={`text-sm font-semibold ${inMonth ? 'text-stone-800' : 'text-stone-400'}`}>
+                      {date.getDate()}
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {colorsForDots.slice(0, 4).map((dot, idx) => (
+                        <span key={idx} className={`w-2 h-2 rounded-full ${dot}`} />
+                      ))}
+                      {colorsForDots.length > 4 && (
+                        <span className="text-[10px] text-stone-400">+{colorsForDots.length - 4}</span>
+                      )}
+                    </div>
+                    {isToday && (
+                      <span className="absolute top-2 right-2 text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-semibold">
+                        Today
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-stone-500">
+              {['Midterm Exam','Final Exam','Quiz','LE Deadline','Reporting','Performance','Presentation','Submission'].map(label => {
+                const colors = getExamTypeColor(label);
+                return (
+                  <span key={label} className={`px-2 py-1 rounded-full border ${colors.bg} ${colors.text} border-stone-200 flex items-center gap-1`}>
+                    <span className={`w-2 h-2 rounded-full ${colors.dot}`} />
+                    {label}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-xs text-stone-400">Scheduled</p>
+                <h3 className="font-bold text-stone-800">{selectedLabel}</h3>
+              </div>
+              <span className="text-sm text-stone-500">{selectedEvents.length || monthEvents.length} items</span>
+            </div>
+
+            {(selectedEvents.length === 0 && monthEvents.length === 0) && (
+              <div className="text-center py-12 text-stone-500">
+                <Icon name="event" className="text-4xl text-stone-300 mb-2" />
+                <p>No scheduled items for this period.</p>
+              </div>
+            )}
+
+            {(selectedEvents.length > 0 ? selectedEvents : monthEvents).map((exam) => {
+              const colors = getExamTypeColor(exam.examType);
+              const status = getExamStatus(exam);
+              return (
+                <div
+                  key={exam.examId}
+                  className="p-3 mb-2 last:mb-0 rounded-xl border border-stone-200 bg-white hover:shadow-sm transition-all"
+                  onClick={() => setSelectedExam(exam)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colors.bg} ${colors.text}`}>
+                        <Icon name="event" className="text-xl" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-stone-800">{exam.courseCode}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
+                            {exam.examType}
+                          </span>
+                        </div>
+                        {exam.courseName && <p className="text-sm text-stone-500 line-clamp-1">{exam.courseName}</p>}
+                        <p className="text-xs text-stone-500 mt-1">
+                          {formatExamDate(exam.date)} • {formatExamTime(exam.startTime)}{exam.endTime ? ` - ${formatExamTime(exam.endTime)}` : ''}
+                        </p>
+                        {exam.room && <p className="text-xs text-stone-400">Room: {exam.room}</p>}
+                        {exam.notes && <p className="text-xs text-stone-400 italic line-clamp-2">"{exam.notes}"</p>}
+                      </div>
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                      status === 'ongoing' ? 'bg-green-100 text-green-700' :
+                      status === 'upcoming' ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-600'
+                    }`}>
+                      {status === 'ongoing' ? 'Ongoing' : status === 'upcoming' ? 'Upcoming' : 'Completed'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </main>
+
+        {calendarDetailDate && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setCalendarDetailDate(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="p-4 border-b border-stone-200 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs text-stone-400">Selected date</p>
+                  <h3 className="font-bold text-stone-800">{detailLabel}</h3>
+                  <p className="text-xs text-stone-500">{detailEvents.length} scheduled</p>
+                </div>
+                <button onClick={() => setCalendarDetailDate(null)} className="p-2 hover:bg-stone-100 rounded-full">
+                  <Icon name="close" className="text-stone-500" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-2">
+                {detailEvents.length === 0 && (
+                  <div className="text-center text-stone-500 py-8">
+                    <Icon name="event" className="text-3xl text-stone-300 mb-2" />
+                    <p>No items for this date.</p>
+                  </div>
+                )}
+
+                {detailEvents.map((exam) => {
+                  const colors = getExamTypeColor(exam.examType);
+                  const status = getExamStatus(exam);
+                  return (
+                    <button
+                      key={exam.examId}
+                      onClick={() => { setSelectedExam(exam); setCalendarDetailDate(null); }}
+                      className="w-full text-left p-3 rounded-xl border border-stone-200 bg-white hover:border-stone-400 hover:shadow-sm transition-all flex items-start gap-3"
+                    >
+                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${colors.bg} ${colors.text}`}>
+                        <Icon name="event" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-stone-800 line-clamp-1">{exam.courseCode}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${colors.bg} ${colors.text}`}>
+                            {exam.examType}
+                          </span>
+                        </div>
+                        {exam.courseName && <p className="text-xs text-stone-500 line-clamp-1">{exam.courseName}</p>}
+                        <p className="text-xs text-stone-500 mt-1">{formatExamTime(exam.startTime)}{exam.endTime ? ` - ${formatExamTime(exam.endTime)}` : ''}</p>
+                        {exam.room && <p className="text-[11px] text-stone-400">Room: {exam.room}</p>}
+                      </div>
+                      <span className={`px-2 py-1 rounded-full text-[11px] font-semibold ${
+                        status === 'ongoing' ? 'bg-green-100 text-green-700' :
+                        status === 'upcoming' ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-600'
+                      }`}>
+                        {status === 'ongoing' ? 'Ongoing' : status === 'upcoming' ? 'Upcoming' : 'Done'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="p-4 border-t border-stone-200 flex justify-end gap-2">
+                <button
+                  onClick={() => setCalendarDetailDate(null)}
+                  className="px-4 py-2 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setPrefillExamDate(calendarDetailDate ? toDateKey(calendarDetailDate) : null);
+                    user ? setShowAddExam(true) : setShowLogin(true);
+                  }}
+                  className="px-4 py-2 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900"
+                >
+                  Add Exam
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Date Jump Modal */}
+        {showDateJump && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDateJump(false)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-stone-800">Jump to Date</h2>
+                  <button onClick={() => setShowDateJump(false)} className="p-2 hover:bg-stone-100 rounded-full">
+                    <Icon name="close" className="text-stone-500" />
+                  </button>
+                </div>
+
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.target as HTMLFormElement);
+                  const dateStr = formData.get('jumpDate') as string;
+                  if (dateStr) {
+                    const targetDate = new Date(dateStr);
+                    const monthStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+                    setCalendarMonth(monthStart);
+                    setCalendarSelectedDate(targetDate);
+                    setShowDateJump(false);
+                  }
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-2">Select Date</label>
+                    <input
+                      type="date"
+                      name="jumpDate"
+                      required
+                      defaultValue={toDateKey(calendarSelectedDate || new Date())}
+                      className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowDateJump(false)}
+                      className="flex-1 py-2 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 py-2 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900"
+                    >
+                      Jump
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Date Jump Modal */}
+        {showDateJump && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDateJump(false)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-stone-800">Jump to Date</h2>
+                  <button onClick={() => setShowDateJump(false)} className="p-2 hover:bg-stone-100 rounded-full">
+                    <Icon name="close" className="text-stone-500" />
+                  </button>
+                </div>
+
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.target as HTMLFormElement);
+                  const dateStr = formData.get('jumpDate') as string;
+                  if (dateStr) {
+                    const targetDate = new Date(dateStr);
+                    const monthStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+                    setCalendarMonth(monthStart);
+                    setCalendarSelectedDate(targetDate);
+                    setShowDateJump(false);
+                  }
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-2">Select Date</label>
+                    <input
+                      type="date"
+                      name="jumpDate"
+                      required
+                      defaultValue={toDateKey(calendarSelectedDate || new Date())}
+                      className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowDateJump(false)}
+                      className="flex-1 py-2 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 py-2 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900"
+                    >
+                      Jump
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <AddExamModal
+          isOpen={showAddExam}
+          onClose={() => { setShowAddExam(false); setPrefillExamDate(null); }}
+          subject={activeSubject || ''}
+          subjectName={subjectInfo[activeSubject || '']?.name || ''}
+          user={user}
+          onAddExam={addExamToBackend}
+          addToast={addToast}
+          updateToast={updateToast}
+          removeToast={removeToast}
+        />
+      </div>
+    );
+  }
+
   if (view === 'EXAMS') {
     const ongoingExams = exams.filter(e => getExamStatus(e) === 'ongoing');
     const upcomingExams = exams.filter(e => getExamStatus(e) === 'upcoming');
@@ -4973,7 +5743,14 @@ const App = () => {
               <p className="text-xs text-stone-500">{exams.length} total exams</p>
             </div>
             <button
-              onClick={() => user ? setShowAddExam(true) : setShowLogin(true)}
+              onClick={() => setView('CALENDAR')}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-stone-200 text-stone-700 rounded-xl text-sm font-medium hover:border-stone-400 transition-colors"
+            >
+              <Icon name="calendar_month" className="text-sm" />
+              Calendar
+            </button>
+            <button
+              onClick={() => { setPrefillExamDate(null); user ? setShowAddExam(true) : setShowLogin(true); }}
               className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
             >
               <Icon name="add" className="text-sm" />
@@ -4989,7 +5766,7 @@ const App = () => {
               <div className="p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-bold text-stone-800">Add Exam</h2>
-                  <button onClick={() => setShowAddExam(false)} className="p-2 hover:bg-stone-100 rounded-full">
+                  <button onClick={() => { setShowAddExam(false); setPrefillExamDate(null); }} className="p-2 hover:bg-stone-100 rounded-full">
                     <Icon name="close" className="text-stone-500" />
                   </button>
                 </div>
@@ -5013,6 +5790,7 @@ const App = () => {
                   
                   if (success) {
                     setShowAddExam(false);
+                    setPrefillExamDate(null);
                     form.reset();
                   }
                 }} className="space-y-4">
@@ -5047,7 +5825,7 @@ const App = () => {
                   
                   <div>
                     <label className="block text-sm font-medium text-stone-700 mb-1">Date *</label>
-                    <input type="date" name="date" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    <input type="date" name="date" required defaultValue={prefillExamDate || ''} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                   </div>
                   
                   <div className="grid grid-cols-2 gap-3">
@@ -5092,7 +5870,7 @@ const App = () => {
               <h3 className="text-lg font-semibold text-stone-600 mb-2">No Exams Scheduled</h3>
               <p className="text-stone-400 mb-4">Add your first exam to get started</p>
               <button
-                onClick={() => user ? setShowAddExam(true) : setShowLogin(true)}
+                onClick={() => { setPrefillExamDate(null); user ? setShowAddExam(true) : setShowLogin(true); }}
                 className="px-6 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors"
               >
                 Add Exam

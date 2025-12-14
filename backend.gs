@@ -114,6 +114,10 @@ function doPost(e) {
         return jsonResponse(dismissAnnouncement(data.announcementId, data.userId));
       case 'deactivateAnnouncement':
         return jsonResponse(deactivateAnnouncement(data.announcementId, data.userId));
+      case 'savePushSubscription':
+        return jsonResponse(savePushSubscription(data));
+      case 'sendPushNotification':
+        return jsonResponse(sendPushNotification(data));
       default:
         return jsonResponse({ error: 'Unknown action' });
     }
@@ -236,6 +240,17 @@ function setupSheets() {
     results.push('Created AnnouncementDismissals sheet');
   } else {
     results.push('AnnouncementDismissals sheet already exists');
+  }
+  
+  // 9. Setup PushSubscriptions sheet for storing web push subscriptions
+  let pushSheet = ss.getSheetByName('PushSubscriptions');
+  if (!pushSheet) {
+    pushSheet = ss.insertSheet('PushSubscriptions');
+    pushSheet.appendRow(['UserID', 'UserName', 'Subscription', 'CreatedAt', 'LastUpdated']);
+    pushSheet.setFrozenRows(1);
+    results.push('Created PushSubscriptions sheet');
+  } else {
+    results.push('PushSubscriptions sheet already exists');
   }
   
   return { 
@@ -1977,5 +1992,403 @@ function dismissAnnouncement(announcementId, userId) {
     return { success: true, message: 'Dismissal recorded' };
   } catch (error) {
     return { error: 'Failed to record dismissal: ' + error.message };
+  }
+}
+
+// =====================================================
+// PUSH NOTIFICATIONS
+// =====================================================
+
+/**
+ * Save or update a user's push notification subscription
+ * @param {Object} data - { userId, userName, subscription }
+ */
+function savePushSubscription(data) {
+  try {
+    const { userId, userName, subscription } = data;
+    
+    if (!userId || !subscription) {
+      return { error: 'Missing userId or subscription' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('PushSubscriptions');
+    
+    // Create sheet if it doesn't exist
+    if (!sheet) {
+      sheet = ss.insertSheet('PushSubscriptions');
+      sheet.appendRow(['UserID', 'UserName', 'Subscription', 'CreatedAt', 'LastUpdated']);
+      sheet.setFrozenRows(1);
+    }
+    
+    const now = new Date().toISOString();
+    const subscriptionJson = JSON.stringify(subscription);
+    const data2 = sheet.getDataRange().getValues();
+    
+    // Check if user already has a subscription (update it)
+    for (let i = 1; i < data2.length; i++) {
+      if (String(data2[i][0]) === String(userId)) {
+        sheet.getRange(i + 1, 2).setValue(userName);
+        sheet.getRange(i + 1, 3).setValue(subscriptionJson);
+        sheet.getRange(i + 1, 5).setValue(now);
+        return { success: true, message: 'Subscription updated' };
+      }
+    }
+    
+    // Add new subscription
+    sheet.appendRow([userId, userName, subscriptionJson, now, now]);
+    return { success: true, message: 'Subscription saved' };
+    
+  } catch (error) {
+    return { error: 'Failed to save subscription: ' + error.message };
+  }
+}
+
+/**
+ * Send push notification to a user or all users
+ * @param {Object} data - { userId (optional), title, body, url, tag }
+ * 
+ * IMPORTANT: This function requires web-push npm package and VAPID keys.
+ * Since Google Apps Script doesn't natively support web-push protocol,
+ * you'll need to use an external service (like Firebase Cloud Messaging,
+ * OneSignal, or your own Node.js server) to actually send the push.
+ * 
+ * This function stores the notification request, which you can read
+ * from an external service to send the actual push.
+ */
+function sendPushNotification(data) {
+  try {
+    const { userId, title, body, url, tag } = data;
+    
+    if (!title || !body) {
+      return { error: 'Missing title or body' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const subSheet = ss.getSheetByName('PushSubscriptions');
+    
+    if (!subSheet) {
+      return { error: 'No push subscriptions found' };
+    }
+    
+    // Get all subscriptions (or filter by userId)
+    const subData = subSheet.getDataRange().getValues();
+    const subscriptions = [];
+    
+    for (let i = 1; i < subData.length; i++) {
+      const rowUserId = String(subData[i][0]);
+      
+      // If userId is specified, only send to that user
+      if (userId && rowUserId !== String(userId)) {
+        continue;
+      }
+      
+      try {
+        const subscription = JSON.parse(subData[i][2]);
+        subscriptions.push({
+          userId: rowUserId,
+          userName: subData[i][1],
+          subscription: subscription
+        });
+      } catch (e) {
+        // Skip invalid subscriptions
+        continue;
+      }
+    }
+    
+    if (subscriptions.length === 0) {
+      return { error: 'No valid subscriptions found' };
+    }
+    
+    // Store notification request in a queue sheet
+    let queueSheet = ss.getSheetByName('PushQueue');
+    if (!queueSheet) {
+      queueSheet = ss.insertSheet('PushQueue');
+      queueSheet.appendRow(['QueueID', 'UserID', 'Title', 'Body', 'URL', 'Tag', 'Subscription', 'Status', 'CreatedAt', 'SentAt']);
+      queueSheet.setFrozenRows(1);
+    }
+    
+    const now = new Date().toISOString();
+    let queuedCount = 0;
+    
+    // Queue each notification
+    subscriptions.forEach(sub => {
+      const queueId = Utilities.getUuid();
+      queueSheet.appendRow([
+        queueId,
+        sub.userId,
+        title,
+        body,
+        url || '/',
+        tag || 'cumlaude-notification',
+        JSON.stringify(sub.subscription),
+        'pending',
+        now,
+        ''
+      ]);
+      queuedCount++;
+    });
+    
+    return { 
+      success: true, 
+      message: `Queued ${queuedCount} notification(s)`,
+      queued: queuedCount,
+      note: 'Use an external service to read PushQueue and send notifications'
+    };
+    
+  } catch (error) {
+    return { error: 'Failed to queue notification: ' + error.message };
+  }
+}
+
+/**
+ * SCHEDULED TRIGGER: Check for upcoming exams and send notifications
+ * Run this function on a time-based trigger (e.g., every hour)
+ * 
+ * Setup: Extensions > Apps Script > Triggers > Add Trigger
+ * - Choose function: checkUpcomingExamsAndNotify
+ * - Event source: Time-driven
+ * - Type: Hour timer
+ * - Hour interval: Every hour
+ */
+function checkUpcomingExamsAndNotify() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const examSheet = ss.getSheetByName('ExamSchedule');
+    
+    if (!examSheet) {
+      Logger.log('ExamSchedule sheet not found');
+      return;
+    }
+    
+    const now = new Date();
+    const oneHourFromNow = new Date(now.getTime() + (60 * 60 * 1000));
+    const twentyFourHoursFromNow = new Date(now.getTime() + (24 * 60 * 60 * 1000));
+    
+    const data = examSheet.getDataRange().getValues();
+    
+    for (let i = 1; i < data.length; i++) {
+      const examDate = new Date(data[i][4]); // Date column
+      const startTime = data[i][5]; // StartTime column
+      
+      // Combine date and time
+      const [hours, minutes] = String(startTime).split(':').map(Number);
+      examDate.setHours(hours || 0, minutes || 0, 0, 0);
+      
+      const courseCode = data[i][1];
+      const examType = data[i][3];
+      
+      // Check if exam is within the notification window
+      const timeDiff = examDate - now;
+      
+      // Send notification 24 hours before
+      if (timeDiff > 0 && timeDiff <= (24 * 60 * 60 * 1000)) {
+        const hoursUntil = Math.floor(timeDiff / (60 * 60 * 1000));
+        if (hoursUntil === 24 || hoursUntil === 12 || hoursUntil === 6 || hoursUntil === 3 || hoursUntil === 1) {
+          sendPushNotification({
+            title: `${courseCode} ${examType} Soon`,
+            body: `Your ${examType} is in ${hoursUntil} hour${hoursUntil !== 1 ? 's' : ''}!`,
+            url: '/',
+            tag: `exam-reminder-${data[i][0]}`
+          });
+          Logger.log(`Sent notification for ${courseCode} - ${hoursUntil} hours until exam`);
+        }
+      }
+      
+      // Send notification when exam starts
+      if (timeDiff > -300000 && timeDiff <= 0) { // Within 5 minutes of start
+        sendPushNotification({
+          title: `${courseCode} ${examType} Starting Now!`,
+          body: `Your ${examType} is starting now in ${data[i][7]}`,
+          url: '/',
+          tag: `exam-starting-${data[i][0]}`
+        });
+        Logger.log(`Sent start notification for ${courseCode}`);
+      }
+    }
+    
+    Logger.log('Exam notification check completed');
+    
+  } catch (error) {
+    Logger.log('Error checking exams: ' + error.message);
+  }
+}
+
+// ============================================================================
+// FIREBASE CLOUD MESSAGING - Push Notifications
+// ============================================================================
+
+/**
+ * Firebase Service Account Configuration
+ * Used to authenticate with Firebase Cloud Messaging API
+ */
+const FIREBASE_SERVICE_ACCOUNT = {
+  "type": "service_account",
+  "project_id": "cumlaude-push",
+  "private_key_id": "5d2f6728a8ba2d70354822dd5b3e2b02529567ea",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC5Ktg4hPJ0RfsI\nVlaWINlefZVVPFZlZv0OhKj7O7pe7rbn6I3dcbLMwFUwTzF4j96GBexUc3jpUwOX\nSbyyF6/KKQtt4AMqDUXppbe3V0AVIEoOhM6vKTawZd423jc318E9DEfNSSHeQZxq\n+I7BsSuVw0wN1JjAsX1mcRD0jfrI6yQaRYNuFcvbeSXw5kotzOauztDtm6lQ2J3L\nkzeGpcufBDII/UnrdG4Z9ehoIOLRMbR2ogjFQGusW6QPbszC1H7AwnckPnQ1X+1l\n2EiEdXUO9/8X1d6VWILZAK9Er4NN6XUy2Ljc5wgBRnejPjcfrf+L52D2Nv1+pf/y\nYsYUBQthAgMBAAECggEAG1uF6iXUV5L+UZ9F+DTewLvvvBHn1uAGO+akO8g5kyyU\nSAO/MAxMJT22aGaO8dfZwfXukpSj9N8fvPK3Rx3CSm1Rg7iQ5x3iajCiidtBe82T\nO31qNw1xB9NpJzSiNmUxZvZhRmaLczXA6ToTh3EIdj5ORo3WSsP+ecvzPBqdBqGc\nBp/R/M7W+RXV4pagVQ/AHSKhHlV+JFmlsS/A3q1VPPnBWN+CzStZPJvmRi/yNBe9\nTlYG/XNjSVeUvY3UpsAwSNF34JfQs53ravWtcAhzL6Z3dtGKqGmAsTfEsM6C7Zxb\nACtFYEZ5fDadY/dO9BvzF9c4OFeDnHNSZg9rr9iUhQKBgQD+89HbJySk+dA9jpLb\nGZmITGamnOdM1yL9WIwwSDO9SA9ofPebVTpV8vm/66TBl2fYJ5zj8/1x+Hazx8e4\nnUolK0t0wSwIv3/69n8TcEwFRjn6JqpOQSuxukqLancId5pXsyFD31A5iZp7MOpT\nfauGLSFvNI9cSqYI4vrJk7Vv1QKBgQC57Z595iQZPAT0gh5Eg545E2GwDNVRWv/z\nnetP9zG9RS7TOFxHDfAOF+ysuw9DsbrA5XKoZawaV4b/3KqR3hFEG9iyBlU3VOOk\nEtmTrzBFmuS1nJKTk0zMZRKcsFfG8cxA62oVLo7BcP//yfk7lxfPuzwLdA0Cqfpg\nlJb0cz4/XQKBgQCvLwo79CGR2rXkFluCgYylwxml0pp8ijdYrcdmRbaHkURFH9lj\nuqRi+pnx7hE/lLGeLVn4qGa2MWwfDF+H00xnTeCDUVjYif1+jHG1Aay60w5zfK35\nJ37GmKMwOO+huc0sBcINyRxu7MZhb7MTu35orAoVR6BaYlDEOnLon75EIQKBgGe5\n6xvt0uHJHDKUjPJIQ3MwHuWqoy96ByUQSwEXtUYUXKU14jU5z1ztd/p9eWyYsMmA\nuFC+OB+SCRyhLP+n1hYbOu9GnS/7Sex1H7FGoTWTzliLezKdkNDO6m1D7BRvPTZS\nn6IlkTrWIdvAAC2Ag6Y+nKb/HWsJDUfoXbcOvAF5AoGAGR0W7Svo4j6eI2KRCXgz\nTpGA/NUnHg4n2e2zfGgL5O1pc3/dA2ewbQMOUlfNm8MjN6nSXLqfBuTgX5koEAOG\nlI4zNpf4HdBqYaV2OeVljck3JeQjvGvWVS1z9ariTU6+Tllq12QebTGgmGXE7Rgn\nhRC4PSlxpD4tFCoHBea2BQ4=\n-----END PRIVATE KEY-----\n",
+  "client_email": "fcm-sender@cumlaude-push.iam.gserviceaccount.com",
+  "client_id": "111353484858450703358",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs"
+};
+
+/**
+ * Get Firebase OAuth access token using service account
+ */
+function getFirebaseAccessToken() {
+  try {
+    const header = {
+      alg: 'RS256',
+      typ: 'JWT'
+    };
+    
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iss: FIREBASE_SERVICE_ACCOUNT.client_email,
+      scope: 'https://www.googleapis.com/auth/cloud-platform',
+      aud: FIREBASE_SERVICE_ACCOUNT.token_uri,
+      exp: now + 3600,
+      iat: now
+    };
+    
+    const headerEncoded = Utilities.base64Encode(JSON.stringify(header)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    const payloadEncoded = Utilities.base64Encode(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    const signatureInput = headerEncoded + '.' + payloadEncoded;
+    
+    const signature = Utilities.computeRsaSha256Signature(signatureInput, FIREBASE_SERVICE_ACCOUNT.private_key);
+    const signatureEncoded = Utilities.base64Encode(signature).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    
+    const jwt = signatureInput + '.' + signatureEncoded;
+    
+    const options = {
+      method: 'post',
+      contentType: 'application/x-www-form-urlencoded',
+      payload: 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=' + jwt,
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(FIREBASE_SERVICE_ACCOUNT.token_uri, options);
+    const result = JSON.parse(response.getContentText());
+    
+    if (result.access_token) {
+      return result.access_token;
+    } else {
+      Logger.log('Token error: ' + response.getContentText());
+      return null;
+    }
+  } catch (error) {
+    Logger.log('Error getting token: ' + error.message);
+    return null;
+  }
+}
+
+/**
+ * Send notification via Firebase Cloud Messaging v1 API
+ */
+function sendFCMNotification(token, title, body, url) {
+  try {
+    const accessToken = getFirebaseAccessToken();
+    if (!accessToken) {
+      return { success: false, error: 'Failed to get access token' };
+    }
+    
+    const message = {
+      message: {
+        token: token,
+        notification: {
+          title: title,
+          body: body
+        },
+        data: {
+          url: url || '/'
+        }
+      }
+    };
+    
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'Authorization': 'Bearer ' + accessToken
+      },
+      payload: JSON.stringify(message),
+      muteHttpExceptions: true
+    };
+    
+    const endpoint = 'https://fcm.googleapis.com/v1/projects/' + FIREBASE_SERVICE_ACCOUNT.project_id + '/messages:send';
+    const response = UrlFetchApp.fetch(endpoint, options);
+    const responseCode = response.getResponseCode();
+    
+    if (responseCode === 200) {
+      return { success: true, response: response.getContentText() };
+    } else {
+      return { success: false, error: 'HTTP ' + responseCode + ': ' + response.getContentText() };
+    }
+  } catch (error) {
+    Logger.log('Error sending FCM notification: ' + error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Process push notification queue
+ * Runs every 5 minutes to send pending notifications
+ */
+function processPushQueue() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const queueSheet = ss.getSheetByName('PushQueue');
+    
+    if (!queueSheet) {
+      Logger.log('PushQueue sheet not found');
+      return;
+    }
+    
+    const data = queueSheet.getDataRange().getValues();
+    let sentCount = 0;
+    let failedCount = 0;
+    
+    // Skip header row (row 0)
+    for (let i = 1; i < data.length; i++) {
+      const status = data[i][7]; // Column H: Status
+      
+      if (status === 'pending') {
+        const userId = data[i][1];         // Column B: UserID
+        const title = data[i][2];          // Column C: Title
+        const body = data[i][3];           // Column D: Body
+        const url = data[i][4];            // Column E: URL
+        const subscriptionJson = data[i][6]; // Column G: Subscription JSON
+        
+        try {
+          const subscription = JSON.parse(subscriptionJson);
+          
+          if (subscription.token) {
+            const result = sendFCMNotification(subscription.token, title, body, url);
+            
+            if (result.success) {
+              queueSheet.getRange(i + 1, 9).setValue('sent');  // Column I: Status
+              queueSheet.getRange(i + 1, 10).setValue(new Date().toISOString()); // Column J: SentAt
+              sentCount++;
+            } else {
+              queueSheet.getRange(i + 1, 9).setValue('failed');
+              queueSheet.getRange(i + 1, 10).setValue(result.error);
+              failedCount++;
+            }
+          }
+        } catch (parseError) {
+          Logger.log('Error parsing subscription: ' + parseError.message);
+          queueSheet.getRange(i + 1, 9).setValue('failed');
+          queueSheet.getRange(i + 1, 10).setValue('Parse error: ' + parseError.message);
+          failedCount++;
+        }
+      }
+    }
+    
+    Logger.log('Push queue processed: ' + sentCount + ' sent, ' + failedCount + ' failed');
+    
+  } catch (error) {
+    Logger.log('Error processing queue: ' + error.message);
   }
 }
