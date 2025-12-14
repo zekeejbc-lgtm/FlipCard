@@ -5872,17 +5872,108 @@ const App = () => {
           </div>
         )}
 
-        <AddExamModal
-          isOpen={showAddExam}
-          onClose={() => { setShowAddExam(false); setPrefillExamDate(null); }}
-          subject={activeSubject || ''}
-          subjectName={subjectInfo[activeSubject || '']?.name || ''}
-          user={user}
-          onAddExam={addExamToBackend}
-          addToast={addToast}
-          updateToast={updateToast}
-          removeToast={removeToast}
-        />
+        {showAddExam && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-stone-800">Add Exam</h2>
+                  <button onClick={() => { setShowAddExam(false); setPrefillExamDate(null); }} className="p-2 hover:bg-stone-100 rounded-full">
+                    <Icon name="close" className="text-stone-500" />
+                  </button>
+                </div>
+                
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target as HTMLFormElement;
+                  const formData = new FormData(form);
+                  
+                  const success = await addExamToBackend({
+                    courseCode: formData.get('courseCode') as string,
+                    courseName: formData.get('courseName') as string || subjectInfo[formData.get('courseCode') as string]?.name || '',
+                    examType: formData.get('examType') as string,
+                    date: formData.get('date') as string,
+                    startTime: formData.get('startTime') as string,
+                    endTime: formData.get('endTime') as string,
+                    room: formData.get('room') as string,
+                    proctor: formData.get('proctor') as string,
+                    notes: formData.get('notes') as string
+                  });
+                  
+                  if (success) {
+                    setShowAddExam(false);
+                    setPrefillExamDate(null);
+                    form.reset();
+                  }
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Code *</label>
+                    <select name="courseCode" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
+                      <option value="">Select a course</option>
+                      {displaySubjects.map(s => (
+                        <option key={s} value={s}>{s} {subjectInfo[s]?.name ? `- ${subjectInfo[s].name}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Name</label>
+                    <input type="text" name="courseName" placeholder="e.g., Introduction to Language" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Type *</label>
+                    <select name="examType" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
+                      <option value="LE Deadline">LE Deadline</option>
+                      <option value="Quiz">Quiz</option>
+                      <option value="Midterm Exam">Midterm Exam</option>
+                      <option value="Final Exam">Final Exam</option>
+                      <option value="Reporting">Reporting</option>
+                      <option value="Performance">Performance</option>
+                      <option value="Presentation">Presentation</option>
+                      <option value="Submission">Submission</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Date *</label>
+                    <input type="date" name="date" required defaultValue={prefillExamDate || ''} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time *</label>
+                      <input type="time" name="startTime" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time *</label>
+                      <input type="time" name="endTime" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Room *</label>
+                    <input type="text" name="room" required placeholder="e.g., Room 101" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Proctor</label>
+                    <input type="text" name="proctor" placeholder="e.g., Prof. Santos" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Notes</label>
+                    <textarea name="notes" rows={2} placeholder="Additional notes..." className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500 resize-none" />
+                  </div>
+                  
+                  <button type="submit" className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 flex items-center justify-center gap-2">
+                    <Icon name="event" /> Add
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
