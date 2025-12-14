@@ -38,6 +38,24 @@ type User = {
   idNumber: string;
   name: string;
   record: Record<string, any>;
+  // Extended profile fields
+  username?: string;
+  profilePicture?: string;
+  birthday?: string;
+  email?: string;
+  schoolEmail?: string;
+  school?: string;
+  college?: string;
+  program?: string;
+  major?: string;
+  year?: number;
+  section?: string;
+  createdAt?: string;
+  lastLogin?: string;
+  isGuest?: boolean;
+  // Class/Organization fields
+  role?: 'student' | 'class-president' | 'class-vice-president' | 'class-secretary' | 'class-treasurer' | 'class-auditor' | 'class-pio' | 'class-sergeant-at-arms' | 'class-muse' | 'class-escort' | 'organization-officer';
+  position?: string; // Custom position title
 };
 
 type Toast = {
@@ -47,7 +65,7 @@ type Toast = {
   progress?: number;
 };
 
-type AppView = 'HOME' | 'SUBJECT' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY' | 'RESOURCE_VIEW' | 'ANALYTICS' | 'EXAMS' | 'ALL_RESOURCES' | 'CALENDAR';
+type AppView = 'HOME' | 'SUBJECT' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY' | 'RESOURCE_VIEW' | 'ANALYTICS' | 'EXAMS' | 'ALL_RESOURCES' | 'CALENDAR' | 'CLASS' | 'FINANCE' | 'ATTENDANCE' | 'SCHEDULE';
 
 type DeckProgress = {
   deckName: string;
@@ -1045,6 +1063,2225 @@ const AddExamModal = ({
 };
 
 // Login Modal Component
+// School data constants
+const SCHOOL_DATA = {
+  schools: ['University of Southeastern Philippines Tagum Unit'],
+  colleges: ['College of Teacher Education and Technology'],
+  programs: ['Bachelor of Secondary Education'],
+  majors: ['Mathematics', 'Filipino', 'English'],
+  years: [1, 2, 3, 4, 5, 6]
+};
+
+// Password strength checker
+const checkPasswordStrength = (password: string): { strength: 'weak' | 'fair' | 'good' | 'strong'; message: string; color: string } => {
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
+  if (/\d/.test(password)) score++;
+  if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score++;
+  
+  if (score <= 1) return { strength: 'weak', message: 'Weak - Add uppercase, numbers, symbols', color: 'bg-red-500' };
+  if (score === 2) return { strength: 'fair', message: 'Fair - Consider adding more variety', color: 'bg-orange-500' };
+  if (score === 3) return { strength: 'good', message: 'Good - Almost there!', color: 'bg-yellow-500' };
+  return { strength: 'strong', message: 'Strong - Excellent password!', color: 'bg-emerald-500' };
+};
+
+// Profile Picture Upload Component
+const ProfilePictureUpload = ({ 
+  value, 
+  onChange 
+}: { 
+  value: string; 
+  onChange: (url: string) => void;
+}) => {
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+    
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size must be less than 5MB');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        
+        // Upload to backend
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'uploadProfilePicture',
+            fileName: file.name,
+            mimeType: file.type,
+            data: base64.split(',')[1]
+          })
+        });
+        
+        const result = await response.json();
+        if (result.success && result.url) {
+          onChange(result.url);
+        } else {
+          // Fallback to base64 storage
+          onChange(base64);
+        }
+        setUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Upload error:', err);
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <div 
+        className="w-24 h-24 rounded-full bg-stone-100 border-2 border-dashed border-stone-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-stone-400 transition-all"
+        onClick={() => fileInputRef.current?.click()}
+      >
+        {uploading ? (
+          <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+        ) : value ? (
+          <img src={value} alt="Profile" className="w-full h-full object-cover" />
+        ) : (
+          <Icon name="add_a_photo" className="text-3xl text-stone-400" />
+        )}
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+      <p className="text-xs text-stone-500">Click to upload profile picture</p>
+    </div>
+  );
+};
+
+// Registration Form Component
+const RegistrationForm = ({
+  onRegister,
+  onBack,
+  addToast,
+  updateToast,
+  removeToast
+}: {
+  onRegister: (user: User) => void;
+  onBack: () => void;
+  addToast: (message: string, type: Toast['type'], progress?: number) => number;
+  updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
+  removeToast: (id: number) => void;
+}) => {
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  // Validation states
+  const [usernameStatus, setUsernameStatus] = useState<{ checking: boolean; available: boolean | null; error?: string }>({ checking: false, available: null });
+  const [idNumberStatus, setIdNumberStatus] = useState<{ checking: boolean; available: boolean | null; valid: boolean | null; error?: string }>({ checking: false, available: null, valid: null });
+  const [emailStatus, setEmailStatus] = useState<{ checking: boolean; available: boolean | null; valid: boolean | null; error?: string }>({ checking: false, available: null, valid: null });
+  const [schoolEmailStatus, setSchoolEmailStatus] = useState<{ checking: boolean; available: boolean | null; valid: boolean | null; error?: string }>({ checking: false, available: null, valid: null });
+  
+  // Form fields
+  const [formData, setFormData] = useState({
+    profilePicture: '',
+    name: '',
+    idNumber: '',
+    birthday: '',
+    email: '',
+    schoolEmail: '',
+    school: SCHOOL_DATA.schools[0],
+    college: SCHOOL_DATA.colleges[0],
+    program: SCHOOL_DATA.programs[0],
+    major: '',
+    year: 1,
+    section: '',
+    username: '',
+    password: '',
+    confirmPassword: ''
+  });
+
+  const passwordStrength = checkPasswordStrength(formData.password);
+
+  const validateIdFormat = (id: string) => /^\d{4}-\d{5}$/.test(id);
+  const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  // Check username availability with debounce
+  useEffect(() => {
+    if (formData.username.length < 4) {
+      setUsernameStatus({ checking: false, available: null });
+      return;
+    }
+    
+    setUsernameStatus(prev => ({ ...prev, checking: true }));
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'checkUsername', username: formData.username })
+        });
+        const result = await response.json();
+        setUsernameStatus({ checking: false, available: result.available === true, error: result.error });
+      } catch (err) {
+        setUsernameStatus({ checking: false, available: null, error: 'Could not verify' });
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [formData.username]);
+
+  // Check ID number availability with debounce
+  useEffect(() => {
+    if (!formData.idNumber) {
+      setIdNumberStatus({ checking: false, available: null, valid: null });
+      return;
+    }
+    
+    if (!validateIdFormat(formData.idNumber)) {
+      setIdNumberStatus({ checking: false, available: null, valid: false, error: 'Invalid format. Use: YYYY-NNNNN' });
+      return;
+    }
+    
+    setIdNumberStatus(prev => ({ ...prev, checking: true, valid: true }));
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'checkIdNumber', idNumber: formData.idNumber })
+        });
+        const result = await response.json();
+        setIdNumberStatus({ checking: false, available: result.available === true, valid: result.valid !== false, error: result.error });
+      } catch (err) {
+        setIdNumberStatus({ checking: false, available: null, valid: true, error: 'Could not verify' });
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [formData.idNumber]);
+
+  // Check email availability with debounce
+  useEffect(() => {
+    if (!formData.email) {
+      setEmailStatus({ checking: false, available: null, valid: null });
+      return;
+    }
+    
+    if (!validateEmail(formData.email)) {
+      setEmailStatus({ checking: false, available: null, valid: false, error: 'Invalid email format' });
+      return;
+    }
+    
+    setEmailStatus(prev => ({ ...prev, checking: true, valid: true }));
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'checkEmail', email: formData.email, type: 'personal' })
+        });
+        const result = await response.json();
+        setEmailStatus({ checking: false, available: result.available === true, valid: result.valid !== false, error: result.error });
+      } catch (err) {
+        setEmailStatus({ checking: false, available: null, valid: true, error: 'Could not verify' });
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [formData.email]);
+
+  // Check school email availability with debounce
+  useEffect(() => {
+    if (!formData.schoolEmail) {
+      setSchoolEmailStatus({ checking: false, available: null, valid: null });
+      return;
+    }
+    
+    if (!validateEmail(formData.schoolEmail)) {
+      setSchoolEmailStatus({ checking: false, available: null, valid: false, error: 'Invalid email format' });
+      return;
+    }
+    
+    // Check if school email is same as personal email
+    if (formData.schoolEmail.toLowerCase() === formData.email.toLowerCase()) {
+      setSchoolEmailStatus({ checking: false, available: false, valid: true, error: 'Must be different from personal email' });
+      return;
+    }
+    
+    setSchoolEmailStatus(prev => ({ ...prev, checking: true, valid: true }));
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'checkEmail', email: formData.schoolEmail, type: 'school' })
+        });
+        const result = await response.json();
+        setSchoolEmailStatus({ checking: false, available: result.available === true, valid: result.valid !== false, error: result.error });
+      } catch (err) {
+        setSchoolEmailStatus({ checking: false, available: null, valid: true, error: 'Could not verify' });
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [formData.schoolEmail, formData.email]);
+
+  const updateField = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setError('');
+  };
+
+  const validateStep = (stepNum: number): boolean => {
+    switch (stepNum) {
+      case 1:
+        if (!formData.profilePicture) {
+          setError('Please upload a profile picture');
+          return false;
+        }
+        if (!formData.name.trim()) {
+          setError('Please enter your full name');
+          return false;
+        }
+        if (!formData.idNumber) {
+          setError('Please enter your ID number');
+          return false;
+        }
+        if (!validateIdFormat(formData.idNumber)) {
+          setError('Invalid ID format. Use: YYYY-NNNNN (e.g., 2025-00000)');
+          return false;
+        }
+        if (idNumberStatus.checking) {
+          setError('Please wait while we verify your ID number');
+          return false;
+        }
+        if (idNumberStatus.available === false) {
+          setError('This ID number is already registered');
+          return false;
+        }
+        if (!formData.birthday) {
+          setError('Please enter your birthday');
+          return false;
+        }
+        return true;
+      case 2:
+        if (!formData.email) {
+          setError('Please enter your personal email');
+          return false;
+        }
+        if (!validateEmail(formData.email)) {
+          setError('Please enter a valid email');
+          return false;
+        }
+        if (emailStatus.checking) {
+          setError('Please wait while we verify your email');
+          return false;
+        }
+        if (emailStatus.available === false) {
+          setError(emailStatus.error || 'This email is already registered');
+          return false;
+        }
+        if (formData.schoolEmail) {
+          if (!validateEmail(formData.schoolEmail)) {
+            setError('Please enter a valid school email');
+            return false;
+          }
+          if (schoolEmailStatus.checking) {
+            setError('Please wait while we verify your school email');
+            return false;
+          }
+          if (schoolEmailStatus.available === false) {
+            setError(schoolEmailStatus.error || 'This school email is already registered');
+            return false;
+          }
+        }
+        return true;
+      case 3:
+        if (!formData.major) {
+          setError('Please select your major');
+          return false;
+        }
+        if (!formData.section.trim()) {
+          setError('Please enter your section');
+          return false;
+        }
+        return true;
+      case 4:
+        if (!formData.username || formData.username.length < 4) {
+          setError('Username must be at least 4 characters');
+          return false;
+        }
+        if (usernameStatus.checking) {
+          setError('Please wait while we verify username availability');
+          return false;
+        }
+        if (usernameStatus.available !== true) {
+          setError(usernameStatus.error || 'Username is not available');
+          return false;
+        }
+        if (!formData.password || formData.password.length < 8) {
+          setError('Password must be at least 8 characters');
+          return false;
+        }
+        if (passwordStrength.strength === 'weak') {
+          setError('Password is too weak. Add uppercase, numbers, or symbols.');
+          return false;
+        }
+        if (!formData.confirmPassword) {
+          setError('Please confirm your password');
+          return false;
+        }
+        if (formData.password !== formData.confirmPassword) {
+          setError('Passwords do not match');
+          return false;
+        }
+        return true;
+      default:
+        return true;
+    }
+  };
+
+  const handleNext = () => {
+    if (validateStep(step)) {
+      setError('');
+      setStep(prev => prev + 1);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!validateStep(4)) return;
+
+    setLoading(true);
+    const toastId = addToast('Creating your account...', 'loading');
+
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'registerUser',
+          ...formData
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        const user: User = result.user;
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+        updateToast(toastId, 'Account created successfully! Welcome to CumLaude!', 'success');
+        setTimeout(() => removeToast(toastId), 3000);
+        onRegister(user);
+      } else {
+        setError(result.error || 'Registration failed. Please try again.');
+        updateToast(toastId, result.error || 'Registration failed', 'error');
+        setTimeout(() => removeToast(toastId), 3000);
+      }
+    } catch (err) {
+      setError('Network error. Please check your connection.');
+      updateToast(toastId, 'Network error', 'error');
+      setTimeout(() => removeToast(toastId), 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderStep = () => {
+    switch (step) {
+      case 1:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-stone-700 mb-4">Personal Information</h3>
+            
+            <div className="flex flex-col items-center">
+              <ProfilePictureUpload 
+                value={formData.profilePicture} 
+                onChange={(url) => updateField('profilePicture', url)} 
+              />
+              {!formData.profilePicture && (
+                <p className="text-xs text-amber-600 mt-1">* Profile picture is required</p>
+              )}
+              {formData.profilePicture && (
+                <p className="text-xs text-emerald-600 mt-1">✓ Profile picture uploaded</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-600 mb-1">Full Name *</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => updateField('name', e.target.value)}
+                  placeholder="Juan Dela Cruz"
+                  className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                    formData.name.trim() ? 'border-emerald-500' : 'border-stone-200'
+                  }`}
+                />
+                {formData.name.trim() && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <Icon name="check_circle" className="text-emerald-500" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-600 mb-1">ID Number *</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formData.idNumber}
+                  onChange={(e) => updateField('idNumber', e.target.value)}
+                  placeholder="2025-00000"
+                  className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                    idNumberStatus.available === true && idNumberStatus.valid === true ? 'border-emerald-500' : 
+                    idNumberStatus.available === false || idNumberStatus.valid === false ? 'border-red-500' : 
+                    'border-stone-200'
+                  }`}
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {idNumberStatus.checking ? (
+                    <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+                  ) : idNumberStatus.available === true && idNumberStatus.valid === true ? (
+                    <Icon name="check_circle" className="text-emerald-500" />
+                  ) : (idNumberStatus.available === false || idNumberStatus.valid === false) ? (
+                    <Icon name="cancel" className="text-red-500" />
+                  ) : null}
+                </div>
+              </div>
+              <p className={`text-xs mt-1 ${
+                idNumberStatus.available === true && idNumberStatus.valid === true ? 'text-emerald-500' :
+                idNumberStatus.available === false || idNumberStatus.valid === false ? 'text-red-500' :
+                'text-stone-400'
+              }`}>
+                {idNumberStatus.checking ? 'Verifying...' :
+                 idNumberStatus.available === true && idNumberStatus.valid === true ? '✓ ID number is available' :
+                 idNumberStatus.error ? `✗ ${idNumberStatus.error}` :
+                 'Format: YYYY-NNNNN (e.g., 2025-12345)'}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-600 mb-1">Birthday *</label>
+              <div className="relative">
+                <input
+                  type="date"
+                  value={formData.birthday}
+                  onChange={(e) => updateField('birthday', e.target.value)}
+                  className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                    formData.birthday ? 'border-emerald-500' : 'border-stone-200'
+                  }`}
+                />
+                {formData.birthday && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <Icon name="check_circle" className="text-emerald-500" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 2:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-stone-700 mb-4">Contact Information</h3>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-600 mb-1">Personal Email *</label>
+              <div className="relative">
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => updateField('email', e.target.value)}
+                  placeholder="juan@email.com"
+                  className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                    emailStatus.available === true && emailStatus.valid === true ? 'border-emerald-500' : 
+                    emailStatus.available === false || emailStatus.valid === false ? 'border-red-500' : 
+                    'border-stone-200'
+                  }`}
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {emailStatus.checking ? (
+                    <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+                  ) : emailStatus.available === true && emailStatus.valid === true ? (
+                    <Icon name="check_circle" className="text-emerald-500" />
+                  ) : (emailStatus.available === false || emailStatus.valid === false) ? (
+                    <Icon name="cancel" className="text-red-500" />
+                  ) : null}
+                </div>
+              </div>
+              <p className={`text-xs mt-1 ${
+                emailStatus.available === true && emailStatus.valid === true ? 'text-emerald-500' :
+                emailStatus.available === false || emailStatus.valid === false ? 'text-red-500' :
+                'text-stone-400'
+              }`}>
+                {emailStatus.checking ? 'Verifying...' :
+                 emailStatus.available === true && emailStatus.valid === true ? '✓ Email is available' :
+                 emailStatus.error ? `✗ ${emailStatus.error}` :
+                 'Enter your personal email address'}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-600 mb-1">School Email (Optional)</label>
+              <div className="relative">
+                <input
+                  type="email"
+                  value={formData.schoolEmail}
+                  onChange={(e) => updateField('schoolEmail', e.target.value)}
+                  placeholder="juan@usep.edu.ph"
+                  className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                    formData.schoolEmail && schoolEmailStatus.available === true && schoolEmailStatus.valid === true ? 'border-emerald-500' : 
+                    formData.schoolEmail && (schoolEmailStatus.available === false || schoolEmailStatus.valid === false) ? 'border-red-500' : 
+                    'border-stone-200'
+                  }`}
+                />
+                {formData.schoolEmail && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {schoolEmailStatus.checking ? (
+                      <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+                    ) : schoolEmailStatus.available === true && schoolEmailStatus.valid === true ? (
+                      <Icon name="check_circle" className="text-emerald-500" />
+                    ) : (schoolEmailStatus.available === false || schoolEmailStatus.valid === false) ? (
+                      <Icon name="cancel" className="text-red-500" />
+                    ) : null}
+                  </div>
+                )}
+              </div>
+              {formData.schoolEmail && (
+                <p className={`text-xs mt-1 ${
+                  schoolEmailStatus.available === true && schoolEmailStatus.valid === true ? 'text-emerald-500' :
+                  schoolEmailStatus.available === false || schoolEmailStatus.valid === false ? 'text-red-500' :
+                  'text-stone-400'
+                }`}>
+                  {schoolEmailStatus.checking ? 'Verifying...' :
+                   schoolEmailStatus.available === true && schoolEmailStatus.valid === true ? '✓ School email is available' :
+                   schoolEmailStatus.error ? `✗ ${schoolEmailStatus.error}` :
+                   'Enter your school email address'}
+                </p>
+              )}
+            </div>
+          </div>
+        );
+
+      case 3:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-stone-700 mb-4">Academic Information</h3>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-600 mb-1">School</label>
+              <select
+                value={formData.school}
+                onChange={(e) => updateField('school', e.target.value)}
+                className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white"
+              >
+                {SCHOOL_DATA.schools.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-600 mb-1">College</label>
+              <select
+                value={formData.college}
+                onChange={(e) => updateField('college', e.target.value)}
+                className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white"
+              >
+                {SCHOOL_DATA.colleges.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-600 mb-1">Program</label>
+              <select
+                value={formData.program}
+                onChange={(e) => updateField('program', e.target.value)}
+                className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white"
+              >
+                {SCHOOL_DATA.programs.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-600 mb-1">Major *</label>
+              <select
+                value={formData.major}
+                onChange={(e) => updateField('major', e.target.value)}
+                className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white"
+              >
+                <option value="">Select your major</option>
+                {SCHOOL_DATA.majors.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">Year Level *</label>
+                <select
+                  value={formData.year}
+                  onChange={(e) => updateField('year', parseInt(e.target.value))}
+                  className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white"
+                >
+                  {SCHOOL_DATA.years.map(y => <option key={y} value={y}>Year {y}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">Section *</label>
+                <input
+                  type="text"
+                  value={formData.section}
+                  onChange={(e) => updateField('section', e.target.value.toUpperCase())}
+                  placeholder="A"
+                  maxLength={5}
+                  className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+                />
+              </div>
+            </div>
+          </div>
+        );
+
+      case 4:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-stone-700 mb-4">Account Credentials</h3>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-600 mb-1">Username *</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formData.username}
+                  onChange={(e) => updateField('username', e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                  placeholder="juandelacruz"
+                  className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none pr-10 ${
+                    usernameStatus.available === true ? 'border-emerald-500' : 
+                    usernameStatus.available === false ? 'border-red-500' : 'border-stone-200'
+                  }`}
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {usernameStatus.checking ? (
+                    <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+                  ) : usernameStatus.available === true ? (
+                    <Icon name="check_circle" className="text-emerald-500" />
+                  ) : usernameStatus.available === false ? (
+                    <Icon name="cancel" className="text-red-500" />
+                  ) : null}
+                </div>
+              </div>
+              <p className={`text-xs mt-1 ${
+                usernameStatus.available === true ? 'text-emerald-500' :
+                usernameStatus.available === false ? 'text-red-500' :
+                'text-stone-400'
+              }`}>
+                {usernameStatus.checking ? 'Checking availability...' :
+                 usernameStatus.available === true ? '✓ Username is available' : 
+                 usernameStatus.available === false ? '✗ Username is already taken' : 
+                 'Only lowercase letters, numbers, and underscores (min 4 chars)'}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-600 mb-1">Password *</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={formData.password}
+                  onChange={(e) => updateField('password', e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full p-3 pr-10 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                >
+                  <Icon name={showPassword ? 'visibility_off' : 'visibility'} />
+                </button>
+              </div>
+              {formData.password && (
+                <div className="mt-2">
+                  <div className="flex gap-1 mb-1">
+                    {[1, 2, 3, 4].map(i => (
+                      <div 
+                        key={i} 
+                        className={`h-1.5 flex-1 rounded-full ${
+                          i <= (passwordStrength.strength === 'weak' ? 1 : 
+                                passwordStrength.strength === 'fair' ? 2 : 
+                                passwordStrength.strength === 'good' ? 3 : 4) 
+                            ? passwordStrength.color : 'bg-stone-200'
+                        }`} 
+                      />
+                    ))}
+                  </div>
+                  <p className={`text-xs ${
+                    passwordStrength.strength === 'weak' ? 'text-red-500' :
+                    passwordStrength.strength === 'fair' ? 'text-orange-500' :
+                    passwordStrength.strength === 'good' ? 'text-yellow-600' :
+                    'text-emerald-500'
+                  }`}>{passwordStrength.message}</p>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-600 mb-1">Confirm Password *</label>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={formData.confirmPassword}
+                  onChange={(e) => updateField('confirmPassword', e.target.value)}
+                  placeholder="••••••••"
+                  className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                    formData.confirmPassword && formData.password !== formData.confirmPassword 
+                      ? 'border-red-500' 
+                      : formData.confirmPassword && formData.password === formData.confirmPassword 
+                      ? 'border-emerald-500' 
+                      : 'border-stone-200'
+                  }`}
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                >
+                  <Icon name={showConfirmPassword ? 'visibility_off' : 'visibility'} />
+                </button>
+              </div>
+              {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+              )}
+              {formData.confirmPassword && formData.password === formData.confirmPassword && (
+                <p className="text-xs text-emerald-500 mt-1">✓ Passwords match</p>
+              )}
+            </div>
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Progress indicator */}
+      <div className="flex items-center justify-center gap-2 mb-6">
+        {[1, 2, 3, 4].map(s => (
+          <div key={s} className="flex items-center">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
+              s < step ? 'bg-emerald-500 text-white' : 
+              s === step ? 'bg-stone-800 text-white' : 
+              'bg-stone-200 text-stone-500'
+            }`}>
+              {s < step ? <Icon name="check" className="text-base" /> : s}
+            </div>
+            {s < 4 && <div className={`w-8 h-0.5 ${s < step ? 'bg-emerald-500' : 'bg-stone-200'}`} />}
+          </div>
+        ))}
+      </div>
+
+      {renderStep()}
+
+      {error && (
+        <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg flex items-center gap-2">
+          <Icon name="error" className="text-lg" />
+          {error}
+        </div>
+      )}
+
+      <div className="flex gap-3 pt-2">
+        <button
+          onClick={step === 1 ? onBack : () => setStep(prev => prev - 1)}
+          className="flex-1 py-3 border border-stone-300 text-stone-700 rounded-xl font-semibold hover:bg-stone-50 transition-all"
+        >
+          {step === 1 ? 'Back to Login' : 'Previous'}
+        </button>
+        {step < 4 ? (
+          <button
+            onClick={handleNext}
+            className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-all"
+          >
+            Next
+          </button>
+        ) : (
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-all"
+          >
+            {loading ? 'Creating Account...' : 'Create Account'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Profile Page Component
+const ProfilePage = ({
+  user,
+  onClose,
+  onLogout,
+  onUpdate
+}: {
+  user: User;
+  onClose: () => void;
+  onLogout: () => void;
+  onUpdate: (user: User) => void;
+}) => {
+  const [editing, setEditing] = useState(false);
+  const [editData, setEditData] = useState({ ...user, newUsername: '', newPassword: '', confirmPassword: '' });
+  const [loading, setLoading] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [usernameStatus, setUsernameStatus] = useState<{ checking: boolean; available: boolean | null; error?: string }>({ checking: false, available: null });
+  const [emailStatus, setEmailStatus] = useState<{ checking: boolean; available: boolean | null; error?: string }>({ checking: false, available: null });
+  const [schoolEmailStatus, setSchoolEmailStatus] = useState<{ checking: boolean; available: boolean | null; error?: string }>({ checking: false, available: null });
+
+  // Validate email format
+  const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  // Check username availability
+  useEffect(() => {
+    if (!editData.newUsername || editData.newUsername.length < 4 || editData.newUsername === user.username) {
+      setUsernameStatus({ checking: false, available: null });
+      return;
+    }
+    
+    setUsernameStatus(prev => ({ ...prev, checking: true }));
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'checkUsername', username: editData.newUsername })
+        });
+        const result = await response.json();
+        setUsernameStatus({ checking: false, available: result.available === true, error: result.error });
+      } catch {
+        setUsernameStatus({ checking: false, available: null, error: 'Could not verify' });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [editData.newUsername, user.username]);
+
+  // Check email availability
+  useEffect(() => {
+    if (!editData.email || !validateEmail(editData.email) || editData.email === user.email) {
+      setEmailStatus({ checking: false, available: null });
+      return;
+    }
+    
+    setEmailStatus(prev => ({ ...prev, checking: true }));
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'checkEmail', email: editData.email, type: 'personal' })
+        });
+        const result = await response.json();
+        setEmailStatus({ checking: false, available: result.available === true, error: result.error });
+      } catch {
+        setEmailStatus({ checking: false, available: null, error: 'Could not verify' });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [editData.email, user.email]);
+
+  // Check school email availability
+  useEffect(() => {
+    if (!editData.schoolEmail || !validateEmail(editData.schoolEmail) || editData.schoolEmail === user.schoolEmail) {
+      setSchoolEmailStatus({ checking: false, available: null });
+      return;
+    }
+    
+    setSchoolEmailStatus(prev => ({ ...prev, checking: true }));
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'checkEmail', email: editData.schoolEmail, type: 'school' })
+        });
+        const result = await response.json();
+        setSchoolEmailStatus({ checking: false, available: result.available === true, error: result.error });
+      } catch {
+        setSchoolEmailStatus({ checking: false, available: null, error: 'Could not verify' });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [editData.schoolEmail, user.schoolEmail]);
+
+  const handleSave = async () => {
+    setEditError('');
+    
+    // Validations
+    if (!editData.name?.trim()) {
+      setEditError('Name is required');
+      return;
+    }
+    
+    if (editData.email && !validateEmail(editData.email)) {
+      setEditError('Invalid email format');
+      return;
+    }
+    
+    if (editData.email && editData.email !== user.email && emailStatus.available === false) {
+      setEditError('Email is already taken');
+      return;
+    }
+    
+    if (editData.schoolEmail && !validateEmail(editData.schoolEmail)) {
+      setEditError('Invalid school email format');
+      return;
+    }
+    
+    if (editData.schoolEmail && editData.schoolEmail !== user.schoolEmail && schoolEmailStatus.available === false) {
+      setEditError('School email is already taken');
+      return;
+    }
+    
+    if (editData.newUsername && editData.newUsername.length < 4) {
+      setEditError('Username must be at least 4 characters');
+      return;
+    }
+    
+    if (editData.newUsername && editData.newUsername !== user.username && usernameStatus.available === false) {
+      setEditError('Username is already taken');
+      return;
+    }
+    
+    if (editData.newPassword) {
+      if (editData.newPassword.length < 8) {
+        setEditError('Password must be at least 8 characters');
+        return;
+      }
+      if (editData.newPassword !== editData.confirmPassword) {
+        setEditError('Passwords do not match');
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      const updatePayload: any = {
+        action: 'updateProfile',
+        idNumber: user.idNumber,
+        name: editData.name,
+        profilePicture: editData.profilePicture,
+        birthday: editData.birthday,
+        email: editData.email,
+        schoolEmail: editData.schoolEmail,
+      };
+      
+      if (editData.newUsername && editData.newUsername !== user.username) {
+        updatePayload.newUsername = editData.newUsername;
+      }
+      
+      if (editData.newPassword) {
+        updatePayload.newPassword = editData.newPassword;
+      }
+
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify(updatePayload)
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        const updatedUser = { 
+          ...user, 
+          name: editData.name,
+          profilePicture: editData.profilePicture,
+          birthday: editData.birthday,
+          email: editData.email,
+          schoolEmail: editData.schoolEmail,
+          username: editData.newUsername && editData.newUsername !== user.username ? editData.newUsername : user.username
+        };
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
+        onUpdate(updatedUser);
+        setEditing(false);
+        setEditData({ ...updatedUser, newUsername: '', newPassword: '', confirmPassword: '' });
+      } else {
+        setEditError(result.error || 'Failed to update profile');
+      }
+    } catch (err) {
+      console.error('Update failed:', err);
+      setEditError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Group fields by editability
+  const editableFields = [
+    { label: 'Profile Picture', key: 'profilePicture', type: 'image' },
+    { label: 'Full Name', key: 'name', icon: 'person', type: 'text' },
+    { label: 'Birthday', key: 'birthday', icon: 'cake', type: 'date' },
+    { label: 'Personal Email', key: 'email', icon: 'mail', type: 'email' },
+    { label: 'School Email', key: 'schoolEmail', icon: 'school', type: 'email' },
+  ];
+  
+  const credentialFields = [
+    { label: 'New Username', key: 'newUsername', icon: 'alternate_email', type: 'text', placeholder: user.username || '' },
+    { label: 'New Password', key: 'newPassword', icon: 'lock', type: 'password' },
+    { label: 'Confirm New Password', key: 'confirmPassword', icon: 'lock_reset', type: 'password' },
+  ];
+  
+  const readOnlyFields = [
+    { label: 'ID Number', value: user.idNumber, icon: 'badge' },
+    { label: 'Username', value: user.username ? `@${user.username}` : '-', icon: 'alternate_email' },
+  ];
+  
+  const adminOnlyFields = [
+    { label: 'School', value: user.school || '-', icon: 'location_city' },
+    { label: 'College', value: user.college || '-', icon: 'domain' },
+    { label: 'Program', value: user.program || '-', icon: 'menu_book' },
+    { label: 'Major', value: user.major || '-', icon: 'psychology' },
+    { label: 'Year Level', value: user.year ? `Year ${user.year}` : '-', icon: 'calendar_month' },
+    { label: 'Section', value: user.section || '-', icon: 'groups' },
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl my-4 max-h-[90vh] overflow-y-auto modal-content">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-stone-100 p-4 flex items-center justify-between z-10">
+          <h2 className="text-xl font-bold text-stone-800">{editing ? 'Edit Profile' : 'Profile'}</h2>
+          <div className="flex items-center gap-2">
+            {!user.isGuest && !editing && (
+              <button 
+                onClick={() => setEditing(true)} 
+                className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                title="Edit Profile"
+              >
+                <Icon name="edit" className="text-stone-600" />
+              </button>
+            )}
+            <button onClick={onClose} className="text-stone-400 hover:text-stone-600">
+              <Icon name="close" />
+            </button>
+          </div>
+        </div>
+
+        {editing ? (
+          <div className="p-4 space-y-6">
+            {/* Profile Picture */}
+            <div className="flex justify-center">
+              <ProfilePictureUpload 
+                value={editData.profilePicture || ''} 
+                onChange={(url) => setEditData(prev => ({ ...prev, profilePicture: url }))} 
+              />
+            </div>
+
+            {/* Basic Info Section */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-stone-500 uppercase tracking-wider">Basic Information</h3>
+              
+              {/* Name */}
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">Full Name *</label>
+                <input
+                  type="text"
+                  value={editData.name || ''}
+                  onChange={(e) => setEditData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+                />
+              </div>
+
+              {/* Birthday */}
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">Birthday</label>
+                <input
+                  type="date"
+                  value={editData.birthday || ''}
+                  onChange={(e) => setEditData(prev => ({ ...prev, birthday: e.target.value }))}
+                  className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+                />
+              </div>
+
+              {/* Personal Email */}
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">Personal Email</label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    value={editData.email || ''}
+                    onChange={(e) => setEditData(prev => ({ ...prev, email: e.target.value }))}
+                    className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                      editData.email !== user.email && emailStatus.available === true ? 'border-emerald-500' :
+                      editData.email !== user.email && emailStatus.available === false ? 'border-red-500' :
+                      'border-stone-200'
+                    }`}
+                  />
+                  {editData.email !== user.email && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {emailStatus.checking ? (
+                        <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+                      ) : emailStatus.available === true ? (
+                        <Icon name="check_circle" className="text-emerald-500" />
+                      ) : emailStatus.available === false ? (
+                        <Icon name="cancel" className="text-red-500" />
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* School Email */}
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">School Email</label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    value={editData.schoolEmail || ''}
+                    onChange={(e) => setEditData(prev => ({ ...prev, schoolEmail: e.target.value }))}
+                    className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                      editData.schoolEmail !== user.schoolEmail && schoolEmailStatus.available === true ? 'border-emerald-500' :
+                      editData.schoolEmail !== user.schoolEmail && schoolEmailStatus.available === false ? 'border-red-500' :
+                      'border-stone-200'
+                    }`}
+                  />
+                  {editData.schoolEmail !== user.schoolEmail && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {schoolEmailStatus.checking ? (
+                        <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+                      ) : schoolEmailStatus.available === true ? (
+                        <Icon name="check_circle" className="text-emerald-500" />
+                      ) : schoolEmailStatus.available === false ? (
+                        <Icon name="cancel" className="text-red-500" />
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Credentials Section */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-stone-500 uppercase tracking-wider">Change Credentials (Optional)</h3>
+              
+              {/* New Username */}
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">New Username</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={editData.newUsername || ''}
+                    onChange={(e) => setEditData(prev => ({ ...prev, newUsername: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))}
+                    placeholder={user.username || 'Leave blank to keep current'}
+                    className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                      editData.newUsername && editData.newUsername !== user.username && usernameStatus.available === true ? 'border-emerald-500' :
+                      editData.newUsername && editData.newUsername !== user.username && usernameStatus.available === false ? 'border-red-500' :
+                      'border-stone-200'
+                    }`}
+                  />
+                  {editData.newUsername && editData.newUsername !== user.username && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {usernameStatus.checking ? (
+                        <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+                      ) : usernameStatus.available === true ? (
+                        <Icon name="check_circle" className="text-emerald-500" />
+                      ) : usernameStatus.available === false ? (
+                        <Icon name="cancel" className="text-red-500" />
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-stone-400 mt-1">Current: @{user.username || 'none'}</p>
+              </div>
+
+              {/* New Password */}
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">New Password</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={editData.newPassword || ''}
+                    onChange={(e) => setEditData(prev => ({ ...prev, newPassword: e.target.value }))}
+                    placeholder="Leave blank to keep current"
+                    className="w-full p-3 pr-10 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                  >
+                    <Icon name={showPassword ? 'visibility_off' : 'visibility'} />
+                  </button>
+                </div>
+                <p className="text-xs text-stone-400 mt-1">Minimum 8 characters</p>
+              </div>
+
+              {/* Confirm Password */}
+              {editData.newPassword && (
+                <div>
+                  <label className="block text-sm font-medium text-stone-600 mb-1">Confirm New Password</label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={editData.confirmPassword || ''}
+                      onChange={(e) => setEditData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                      placeholder="Re-enter new password"
+                      className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                        editData.confirmPassword && editData.newPassword === editData.confirmPassword ? 'border-emerald-500' :
+                        editData.confirmPassword && editData.newPassword !== editData.confirmPassword ? 'border-red-500' :
+                        'border-stone-200'
+                      }`}
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                    >
+                      <Icon name={showConfirmPassword ? 'visibility_off' : 'visibility'} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Admin-only Fields Notice */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <Icon name="info" className="text-amber-600 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-amber-800">Academic Information</p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    To change your School, College, Program, Major, Year Level, or Section, please contact your class admin or system administrator.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            {editError && (
+              <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg flex items-center gap-2">
+                <Icon name="error" className="text-lg" />
+                {editError}
+              </div>
+            )}
+            
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => { setEditing(false); setEditData({ ...user, newUsername: '', newPassword: '', confirmPassword: '' }); setEditError(''); }}
+                className="flex-1 py-3 border border-stone-300 text-stone-700 rounded-xl font-semibold hover:bg-stone-50 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={loading || usernameStatus.checking || emailStatus.checking || schoolEmailStatus.checking}
+                className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Icon name="save" />
+                    Save Changes
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Profile Header */}
+            <div className="p-6 bg-gradient-to-b from-stone-100 to-white">
+              <div className="flex flex-col items-center">
+                <div className="w-24 h-24 rounded-full bg-stone-200 overflow-hidden border-4 border-white shadow-lg mb-3">
+                  {user.profilePicture ? (
+                    <img src={user.profilePicture} alt={user.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-stone-300">
+                      <Icon name="person" className="text-4xl text-stone-500" />
+                    </div>
+                  )}
+                </div>
+                <h3 className="text-xl font-bold text-stone-800">{user.name}</h3>
+                {user.username && (
+                  <p className="text-stone-500">@{user.username}</p>
+                )}
+                {user.role && user.role !== 'student' && (
+                  <span className="mt-2 px-3 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-full capitalize">
+                    {user.role.replace('class-', '').replace(/-/g, ' ')}
+                  </span>
+                )}
+                {user.isGuest && (
+                  <span className="mt-2 px-3 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                    Guest Account
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Info Section */}
+            <div className="p-4 space-y-1">
+              {/* Read-only fields */}
+              {readOnlyFields.map((row, idx) => (
+                <div key={idx} className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all">
+                  <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center">
+                    <Icon name={row.icon} className="text-stone-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-stone-500">{row.label}</p>
+                    <p className="text-sm font-medium text-stone-800 truncate">{row.value}</p>
+                  </div>
+                </div>
+              ))}
+              
+              {/* Contact Info */}
+              <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all">
+                <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center">
+                  <Icon name="mail" className="text-stone-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-stone-500">Email</p>
+                  <p className="text-sm font-medium text-stone-800 truncate">{user.email || '-'}</p>
+                </div>
+                {!user.isGuest && <Icon name="edit" className="text-stone-300 text-sm" />}
+              </div>
+              
+              <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all">
+                <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center">
+                  <Icon name="school" className="text-stone-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-stone-500">School Email</p>
+                  <p className="text-sm font-medium text-stone-800 truncate">{user.schoolEmail || '-'}</p>
+                </div>
+                {!user.isGuest && <Icon name="edit" className="text-stone-300 text-sm" />}
+              </div>
+              
+              <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all">
+                <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center">
+                  <Icon name="cake" className="text-stone-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-stone-500">Birthday</p>
+                  <p className="text-sm font-medium text-stone-800 truncate">
+                    {user.birthday ? new Date(user.birthday).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}
+                  </p>
+                </div>
+                {!user.isGuest && <Icon name="edit" className="text-stone-300 text-sm" />}
+              </div>
+              
+              {/* Academic Info - read only */}
+              <div className="mt-4 pt-4 border-t border-stone-100">
+                <p className="text-xs text-stone-400 mb-2 px-3">Academic Information</p>
+                {adminOnlyFields.map((row, idx) => (
+                  <div key={idx} className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all">
+                    <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center">
+                      <Icon name={row.icon} className="text-stone-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-stone-500">{row.label}</p>
+                      <p className="text-sm font-medium text-stone-800 truncate">{row.value}</p>
+                    </div>
+                    <Icon name="lock" className="text-stone-300 text-sm" />
+                  </div>
+                ))}
+              </div>
+              
+              {/* Member Since */}
+              <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all mt-4 pt-4 border-t border-stone-100">
+                <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center">
+                  <Icon name="event" className="text-stone-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-stone-500">Member Since</p>
+                  <p className="text-sm font-medium text-stone-800 truncate">
+                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '-'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="p-4 border-t border-stone-100 space-y-3">
+              {user.isGuest && (
+                <button
+                  onClick={() => {/* Navigate to registration */}}
+                  className="w-full py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
+                >
+                  <Icon name="person_add" />
+                  Complete Registration
+                </button>
+              )}
+              <button
+                onClick={onLogout}
+                className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-semibold hover:bg-red-100 transition-all flex items-center justify-center gap-2"
+              >
+                <Icon name="logout" />
+                Sign Out
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Classmate type for Class Page
+type Classmate = {
+  idNumber: string;
+  username: string;
+  name: string;
+  profilePicture: string;
+  birthday: string;
+  email: string;
+  schoolEmail: string;
+  school: string;
+  college: string;
+  program: string;
+  major: string;
+  year: number;
+  section: string;
+  role: string;
+  position: string;
+  createdAt: string;
+};
+
+// Role options for admin assignment
+const ROLE_OPTIONS = [
+  { value: 'student', label: 'Student' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'superadmin', label: 'Superadmin' },
+  { value: 'faculty', label: 'Faculty' },
+  { value: 'guest', label: 'Guest' },
+];
+
+// Position options for class officers
+const POSITION_OPTIONS = [
+  { value: '', label: 'None' },
+  { value: 'Mayor', label: 'Mayor' },
+  { value: 'Vice Mayor', label: 'Vice Mayor' },
+  { value: 'Secretary', label: 'Secretary' },
+  { value: 'Assistant Secretary', label: 'Assistant Secretary' },
+  { value: 'Treasurer', label: 'Treasurer' },
+  { value: 'Auditor', label: 'Auditor' },
+  { value: 'Business Manager', label: 'Business Manager' },
+  { value: 'Internal Public Information Officer', label: 'Internal PIO' },
+  { value: 'External Public Information Officer', label: 'External PIO' },
+  { value: 'Marshal 1', label: 'Marshal 1' },
+  { value: 'Marshal 2', label: 'Marshal 2' },
+  { value: 'Marshal 3', label: 'Marshal 3' },
+];
+
+// Class Page Component
+const ClassPage = ({
+  user,
+  onBack,
+  addToast,
+  updateToast,
+  removeToast
+}: {
+  user: User;
+  onBack: () => void;
+  addToast: (message: string, type: Toast['type'], progress?: number) => number;
+  updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
+  removeToast: (id: number) => void;
+}) => {
+  const [classmates, setClassmates] = useState<Classmate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+  const [selectedClassmate, setSelectedClassmate] = useState<Classmate | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [editingRole, setEditingRole] = useState<{ classmate: Classmate; role: string; position: string } | null>(null);
+  const [savingRole, setSavingRole] = useState(false);
+  
+  const ADMIN_USER_ID = '2025-00046';
+  const isAdmin = user.idNumber === ADMIN_USER_ID;
+
+  useEffect(() => {
+    loadClassmates();
+  }, [user.section]);
+
+  const loadClassmates = async () => {
+    if (!user.section) {
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getClassmates', idNumber: user.idNumber, section: user.section })
+      });
+      const result = await response.json();
+      if (result.success) {
+        setClassmates(result.classmates || []);
+      }
+    } catch (err) {
+      console.error('Failed to load classmates:', err);
+      addToast('Failed to load classmates', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAssignRole = (classmate: Classmate) => {
+    setEditingRole({ 
+      classmate, 
+      role: classmate.role || 'student', 
+      position: classmate.position || '' 
+    });
+    setShowRoleModal(true);
+  };
+
+  const saveRole = async () => {
+    if (!editingRole) return;
+    
+    setSavingRole(true);
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'updateUserRole',
+          adminIdNumber: user.idNumber,
+          targetIdNumber: editingRole.classmate.idNumber,
+          role: editingRole.role,
+          position: editingRole.position
+        })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        // Update local state
+        setClassmates(prev => prev.map(c => 
+          c.idNumber === editingRole.classmate.idNumber 
+            ? { ...c, role: editingRole.role, position: editingRole.position }
+            : c
+        ));
+        addToast('Role assigned successfully', 'success');
+        setShowRoleModal(false);
+        setEditingRole(null);
+      } else {
+        addToast(result.error || 'Failed to assign role', 'error');
+      }
+    } catch (err) {
+      addToast('Network error', 'error');
+    } finally {
+      setSavingRole(false);
+    }
+  };
+
+  const filteredClassmates = classmates.filter(c =>
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.idNumber.includes(searchQuery)
+  );
+
+  // Sort by position priority then role then name
+  const sortedClassmates = [...filteredClassmates].sort((a, b) => {
+    const positionOrder: Record<string, number> = {
+      'Mayor': 1,
+      'Vice Mayor': 2,
+      'Secretary': 3,
+      'Assistant Secretary': 4,
+      'Treasurer': 5,
+      'Auditor': 6,
+      'Business Manager': 7,
+      'Internal Public Information Officer': 8,
+      'External Public Information Officer': 9,
+      'Marshal 1': 10,
+      'Marshal 2': 11,
+      'Marshal 3': 12,
+    };
+    const roleOrder: Record<string, number> = {
+      'superadmin': 1,
+      'admin': 2,
+      'faculty': 3,
+      'student': 4,
+      'guest': 5,
+    };
+    // First sort by position (if they have one)
+    const posA = positionOrder[a.position] || 99;
+    const posB = positionOrder[b.position] || 99;
+    if (posA !== posB) return posA - posB;
+    // Then by role
+    const orderA = roleOrder[a.role] || 4;
+    const orderB = roleOrder[b.role] || 4;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.name.localeCompare(b.name);
+  });
+
+  const getRoleColor = (role: string) => {
+    const colors: Record<string, string> = {
+      'superadmin': 'bg-red-100 text-red-800',
+      'admin': 'bg-amber-100 text-amber-800',
+      'faculty': 'bg-blue-100 text-blue-800',
+      'student': 'bg-stone-100 text-stone-600',
+      'guest': 'bg-gray-100 text-gray-600',
+    };
+    return colors[role] || 'bg-stone-100 text-stone-600';
+  };
+
+  const getPositionColor = (position: string) => {
+    const colors: Record<string, string> = {
+      'Mayor': 'bg-amber-100 text-amber-800',
+      'Vice Mayor': 'bg-blue-100 text-blue-800',
+      'Secretary': 'bg-purple-100 text-purple-800',
+      'Assistant Secretary': 'bg-violet-100 text-violet-800',
+      'Treasurer': 'bg-emerald-100 text-emerald-800',
+      'Auditor': 'bg-cyan-100 text-cyan-800',
+      'Business Manager': 'bg-orange-100 text-orange-800',
+      'Internal Public Information Officer': 'bg-pink-100 text-pink-800',
+      'External Public Information Officer': 'bg-rose-100 text-rose-800',
+      'Marshal 1': 'bg-indigo-100 text-indigo-800',
+      'Marshal 2': 'bg-indigo-100 text-indigo-800',
+      'Marshal 3': 'bg-indigo-100 text-indigo-800',
+    };
+    return colors[position] || 'bg-stone-100 text-stone-600';
+  };
+
+  const formatRole = (role: string) => {
+    if (!role || role === 'student') return 'Student';
+    return role.charAt(0).toUpperCase() + role.slice(1);
+  };
+
+  const formatPosition = (position: string) => {
+    if (!position) return '';
+    // Shorten long position names for display
+    if (position === 'Internal Public Information Officer') return 'Internal PIO';
+    if (position === 'External Public Information Officer') return 'External PIO';
+    return position;
+  };
+
+  return (
+    <div className="min-h-screen bg-stone-50 pb-8">
+      {/* Header */}
+      <header className="bg-white border-b border-stone-200 sticky top-0 z-40">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+                <Icon name="arrow_back" className="text-stone-600" />
+              </button>
+              <div>
+                <h1 className="text-xl font-bold text-stone-800">My Class</h1>
+                <p className="text-sm text-stone-500">Section {user.section} • {classmates.length} classmates</p>
+              </div>
+            </div>
+            
+            {/* View Toggle */}
+            <div className="flex items-center gap-2 bg-stone-100 rounded-xl p-1">
+              <button
+                onClick={() => setViewMode('card')}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'card' ? 'bg-white shadow-sm' : 'hover:bg-stone-200'}`}
+                title="Card View"
+              >
+                <Icon name="grid_view" className={viewMode === 'card' ? 'text-stone-800' : 'text-stone-500'} />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white shadow-sm' : 'hover:bg-stone-200'}`}
+                title="List View"
+              >
+                <Icon name="view_list" className={viewMode === 'list' ? 'text-stone-800' : 'text-stone-500'} />
+              </button>
+            </div>
+          </div>
+          
+          {/* Search Bar */}
+          <div className="mt-4 relative">
+            <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search classmates..."
+              className="w-full pl-10 pr-4 py-3 bg-stone-100 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+            />
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        {!user.section ? (
+          <div className="text-center py-16">
+            <div className="w-20 h-20 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Icon name="group_off" className="text-4xl text-stone-400" />
+            </div>
+            <h3 className="text-xl font-bold text-stone-800 mb-2">No Section Assigned</h3>
+            <p className="text-stone-500">You need to have a section assigned to view your classmates.</p>
+          </div>
+        ) : loading ? (
+          <div className="text-center py-16">
+            <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-stone-500">Loading classmates...</p>
+          </div>
+        ) : sortedClassmates.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="w-20 h-20 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Icon name="person_search" className="text-4xl text-stone-400" />
+            </div>
+            <h3 className="text-xl font-bold text-stone-800 mb-2">
+              {searchQuery ? 'No Results Found' : 'No Classmates Yet'}
+            </h3>
+            <p className="text-stone-500">
+              {searchQuery ? 'Try a different search term.' : 'Be the first in your section!'}
+            </p>
+          </div>
+        ) : viewMode === 'card' ? (
+          /* Card View */
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {sortedClassmates.map(classmate => (
+              <button
+                key={classmate.idNumber}
+                onClick={() => setSelectedClassmate(classmate)}
+                className="bg-white rounded-2xl p-4 border border-stone-200 hover:border-stone-300 hover:shadow-md transition-all text-left group"
+              >
+                <div className="relative">
+                  <div className="w-16 h-16 mx-auto rounded-full bg-stone-200 overflow-hidden mb-3">
+                    {classmate.profilePicture ? (
+                      <img src={classmate.profilePicture} alt={classmate.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-stone-300">
+                        <Icon name="person" className="text-2xl text-stone-500" />
+                      </div>
+                    )}
+                  </div>
+                  {(classmate.position || (classmate.role && classmate.role !== 'student')) && (
+                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
+                      <Icon name="star" className="text-white text-sm" />
+                    </div>
+                  )}
+                </div>
+                <h3 className="font-semibold text-stone-800 text-sm text-center truncate">{classmate.name}</h3>
+                {classmate.username && (
+                  <p className="text-xs text-stone-400 text-center truncate">@{classmate.username}</p>
+                )}
+                {/* Show position badge first, then role badge */}
+                {classmate.position && (
+                  <p className={`text-xs text-center mt-2 px-2 py-1 rounded-full ${getPositionColor(classmate.position)}`}>
+                    {formatPosition(classmate.position)}
+                  </p>
+                )}
+                {classmate.role && classmate.role !== 'student' && (
+                  <p className={`text-xs text-center mt-1 px-2 py-0.5 rounded-full ${getRoleColor(classmate.role)}`}>
+                    {formatRole(classmate.role)}
+                  </p>
+                )}
+                {isAdmin && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleAssignRole(classmate); }}
+                    className="mt-3 w-full py-1.5 text-xs bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <Icon name="admin_panel_settings" className="text-sm" /> Assign
+                  </button>
+                )}
+              </button>
+            ))}
+          </div>
+        ) : (
+          /* List View */
+          <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100 overflow-hidden">
+            {sortedClassmates.map(classmate => (
+              <button
+                key={classmate.idNumber}
+                onClick={() => setSelectedClassmate(classmate)}
+                className="w-full p-3 sm:p-4 hover:bg-stone-50 transition-all flex items-center gap-3 sm:gap-4 text-left group"
+              >
+                <div className="relative flex-shrink-0">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-stone-200 overflow-hidden">
+                    {classmate.profilePicture ? (
+                      <img src={classmate.profilePicture} alt={classmate.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-stone-300">
+                        <Icon name="person" className="text-lg sm:text-xl text-stone-500" />
+                      </div>
+                    )}
+                  </div>
+                  {(classmate.position || (classmate.role && classmate.role !== 'student')) && (
+                    <div className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-amber-500 rounded-full flex items-center justify-center">
+                      <Icon name="star" className="text-white text-[10px] sm:text-xs" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                    <h3 className="font-semibold text-stone-800 truncate text-sm sm:text-base">{classmate.name}</h3>
+                    {classmate.position && (
+                      <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full ${getPositionColor(classmate.position)}`}>
+                        {formatPosition(classmate.position)}
+                      </span>
+                    )}
+                    {classmate.role && classmate.role !== 'student' && (
+                      <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full ${getRoleColor(classmate.role)}`}>
+                        {formatRole(classmate.role)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs sm:text-sm text-stone-500 truncate">
+                    {classmate.username ? `@${classmate.username}` : classmate.idNumber}
+                  </p>
+                </div>
+                {isAdmin && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleAssignRole(classmate); }}
+                    className="p-1.5 sm:p-2 hover:bg-stone-200 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                    title="Assign Role"
+                  >
+                    <Icon name="admin_panel_settings" className="text-stone-600 text-lg sm:text-xl" />
+                  </button>
+                )}
+                <Icon name="chevron_right" className="text-stone-300 text-lg sm:text-xl" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Classmate Detail Modal */}
+      {selectedClassmate && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl modal-content max-h-[90vh] overflow-y-auto relative">
+            {/* Close button */}
+            <button 
+              onClick={() => setSelectedClassmate(null)}
+              className="absolute top-2 right-2 sm:top-3 sm:right-3 p-1.5 sm:p-2 hover:bg-stone-100 rounded-full transition-colors z-10"
+            >
+              <Icon name="close" className="text-stone-500" />
+            </button>
+            
+            <div className="p-4 sm:p-6 text-center border-b border-stone-100">
+              <div className="relative inline-block">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-full bg-stone-200 overflow-hidden mb-3 border-4 border-white shadow-lg">
+                  {selectedClassmate.profilePicture ? (
+                    <img src={selectedClassmate.profilePicture} alt={selectedClassmate.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-stone-300">
+                      <Icon name="person" className="text-3xl sm:text-4xl text-stone-500" />
+                    </div>
+                  )}
+                </div>
+                {(selectedClassmate.position || (selectedClassmate.role && selectedClassmate.role !== 'student')) && (
+                  <div className="absolute bottom-2 right-0 w-7 h-7 sm:w-8 sm:h-8 bg-amber-500 rounded-full flex items-center justify-center shadow-md">
+                    <Icon name="star" className="text-white text-sm" />
+                  </div>
+                )}
+              </div>
+              <h2 className="text-lg sm:text-xl font-bold text-stone-800">{selectedClassmate.name}</h2>
+              {selectedClassmate.username && (
+                <p className="text-sm text-stone-500">@{selectedClassmate.username}</p>
+              )}
+              
+              {/* Position Badge */}
+              {selectedClassmate.position && (
+                <div className="mt-2">
+                  <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getPositionColor(selectedClassmate.position)}`}>
+                    {formatPosition(selectedClassmate.position)}
+                  </span>
+                </div>
+              )}
+              
+              {/* Role Badge */}
+              <div className="mt-2">
+                <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getRoleColor(selectedClassmate.role || 'student')}`}>
+                  {formatRole(selectedClassmate.role || 'student')}
+                </span>
+              </div>
+            </div>
+            
+            <div className="p-3 sm:p-4 space-y-2">
+              <div className="flex items-center gap-3 p-2.5 sm:p-3 bg-stone-50 rounded-xl">
+                <Icon name="badge" className="text-stone-500 text-lg sm:text-xl" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-stone-400">ID Number</p>
+                  <p className="text-sm font-medium text-stone-700">{selectedClassmate.idNumber}</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-3 p-2.5 sm:p-3 bg-stone-50 rounded-xl">
+                <Icon name="psychology" className="text-stone-500 text-lg sm:text-xl" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-stone-400">Major</p>
+                  <p className="text-sm font-medium text-stone-700">{selectedClassmate.major || '-'}</p>
+                </div>
+              </div>
+              
+              {selectedClassmate.email && (
+                <div className="flex items-center gap-3 p-2.5 sm:p-3 bg-stone-50 rounded-xl">
+                  <Icon name="mail" className="text-stone-500 text-lg sm:text-xl" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-stone-400">Email</p>
+                    <p className="text-sm font-medium text-stone-700 truncate">{selectedClassmate.email}</p>
+                  </div>
+                </div>
+              )}
+              
+              {selectedClassmate.birthday && (
+                <div className="flex items-center gap-3 p-2.5 sm:p-3 bg-stone-50 rounded-xl">
+                  <Icon name="cake" className="text-stone-500 text-lg sm:text-xl" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-stone-400">Birthday</p>
+                    <p className="text-sm font-medium text-stone-700">
+                      {new Date(selectedClassmate.birthday).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-3 sm:p-4 border-t border-stone-100 flex gap-2 sm:gap-3">
+              {isAdmin && (
+                <button
+                  onClick={() => { setSelectedClassmate(null); handleAssignRole(selectedClassmate); }}
+                  className="flex-1 py-2.5 sm:py-3 bg-purple-100 text-purple-700 rounded-xl font-semibold hover:bg-purple-200 transition-all flex items-center justify-center gap-1.5 sm:gap-2 text-sm sm:text-base"
+                >
+                  <Icon name="admin_panel_settings" className="text-lg sm:text-xl" />
+                  <span className="hidden sm:inline">Assign Role</span>
+                  <span className="sm:hidden">Assign</span>
+                </button>
+              )}
+              <button
+                onClick={() => setSelectedClassmate(null)}
+                className={`${isAdmin ? 'flex-1' : 'w-full'} py-2.5 sm:py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-all text-sm sm:text-base`}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Role Assignment Modal */}
+      {showRoleModal && editingRole && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl modal-content max-h-[90vh] overflow-y-auto">
+            <div className="p-3 sm:p-4 border-b border-stone-100 flex items-center justify-between">
+              <h2 className="text-base sm:text-lg font-bold text-stone-800">Assign Role & Position</h2>
+              <button onClick={() => { setShowRoleModal(false); setEditingRole(null); }} className="text-stone-400 hover:text-stone-600 p-1">
+                <Icon name="close" />
+              </button>
+            </div>
+            
+            <div className="p-3 sm:p-4">
+              <div className="flex items-center gap-3 mb-4 sm:mb-6 p-2.5 sm:p-3 bg-stone-50 rounded-xl">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-stone-200 overflow-hidden flex-shrink-0">
+                  {editingRole.classmate.profilePicture ? (
+                    <img src={editingRole.classmate.profilePicture} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-stone-300">
+                      <Icon name="person" className="text-lg sm:text-xl text-stone-500" />
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold text-stone-800 truncate">{editingRole.classmate.name}</h3>
+                  <p className="text-xs sm:text-sm text-stone-500">{editingRole.classmate.idNumber}</p>
+                </div>
+              </div>
+              
+              <div className="space-y-3 sm:space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-stone-600 mb-1.5 sm:mb-2">Role</label>
+                  <select
+                    value={editingRole.role}
+                    onChange={(e) => setEditingRole(prev => prev ? { ...prev, role: e.target.value } : null)}
+                    className="w-full p-2.5 sm:p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white text-sm sm:text-base"
+                  >
+                    {ROLE_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-stone-400 mt-1">User's access level in the system</p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-stone-600 mb-1.5 sm:mb-2">Class Position</label>
+                  <select
+                    value={editingRole.position}
+                    onChange={(e) => setEditingRole(prev => prev ? { ...prev, position: e.target.value } : null)}
+                    className="w-full p-2.5 sm:p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white text-sm sm:text-base"
+                  >
+                    {POSITION_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-stone-400 mt-1">Class officer position (if applicable)</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-3 sm:p-4 border-t border-stone-100 flex gap-2 sm:gap-3">
+              <button
+                onClick={() => { setShowRoleModal(false); setEditingRole(null); }}
+                className="flex-1 py-2.5 sm:py-3 border border-stone-300 text-stone-700 rounded-xl font-semibold hover:bg-stone-50 transition-all text-sm sm:text-base"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveRole}
+                disabled={savingRole}
+                className="flex-1 py-2.5 sm:py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5 sm:gap-2 text-sm sm:text-base"
+              >
+                {savingRole ? (
+                  <>
+                    <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span className="hidden sm:inline">Saving...</span>
+                    <span className="sm:hidden">Save</span>
+                  </>
+                ) : (
+                  <>
+                    <Icon name="save" className="text-lg" />
+                    Save
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Finance Page Component (Under Development)
+const FinancePage = ({ onBack }: { onBack: () => void }) => {
+  return (
+    <div className="min-h-screen bg-stone-50">
+      {/* Header */}
+      <header className="bg-white border-b border-stone-200 sticky top-0 z-40">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
+          <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+            <Icon name="arrow_back" className="text-stone-600" />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-stone-800">Finance</h1>
+            <p className="text-xs text-stone-500">Track payments & dues</p>
+          </div>
+        </div>
+      </header>
+
+      {/* Under Development Notice */}
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <div className="bg-amber-50 border-2 border-dashed border-amber-300 rounded-2xl p-8 text-center">
+          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Icon name="engineering" className="text-4xl text-amber-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-amber-800 mb-2">Under Development</h2>
+          <p className="text-amber-700 mb-4">The Finance module is currently being built. Check back soon!</p>
+          <div className="flex flex-wrap gap-3 justify-center text-sm text-amber-600">
+            <span className="px-3 py-1.5 bg-amber-100 rounded-full flex items-center gap-1.5">
+              <Icon name="payments" className="text-base" /> Payment Tracking
+            </span>
+            <span className="px-3 py-1.5 bg-amber-100 rounded-full flex items-center gap-1.5">
+              <Icon name="receipt_long" className="text-base" /> Dues Management
+            </span>
+            <span className="px-3 py-1.5 bg-amber-100 rounded-full flex items-center gap-1.5">
+              <Icon name="account_balance" className="text-base" /> Balance History
+            </span>
+          </div>
+          <p className="text-xs text-amber-500 mt-6">Expected features coming in future updates</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Attendance Page Component (Under Development)
+const AttendancePage = ({ onBack }: { onBack: () => void }) => {
+  return (
+    <div className="min-h-screen bg-stone-50">
+      {/* Header */}
+      <header className="bg-white border-b border-stone-200 sticky top-0 z-40">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
+          <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+            <Icon name="arrow_back" className="text-stone-600" />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-stone-800">Attendance</h1>
+            <p className="text-xs text-stone-500">Track your attendance records</p>
+          </div>
+        </div>
+      </header>
+
+      {/* Under Development Notice */}
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <div className="bg-blue-50 border-2 border-dashed border-blue-300 rounded-2xl p-8 text-center">
+          <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Icon name="engineering" className="text-4xl text-blue-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-blue-800 mb-2">Under Development</h2>
+          <p className="text-blue-700 mb-4">The Attendance module is currently being built. Check back soon!</p>
+          <div className="flex flex-wrap gap-3 justify-center text-sm text-blue-600">
+            <span className="px-3 py-1.5 bg-blue-100 rounded-full flex items-center gap-1.5">
+              <Icon name="fact_check" className="text-base" /> Attendance Records
+            </span>
+            <span className="px-3 py-1.5 bg-blue-100 rounded-full flex items-center gap-1.5">
+              <Icon name="insert_chart" className="text-base" /> Statistics
+            </span>
+            <span className="px-3 py-1.5 bg-blue-100 rounded-full flex items-center gap-1.5">
+              <Icon name="notifications_active" className="text-base" /> Absence Alerts
+            </span>
+          </div>
+          <p className="text-xs text-blue-500 mt-6">Expected features coming in future updates</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Schedule Page Component (Under Development)
+const SchedulePage = ({ onBack }: { onBack: () => void }) => {
+  return (
+    <div className="min-h-screen bg-stone-50">
+      {/* Header */}
+      <header className="bg-white border-b border-stone-200 sticky top-0 z-40">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
+          <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
+            <Icon name="arrow_back" className="text-stone-600" />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-stone-800">Class Schedule</h1>
+            <p className="text-xs text-stone-500">Your weekly class timetable</p>
+          </div>
+        </div>
+      </header>
+
+      {/* Under Development Notice */}
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <div className="bg-purple-50 border-2 border-dashed border-purple-300 rounded-2xl p-8 text-center">
+          <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Icon name="engineering" className="text-4xl text-purple-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-purple-800 mb-2">Under Development</h2>
+          <p className="text-purple-700 mb-4">The Class Schedule module is currently being built. Check back soon!</p>
+          <div className="flex flex-wrap gap-3 justify-center text-sm text-purple-600">
+            <span className="px-3 py-1.5 bg-purple-100 rounded-full flex items-center gap-1.5">
+              <Icon name="calendar_month" className="text-base" /> Weekly Timetable
+            </span>
+            <span className="px-3 py-1.5 bg-purple-100 rounded-full flex items-center gap-1.5">
+              <Icon name="room" className="text-base" /> Room Information
+            </span>
+            <span className="px-3 py-1.5 bg-purple-100 rounded-full flex items-center gap-1.5">
+              <Icon name="alarm" className="text-base" /> Class Reminders
+            </span>
+          </div>
+          <p className="text-xs text-purple-500 mt-6">Expected features coming in future updates</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Login Modal Component
 const LoginModal = ({ 
   isOpen, 
   onClose, 
@@ -1060,23 +3297,23 @@ const LoginModal = ({
   updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
   removeToast: (id: number) => void;
 }) => {
-  const [idNumber, setIdNumber] = useState('');
-  const [name, setName] = useState('');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const validateIdFormat = (id: string) => /^\d{4}-\d{5}$/.test(id);
-
-  const handleSubmit = async () => {
+  const handleLogin = async () => {
     setError('');
     
-    if (!validateIdFormat(idNumber)) {
-      setError('Invalid ID format. Use: 2025-00000');
+    if (!username.trim()) {
+      setError('Please enter your username');
       return;
     }
     
-    if (!name.trim()) {
-      setError('Please enter your name');
+    if (!password) {
+      setError('Please enter your password');
       return;
     }
 
@@ -1086,7 +3323,7 @@ const LoginModal = ({
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
-        body: JSON.stringify({ action: 'login', idNumber, name: name.trim() })
+        body: JSON.stringify({ action: 'loginWithPassword', username: username.trim(), password })
       });
       
       const result = await response.json();
@@ -1095,79 +3332,158 @@ const LoginModal = ({
         const user: User = result.user;
         localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
         onLogin(user);
-        updateToast(toastId, result.isNew ? 'Account created successfully!' : 'Welcome back!', 'success');
+        updateToast(toastId, `Welcome back, ${user.name}!`, 'success');
         setTimeout(() => removeToast(toastId), 3000);
         onClose();
       } else {
-        // Fallback to local-only mode
-        const user: User = { idNumber, name: name.trim(), record: {} };
-        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
-        onLogin(user);
-        updateToast(toastId, 'Logged in (offline mode)', 'info');
+        setError(result.error || 'Invalid username or password');
+        updateToast(toastId, result.error || 'Login failed', 'error');
         setTimeout(() => removeToast(toastId), 3000);
-        onClose();
       }
     } catch (err) {
-      // Fallback to local-only mode
-      const user: User = { idNumber, name: name.trim(), record: {} };
-      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
-      onLogin(user);
-      updateToast(toastId, 'Logged in (offline mode)', 'info');
+      setError('Network error. Please check your connection.');
+      updateToast(toastId, 'Network error', 'error');
       setTimeout(() => removeToast(toastId), 3000);
-      onClose();
     } finally {
       setLoading(false);
     }
   };
 
+  const handleGuestLogin = () => {
+    const guestUser: User = {
+      idNumber: `guest-${Date.now()}`,
+      name: 'Guest User',
+      record: {},
+      isGuest: true
+    };
+    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(guestUser));
+    onLogin(guestUser);
+    addToast('Logged in as guest. Some features may be limited.', 'info');
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-stone-800">Login / Sign Up</h2>
-          <button onClick={onClose} className="text-stone-400 hover:text-stone-600">
-            <Icon name="close" />
-          </button>
-        </div>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl my-4 max-h-[90vh] overflow-y-auto modal-content">
+        {mode === 'register' ? (
+          <RegistrationForm 
+            onRegister={(user) => {
+              onLogin(user);
+              onClose();
+            }}
+            onBack={() => setMode('login')}
+            addToast={addToast}
+            updateToast={updateToast}
+            removeToast={removeToast}
+          />
+        ) : (
+          <>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-stone-800">Welcome to CumLaude!</h2>
+                <p className="text-sm text-stone-500 mt-1">Sign in to your account</p>
+              </div>
+              <button onClick={onClose} className="text-stone-400 hover:text-stone-600">
+                <Icon name="close" />
+              </button>
+            </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-stone-600 mb-1">ID Number</label>
-            <input
-              type="text"
-              value={idNumber}
-              onChange={(e) => setIdNumber(e.target.value)}
-              placeholder="2025-00000"
-              className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
-            />
-            <p className="text-xs text-stone-400 mt-1">Format: YYYY-NNNNN (e.g., 2025-12345)</p>
-          </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">Username</label>
+                <div className="relative">
+                  <Icon name="person" className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                    placeholder="Enter your username"
+                    className="w-full p-3 pl-10 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+                    onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                  />
+                </div>
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-stone-600 mb-1">Full Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Juan Dela Cruz"
-              className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
-            />
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">Password</label>
+                <div className="relative">
+                  <Icon name="lock" className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full p-3 pl-10 pr-10 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+                    onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                  >
+                    <Icon name={showPassword ? 'visibility_off' : 'visibility'} />
+                  </button>
+                </div>
+              </div>
 
-          {error && (
-            <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{error}</div>
-          )}
+              {error && (
+                <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg flex items-center gap-2">
+                  <Icon name="error" className="text-lg" />
+                  {error}
+                </div>
+              )}
 
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 disabled:opacity-50 transition-all"
-          >
-            {loading ? 'Please wait...' : 'Continue'}
-          </button>
-        </div>
+              <button
+                onClick={handleLogin}
+                disabled={loading}
+                className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    <Icon name="login" />
+                    Sign In
+                  </>
+                )}
+              </button>
+
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-stone-200"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-stone-500">or</span>
+                </div>
+              </div>
+
+              <button
+                onClick={handleGuestLogin}
+                className="w-full py-3 border border-stone-300 text-stone-700 rounded-xl font-semibold hover:bg-stone-50 transition-all flex items-center justify-center gap-2"
+              >
+                <Icon name="person_outline" />
+                Continue as Guest
+              </button>
+
+              <div className="text-center pt-4">
+                <p className="text-sm text-stone-500">
+                  Don't have an account?{' '}
+                  <button 
+                    onClick={() => setMode('register')} 
+                    className="text-stone-800 font-semibold hover:underline"
+                  >
+                    Register here
+                  </button>
+                </p>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1305,6 +3621,12 @@ const App = () => {
   const [user, setUser] = useState<User | null>(null);
   const [showLogin, setShowLogin] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [guestActionCount, setGuestActionCount] = useState(0);
+  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
+
+  // Guest action limit
+  const GUEST_ACTION_LIMIT = 5;
 
   // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -1401,6 +3723,7 @@ const App = () => {
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<'default' | 'granted' | 'denied'>('default');
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   // Save navigation state to localStorage
   useEffect(() => {
@@ -1444,6 +3767,20 @@ const App = () => {
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('');
 
+  // Guest action check helper
+  const checkGuestAction = (): boolean => {
+    if (!user?.isGuest) return true;
+    
+    const newCount = guestActionCount + 1;
+    setGuestActionCount(newCount);
+    
+    if (newCount >= GUEST_ACTION_LIMIT) {
+      setShowGuestPrompt(true);
+      return false;
+    }
+    return true;
+  };
+
   // --- Initialization ---
 
   useEffect(() => {
@@ -1455,6 +3792,30 @@ const App = () => {
         try {
           parsedUser = JSON.parse(savedUser);
           setUser(parsedUser);
+          
+          // Refresh user profile from backend if online (to get updated section, role, etc.)
+          if (!parsedUser.isGuest && navigator.onLine) {
+            try {
+              const response = await fetch(GAS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  action: 'getUserProfile',
+                  idNumber: parsedUser.idNumber
+                })
+              });
+              const data = await response.json();
+              if (data.success && data.user) {
+                // Merge with existing user data to preserve any local-only fields
+                const refreshedUser = { ...parsedUser, ...data.user };
+                setUser(refreshedUser);
+                localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(refreshedUser));
+                console.log('User profile refreshed from backend');
+              }
+            } catch (err) {
+              console.log('Could not refresh user profile, using cached data');
+            }
+          }
         } catch (e) {
           localStorage.removeItem(STORAGE_KEY_USER);
         }
@@ -1969,6 +4330,7 @@ const App = () => {
 
   const handleLogout = () => {
     setUser(null);
+    setGuestActionCount(0);
     localStorage.removeItem(STORAGE_KEY_USER);
   };
 
@@ -2999,11 +5361,68 @@ const App = () => {
         <LoginModal 
           isOpen={showLogin} 
           onClose={() => setShowLogin(false)} 
-          onLogin={setUser}
+          onLogin={(u) => { setUser(u); setGuestActionCount(0); }}
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
         />
+
+        {/* Profile Page */}
+        {showProfile && user && (
+          <ProfilePage
+            user={user}
+            onClose={() => setShowProfile(false)}
+            onLogout={() => {
+              handleLogout();
+              setShowProfile(false);
+            }}
+            onUpdate={(updatedUser) => setUser(updatedUser)}
+          />
+        )}
+
+        {/* Guest User Prompt Modal */}
+        {showGuestPrompt && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Icon name="person_add" className="text-3xl text-amber-600" />
+                </div>
+                <h2 className="text-xl font-bold text-stone-800 mb-2">Create Your Account</h2>
+                <p className="text-stone-500 text-sm">
+                  You've used {guestActionCount} of {GUEST_ACTION_LIMIT} guest actions. 
+                  Register now to unlock unlimited access and save your progress!
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    setShowGuestPrompt(false);
+                    setShowLogin(true);
+                  }}
+                  className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-all flex items-center justify-center gap-2"
+                >
+                  <Icon name="person_add" />
+                  Register / Login
+                </button>
+                <button
+                  onClick={() => setShowGuestPrompt(false)}
+                  className="w-full py-3 border border-stone-300 text-stone-600 rounded-xl font-semibold hover:bg-stone-50 transition-all"
+                >
+                  Continue as Guest
+                </button>
+              </div>
+
+              <div className="mt-4 p-3 bg-stone-50 rounded-xl">
+                <p className="text-xs text-stone-500 text-center">
+                  <Icon name="info" className="text-sm align-text-bottom mr-1" />
+                  Registered users can save progress, submit resources, and add exam schedules.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Admin Announcement Panel */}
         {showAnnouncementPanel && user?.idNumber === ADMIN_USER_ID && (
@@ -3279,7 +5698,8 @@ const App = () => {
               </div>
             </div>
             
-            <div className="flex items-center gap-2">
+            {/* Desktop Navigation */}
+            <div className="hidden sm:flex items-center gap-2">
               <button
                 onClick={() => setView('CALENDAR')}
                 className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
@@ -3287,6 +5707,15 @@ const App = () => {
               >
                 <Icon name="event" className="text-stone-600" />
               </button>
+              {user && user.section && (
+                <button
+                  onClick={() => setView('CLASS')}
+                  className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
+                  title="My Class"
+                >
+                  <Icon name="groups" className="text-stone-600" />
+                </button>
+              )}
               {user && (
                 <button
                   onClick={() => { setUserAnalytics(null); setView('ANALYTICS'); }}
@@ -3303,18 +5732,202 @@ const App = () => {
               >
                 <Icon name="notifications" className="text-stone-600" />
               </button>
+              {user ? (
+                <button
+                  onClick={() => setShowProfile(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors"
+                  title="View Profile"
+                >
+                  {user.profilePicture ? (
+                    <img src={user.profilePicture} alt={user.name} className="w-6 h-6 rounded-full object-cover" />
+                  ) : (
+                    <Icon name="person" className="text-stone-600" />
+                  )}
+                  <span className="text-sm font-medium text-stone-700">
+                    {user.name.split(' ')[0]}
+                  </span>
+                  {user.isGuest && (
+                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded">Guest</span>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowLogin(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors"
+                >
+                  <Icon name="login" className="text-stone-600" />
+                  <span className="text-sm font-medium text-stone-700">Login</span>
+                </button>
+              )}
+            </div>
+
+            {/* Mobile Navigation */}
+            <div className="flex sm:hidden items-center gap-2">
+              {user ? (
+                <button
+                  onClick={() => setShowProfile(true)}
+                  className="w-9 h-9 rounded-full bg-stone-100 hover:bg-stone-200 flex items-center justify-center overflow-hidden transition-colors"
+                  title="View Profile"
+                >
+                  {user.profilePicture ? (
+                    <img src={user.profilePicture} alt={user.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Icon name="person" className="text-stone-600" />
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowLogin(true)}
+                  className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
+                >
+                  <Icon name="login" className="text-stone-600" />
+                </button>
+              )}
               <button
-                onClick={() => user ? handleLogout() : setShowLogin(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors"
+                onClick={() => setShowMobileMenu(true)}
+                className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
               >
-                <Icon name={user ? 'logout' : 'login'} className="text-stone-600" />
-                <span className="text-sm font-medium text-stone-700">
-                  {user ? user.name.split(' ')[0] : 'Login'}
-                </span>
+                <Icon name="menu" className="text-stone-600" />
               </button>
             </div>
           </div>
         </header>
+
+        {/* Mobile Menu Drawer */}
+        {showMobileMenu && (
+          <div className="fixed inset-0 z-50 sm:hidden">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setShowMobileMenu(false)} />
+            <div className="absolute right-0 top-0 bottom-0 w-72 bg-white shadow-xl animate-slide-left">
+              <div className="p-4 border-b border-stone-100 flex items-center justify-between">
+                <h2 className="font-bold text-stone-800">Menu</h2>
+                <button onClick={() => setShowMobileMenu(false)} className="p-2 hover:bg-stone-100 rounded-lg">
+                  <Icon name="close" className="text-stone-600" />
+                </button>
+              </div>
+              
+              {user && (
+                <div className="p-4 border-b border-stone-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-stone-200 overflow-hidden">
+                      {user.profilePicture ? (
+                        <img src={user.profilePicture} alt={user.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-stone-300">
+                          <Icon name="person" className="text-xl text-stone-500" />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-stone-800">{user.name}</p>
+                      <p className="text-xs text-stone-500">ID: {user.idNumber}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div className="p-2">
+                <button
+                  onClick={() => { setView('CALENDAR'); setShowMobileMenu(false); }}
+                  className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                >
+                  <Icon name="event" className="text-stone-600" />
+                  <span className="font-medium text-stone-700">Schedule</span>
+                </button>
+                
+                {user && user.section && (
+                  <button
+                    onClick={() => { setView('CLASS'); setShowMobileMenu(false); }}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                  >
+                    <Icon name="groups" className="text-stone-600" />
+                    <span className="font-medium text-stone-700">My Class</span>
+                    <span className="ml-auto text-xs text-stone-400">{user.section}</span>
+                  </button>
+                )}
+                
+                {user && (
+                  <button
+                    onClick={() => { setUserAnalytics(null); setView('ANALYTICS'); setShowMobileMenu(false); }}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                  >
+                    <Icon name="analytics" className="text-stone-600" />
+                    <span className="font-medium text-stone-700">Analytics</span>
+                  </button>
+                )}
+                
+                <button
+                  onClick={() => { setShowNotificationSettings(true); setShowMobileMenu(false); }}
+                  className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                >
+                  <Icon name="notifications" className="text-stone-600" />
+                  <span className="font-medium text-stone-700">Notifications</span>
+                </button>
+                
+                <button
+                  onClick={() => { setView('ALL_RESOURCES'); setShowMobileMenu(false); }}
+                  className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                >
+                  <Icon name="folder_open" className="text-stone-600" />
+                  <span className="font-medium text-stone-700">All Resources</span>
+                </button>
+
+                {/* Coming Soon Items */}
+                <div className="mt-2 pt-2 border-t border-stone-100">
+                  <p className="px-3 py-1 text-xs text-stone-400 font-medium">Coming Soon</p>
+                  
+                  <button
+                    onClick={() => { setView('FINANCE'); setShowMobileMenu(false); }}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                  >
+                    <Icon name="payments" className="text-amber-500" />
+                    <span className="font-medium text-stone-700">Finance</span>
+                    <span className="ml-auto px-1.5 py-0.5 bg-amber-100 text-amber-600 text-[10px] font-bold rounded">SOON</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => { setView('ATTENDANCE'); setShowMobileMenu(false); }}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                  >
+                    <Icon name="fact_check" className="text-cyan-500" />
+                    <span className="font-medium text-stone-700">Attendance</span>
+                    <span className="ml-auto px-1.5 py-0.5 bg-cyan-100 text-cyan-600 text-[10px] font-bold rounded">SOON</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => { setView('SCHEDULE'); setShowMobileMenu(false); }}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                  >
+                    <Icon name="calendar_month" className="text-violet-500" />
+                    <span className="font-medium text-stone-700">Class Schedule</span>
+                    <span className="ml-auto px-1.5 py-0.5 bg-violet-100 text-violet-600 text-[10px] font-bold rounded">SOON</span>
+                  </button>
+                </div>
+                
+                {user && (
+                  <button
+                    onClick={() => { setShowProfile(true); setShowMobileMenu(false); }}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                  >
+                    <Icon name="person" className="text-stone-600" />
+                    <span className="font-medium text-stone-700">My Profile</span>
+                  </button>
+                )}
+              </div>
+              
+              {!user && (
+                <div className="p-4 border-t border-stone-100 mt-auto">
+                  <button
+                    onClick={() => { setShowLogin(true); setShowMobileMenu(false); }}
+                    className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Icon name="login" />
+                    Sign In
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Notification Settings Modal */}
         {showNotificationSettings && (
@@ -3538,7 +6151,7 @@ const App = () => {
           )}
 
           {/* Quick Stats Row */}
-          <div className="grid grid-cols-2 gap-3 mt-8">
+          <div className={`grid ${user && user.section ? 'grid-cols-3' : 'grid-cols-2'} gap-3 mt-8`}>
             {/* Exams Quick View */}
             <button
               onClick={() => setView('CALENDAR')}
@@ -3561,6 +6174,22 @@ const App = () => {
               </p>
             </button>
 
+            {/* Class Quick View - only show if user has section */}
+            {user && user.section && (
+              <button
+                onClick={() => setView('CLASS')}
+                className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-purple-300 hover:shadow-md transition-all"
+              >
+                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 mb-2">
+                  <Icon name="groups" />
+                </div>
+                <h3 className="font-semibold text-stone-800">My Class</h3>
+                <p className="text-xs text-stone-400 mt-1">
+                  Section {user.section}
+                </p>
+              </button>
+            )}
+
             {/* Resources Quick View */}
             {(() => {
               const totalResources = Object.values(resources).reduce((sum, arr) => sum + arr.length, 0);
@@ -3579,6 +6208,57 @@ const App = () => {
                 </button>
               );
             })()}
+
+            {/* Finance Quick View */}
+            <button
+              onClick={() => setView('FINANCE')}
+              className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-amber-300 hover:shadow-md transition-all relative overflow-hidden"
+            >
+              <div className="absolute top-2 right-2">
+                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-600 text-[10px] font-bold rounded">SOON</span>
+              </div>
+              <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600 mb-2">
+                <Icon name="payments" />
+              </div>
+              <h3 className="font-semibold text-stone-800">Finance</h3>
+              <p className="text-xs text-stone-400 mt-1">
+                Track payments & dues
+              </p>
+            </button>
+
+            {/* Attendance Quick View */}
+            <button
+              onClick={() => setView('ATTENDANCE')}
+              className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-cyan-300 hover:shadow-md transition-all relative overflow-hidden"
+            >
+              <div className="absolute top-2 right-2">
+                <span className="px-1.5 py-0.5 bg-cyan-100 text-cyan-600 text-[10px] font-bold rounded">SOON</span>
+              </div>
+              <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center text-cyan-600 mb-2">
+                <Icon name="fact_check" />
+              </div>
+              <h3 className="font-semibold text-stone-800">Attendance</h3>
+              <p className="text-xs text-stone-400 mt-1">
+                Track your attendance
+              </p>
+            </button>
+
+            {/* Class Schedule Quick View */}
+            <button
+              onClick={() => setView('SCHEDULE')}
+              className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-violet-300 hover:shadow-md transition-all relative overflow-hidden"
+            >
+              <div className="absolute top-2 right-2">
+                <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 text-[10px] font-bold rounded">SOON</span>
+              </div>
+              <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center text-violet-600 mb-2">
+                <Icon name="calendar_month" />
+              </div>
+              <h3 className="font-semibold text-stone-800">Class Schedule</h3>
+              <p className="text-xs text-stone-400 mt-1">
+                Weekly timetable
+              </p>
+            </button>
           </div>
 
           {/* Upcoming Exam Preview (show only if there are upcoming exams) */}
@@ -5376,6 +8056,56 @@ const App = () => {
           )}
         </main>
       </div>
+    );
+  }
+
+  // CLASS View
+  if (view === 'CLASS') {
+    if (!user) {
+      setView('HOME');
+      return null;
+    }
+    return (
+      <>
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <ClassPage
+          user={user}
+          onBack={() => setView('HOME')}
+          addToast={addToast}
+          updateToast={updateToast}
+          removeToast={removeToast}
+        />
+      </>
+    );
+  }
+
+  // FINANCE View
+  if (view === 'FINANCE') {
+    return (
+      <>
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <FinancePage onBack={() => setView('HOME')} />
+      </>
+    );
+  }
+
+  // ATTENDANCE View
+  if (view === 'ATTENDANCE') {
+    return (
+      <>
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <AttendancePage onBack={() => setView('HOME')} />
+      </>
+    );
+  }
+
+  // SCHEDULE View
+  if (view === 'SCHEDULE') {
+    return (
+      <>
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <SchedulePage onBack={() => setView('HOME')} />
+      </>
     );
   }
 

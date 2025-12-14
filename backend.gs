@@ -74,6 +74,26 @@ function doPost(e) {
     switch(action) {
       case 'login':
         return jsonResponse(loginOrCreateUser(data.idNumber, data.name));
+      case 'loginWithPassword':
+        return jsonResponse(loginWithPassword(data.username, data.password));
+      case 'registerUser':
+        return jsonResponse(registerUser(data));
+      case 'checkUsername':
+        return jsonResponse(checkUsernameAvailable(data.username));
+      case 'checkIdNumber':
+        return jsonResponse(checkIdNumberAvailable(data.idNumber));
+      case 'checkEmail':
+        return jsonResponse(checkEmailAvailable(data.email, data.type));
+      case 'getUserProfile':
+        return jsonResponse(getUserProfile(data.idNumber));
+      case 'updateProfile':
+        return jsonResponse(updateUserProfile(data));
+      case 'getClassmates':
+        return jsonResponse(getClassmates(data.idNumber, data.section));
+      case 'updateUserRole':
+        return jsonResponse(updateUserRole(data.adminIdNumber, data.targetIdNumber, data.role, data.position));
+      case 'uploadProfilePicture':
+        return jsonResponse(uploadProfilePicture(data));
       case 'updateRecord':
         return jsonResponse(updateUserRecord(data.idNumber, data.record));
       case 'saveAnalytics':
@@ -253,6 +273,49 @@ function setupSheets() {
     results.push('PushSubscriptions sheet already exists');
   }
   
+  // 10. Setup UserAccounts sheet for new authentication system
+  let userAccountsSheet = ss.getSheetByName('UserAccounts');
+  if (!userAccountsSheet) {
+    userAccountsSheet = ss.insertSheet('UserAccounts');
+    userAccountsSheet.appendRow([
+      'ID Number',      // A - Column 1
+      'Username',       // B - Column 2
+      'PasswordHash',   // C - Column 3
+      'Name',           // D - Column 4
+      'ProfilePicture', // E - Column 5
+      'Birthday',       // F - Column 6
+      'Email',          // G - Column 7
+      'SchoolEmail',    // H - Column 8
+      'School',         // I - Column 9
+      'College',        // J - Column 10
+      'Program',        // K - Column 11
+      'Major',          // L - Column 12
+      'Year',           // M - Column 13
+      'Section',        // N - Column 14
+      'CreatedAt',      // O - Column 15
+      'LastLogin',      // P - Column 16
+      'Record',         // Q - Column 17
+      'Role',           // R - Column 18
+      'Position'        // S - Column 19
+    ]);
+    userAccountsSheet.setFrozenRows(1);
+    results.push('Created UserAccounts sheet for new authentication system');
+  } else {
+    // Verify headers match expected structure - now 19 columns
+    const headers = userAccountsSheet.getRange(1, 1, 1, 19).getValues()[0];
+    if (headers[0] !== 'ID Number' || headers[1] !== 'Username' || headers[17] !== 'Role') {
+      userAccountsSheet.getRange(1, 1, 1, 19).setValues([[
+        'ID Number', 'Username', 'PasswordHash', 'Name', 'ProfilePicture',
+        'Birthday', 'Email', 'SchoolEmail', 'School', 'College',
+        'Program', 'Major', 'Year', 'Section', 'CreatedAt', 'LastLogin', 'Record',
+        'Role', 'Position'
+      ]]);
+      results.push('Updated UserAccounts sheet headers with Role and Position columns');
+    } else {
+      results.push('UserAccounts sheet already exists');
+    }
+  }
+  
   return { 
     success: true, 
     message: 'Setup complete', 
@@ -344,6 +407,523 @@ function loginOrCreateUser(idNumber, name) {
       record: {}
     }
   };
+}
+
+/**
+ * Profile Picture Folder ID
+ */
+const PROFILE_PICTURE_FOLDER = '1hOcAuLm7n4y_dJf2Dh_rqLZfbzyQFu8k';
+
+/**
+ * ============================================
+ * USER ACCOUNTS SHEET COLUMN MAPPING
+ * ============================================
+ * Column A (0): ID Number      - Format: 2025-00000
+ * Column B (1): Username       - Lowercase, unique
+ * Column C (2): PasswordHash   - SHA-256 hashed
+ * Column D (3): Name           - Full name
+ * Column E (4): ProfilePicture - Google Drive URL
+ * Column F (5): Birthday       - ISO date string
+ * Column G (6): Email          - Personal email
+ * Column H (7): SchoolEmail    - School email
+ * Column I (8): School         - School name
+ * Column J (9): College        - College name
+ * Column K (10): Program       - Program name
+ * Column L (11): Major         - Major/specialization
+ * Column M (12): Year          - Year level (1-6)
+ * Column N (13): Section       - Section letter
+ * Column O (14): CreatedAt     - ISO timestamp
+ * Column P (15): LastLogin     - ISO timestamp
+ * Column Q (16): Record        - JSON string for progress
+ * ============================================
+ */
+
+/**
+ * Simple hash function for passwords (for demonstration - in production use proper hashing)
+ */
+function hashPassword(password) {
+  const hash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, password + 'cumlaude_salt_2024');
+  return hash.map(b => ('0' + (b & 0xFF).toString(16)).slice(-2)).join('');
+}
+
+/**
+ * Check if a username is available
+ */
+function checkUsernameAvailable(username) {
+  if (!username || username.length < 4) {
+    return { available: false, error: 'Username must be at least 4 characters' };
+  }
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let userSheet = ss.getSheetByName('UserAccounts');
+  
+  if (!userSheet) {
+    return { available: true };
+  }
+  
+  const data = userSheet.getDataRange().getValues();
+  const usernameCol = 1; // Column B is username (0-indexed)
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][usernameCol] && String(data[i][usernameCol]).toLowerCase() === username.toLowerCase()) {
+      return { available: false };
+    }
+  }
+  
+  return { available: true };
+}
+
+/**
+ * Check if an ID number is available
+ */
+function checkIdNumberAvailable(idNumber) {
+  if (!idNumber || !/^\d{4}-\d{5}$/.test(idNumber)) {
+    return { available: false, valid: false, error: 'Invalid ID format. Use: YYYY-NNNNN' };
+  }
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let userSheet = ss.getSheetByName('UserAccounts');
+  
+  if (!userSheet) {
+    return { available: true, valid: true };
+  }
+  
+  const data = userSheet.getDataRange().getValues();
+  const idCol = 0; // Column A is ID Number (0-indexed)
+  
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idCol]) === String(idNumber)) {
+      return { available: false, valid: true, error: 'This ID number is already registered' };
+    }
+  }
+  
+  return { available: true, valid: true };
+}
+
+/**
+ * Check if an email is available
+ */
+function checkEmailAvailable(email, type) {
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { available: false, valid: false, error: 'Invalid email format' };
+  }
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let userSheet = ss.getSheetByName('UserAccounts');
+  
+  if (!userSheet) {
+    return { available: true, valid: true };
+  }
+  
+  const data = userSheet.getDataRange().getValues();
+  const emailCol = 6; // Column G is Email (0-indexed)
+  const schoolEmailCol = 7; // Column H is SchoolEmail (0-indexed)
+  
+  for (let i = 1; i < data.length; i++) {
+    // Check both email columns for duplicates
+    if (String(data[i][emailCol]).toLowerCase() === email.toLowerCase() ||
+        String(data[i][schoolEmailCol]).toLowerCase() === email.toLowerCase()) {
+      return { available: false, valid: true, error: 'This email is already registered' };
+    }
+  }
+  
+  return { available: true, valid: true };
+}
+
+/**
+ * Get user profile by ID number (to refresh user data)
+ */
+function getUserProfile(idNumber) {
+  if (!idNumber) {
+    return { error: 'ID number is required' };
+  }
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const userSheet = ss.getSheetByName('UserAccounts');
+  
+  if (!userSheet) {
+    return { error: 'User sheet not found' };
+  }
+  
+  const data = userSheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(idNumber)) {
+      let record = {};
+      try {
+        record = data[i][16] ? JSON.parse(data[i][16]) : {};
+      } catch(e) {
+        record = {};
+      }
+      
+      return {
+        success: true,
+        user: {
+          idNumber: String(data[i][0]),   // Column A
+          username: data[i][1] || '',      // Column B
+          name: data[i][3] || '',          // Column D
+          profilePicture: data[i][4] || '', // Column E
+          birthday: data[i][5] || '',      // Column F
+          email: data[i][6] || '',         // Column G
+          schoolEmail: data[i][7] || '',   // Column H
+          school: data[i][8] || '',        // Column I
+          college: data[i][9] || '',       // Column J
+          program: data[i][10] || '',      // Column K
+          major: data[i][11] || '',        // Column L
+          year: data[i][12] || 1,          // Column M
+          section: data[i][13] || '',      // Column N
+          createdAt: data[i][14] || '',    // Column O
+          lastLogin: data[i][15] || '',    // Column P
+          record: record,                   // Column Q
+          isGuest: false,
+          role: data[i][17] || 'student',  // Column R
+          position: data[i][18] || ''      // Column S
+        }
+      };
+    }
+  }
+  
+  return { error: 'User not found' };
+}
+
+/**
+ * Register a new user with full profile
+ */
+function registerUser(data) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // Validate required fields
+  if (!data.username || data.username.length < 4) {
+    return { error: 'Username must be at least 4 characters' };
+  }
+  if (!data.password || data.password.length < 8) {
+    return { error: 'Password must be at least 8 characters' };
+  }
+  if (!data.idNumber || !/^\d{4}-\d{5}$/.test(data.idNumber)) {
+    return { error: 'Invalid ID number format' };
+  }
+  if (!data.name) {
+    return { error: 'Name is required' };
+  }
+  
+  // Check username availability
+  const usernameCheck = checkUsernameAvailable(data.username);
+  if (!usernameCheck.available) {
+    return { error: 'Username is already taken' };
+  }
+  
+  // Get or create UserAccounts sheet
+  let userSheet = ss.getSheetByName('UserAccounts');
+  if (!userSheet) {
+    userSheet = ss.insertSheet('UserAccounts');
+    userSheet.appendRow([
+      'ID Number', 'Username', 'PasswordHash', 'Name', 'ProfilePicture',
+      'Birthday', 'Email', 'SchoolEmail', 'School', 'College',
+      'Program', 'Major', 'Year', 'Section', 'CreatedAt', 'LastLogin', 'Record',
+      'Role', 'Position'
+    ]);
+    userSheet.setFrozenRows(1);
+  }
+  
+  // Check if ID number already exists
+  const existingData = userSheet.getDataRange().getValues();
+  for (let i = 1; i < existingData.length; i++) {
+    if (String(existingData[i][0]) === String(data.idNumber)) {
+      return { error: 'This ID number is already registered. Please login instead.' };
+    }
+  }
+  
+  const now = new Date().toISOString();
+  const passwordHash = hashPassword(data.password);
+  
+  // Add new user with role and position columns
+  userSheet.appendRow([
+    data.idNumber,
+    data.username.toLowerCase(),
+    passwordHash,
+    data.name,
+    data.profilePicture || '',
+    data.birthday || '',
+    data.email || '',
+    data.schoolEmail || '',
+    data.school || '',
+    data.college || '',
+    data.program || '',
+    data.major || '',
+    data.year || 1,
+    data.section || '',
+    now,
+    now,
+    '{}',
+    'student',  // Default role
+    ''          // Default empty position
+  ]);
+  
+  return {
+    success: true,
+    user: {
+      idNumber: data.idNumber,
+      username: data.username.toLowerCase(),
+      name: data.name,
+      profilePicture: data.profilePicture || '',
+      birthday: data.birthday || '',
+      email: data.email || '',
+      schoolEmail: data.schoolEmail || '',
+      school: data.school || '',
+      college: data.college || '',
+      program: data.program || '',
+      major: data.major || '',
+      year: data.year || 1,
+      section: data.section || '',
+      createdAt: now,
+      lastLogin: now,
+      record: {},
+      isGuest: false,
+      role: 'student',
+      position: ''
+    }
+  };
+}
+
+/**
+ * Login with username and password
+ */
+function loginWithPassword(username, password) {
+  if (!username || !password) {
+    return { error: 'Username and password are required' };
+  }
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const userSheet = ss.getSheetByName('UserAccounts');
+  
+  if (!userSheet) {
+    return { error: 'No registered users found. Please register first.' };
+  }
+  
+  const data = userSheet.getDataRange().getValues();
+  const passwordHash = hashPassword(password);
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] && data[i][1].toLowerCase() === username.toLowerCase()) {
+      // Username found, check password
+      if (data[i][2] === passwordHash) {
+        // Password correct, update last login (Column P = index 15, but getRange uses 1-based so column 16)
+        const now = new Date().toISOString();
+        userSheet.getRange(i + 1, 16).setValue(now); // LastLogin is column P (16th column, 1-based)
+        
+        let record = {};
+        try {
+          record = data[i][16] ? JSON.parse(data[i][16]) : {};
+        } catch(e) {
+          record = {};
+        }
+        
+        return {
+          success: true,
+          user: {
+            idNumber: String(data[i][0]),   // Column A
+            username: data[i][1],            // Column B
+            name: data[i][3],                // Column D
+            profilePicture: data[i][4] || '', // Column E
+            birthday: data[i][5] || '',      // Column F
+            email: data[i][6] || '',         // Column G
+            schoolEmail: data[i][7] || '',   // Column H
+            school: data[i][8] || '',        // Column I
+            college: data[i][9] || '',       // Column J
+            program: data[i][10] || '',      // Column K
+            major: data[i][11] || '',        // Column L
+            year: data[i][12] || 1,          // Column M
+            section: data[i][13] || '',      // Column N
+            createdAt: data[i][14] || '',    // Column O
+            lastLogin: now,                   // Column P (just updated)
+            record: record,                   // Column Q
+            isGuest: false,
+            role: data[i][17] || 'student',  // Column R
+            position: data[i][18] || ''      // Column S
+          }
+        };
+      } else {
+        return { error: 'Invalid password' };
+      }
+    }
+  }
+  
+  return { error: 'Username not found. Please register first.' };
+}
+
+/**
+ * Update user profile
+ */
+function updateUserProfile(data) {
+  if (!data.idNumber) {
+    return { error: 'ID number is required' };
+  }
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const userSheet = ss.getSheetByName('UserAccounts');
+  
+  if (!userSheet) {
+    return { error: 'User sheet not found' };
+  }
+  
+  const sheetData = userSheet.getDataRange().getValues();
+  
+  for (let i = 1; i < sheetData.length; i++) {
+    if (String(sheetData[i][0]) === String(data.idNumber)) {
+      // Update editable fields (using 1-based column numbers for getRange)
+      if (data.name !== undefined) userSheet.getRange(i + 1, 4).setValue(data.name);              // Column D: Name
+      if (data.profilePicture !== undefined) userSheet.getRange(i + 1, 5).setValue(data.profilePicture); // Column E: ProfilePicture
+      if (data.birthday !== undefined) userSheet.getRange(i + 1, 6).setValue(data.birthday);     // Column F: Birthday
+      if (data.email !== undefined) userSheet.getRange(i + 1, 7).setValue(data.email);            // Column G: Email
+      if (data.schoolEmail !== undefined) userSheet.getRange(i + 1, 8).setValue(data.schoolEmail); // Column H: SchoolEmail
+      
+      // Password change - hash it first
+      if (data.newPassword) {
+        const passwordHash = hashPassword(data.newPassword);
+        userSheet.getRange(i + 1, 3).setValue(passwordHash);  // Column C: PasswordHash
+      }
+      
+      // Username change - need to validate availability first
+      if (data.newUsername && data.newUsername !== String(sheetData[i][1])) {
+        const usernameCheck = checkUsernameAvailable(data.newUsername);
+        if (!usernameCheck.available) {
+          return { error: 'Username is already taken' };
+        }
+        userSheet.getRange(i + 1, 2).setValue(data.newUsername.toLowerCase());  // Column B: Username
+      }
+      
+      return { success: true };
+    }
+  }
+  
+  return { error: 'User not found' };
+}
+
+/**
+ * Get all classmates from the same section
+ */
+function getClassmates(idNumber, section) {
+  if (!section) {
+    return { error: 'Section is required' };
+  }
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const userSheet = ss.getSheetByName('UserAccounts');
+  
+  if (!userSheet) {
+    return { error: 'User sheet not found', classmates: [] };
+  }
+  
+  const data = userSheet.getDataRange().getValues();
+  const classmates = [];
+  
+  // Column indices (0-based)
+  const COL = {
+    ID_NUMBER: 0,
+    USERNAME: 1,
+    NAME: 3,
+    PROFILE_PICTURE: 4,
+    BIRTHDAY: 5,
+    EMAIL: 6,
+    SCHOOL_EMAIL: 7,
+    SCHOOL: 8,
+    COLLEGE: 9,
+    PROGRAM: 10,
+    MAJOR: 11,
+    YEAR: 12,
+    SECTION: 13,
+    CREATED_AT: 14,
+    ROLE: 17,
+    POSITION: 18
+  };
+  
+  for (let i = 1; i < data.length; i++) {
+    const rowSection = String(data[i][COL.SECTION]).trim().toLowerCase();
+    if (rowSection === section.trim().toLowerCase()) {
+      classmates.push({
+        idNumber: String(data[i][COL.ID_NUMBER]),
+        username: data[i][COL.USERNAME] || '',
+        name: data[i][COL.NAME] || '',
+        profilePicture: data[i][COL.PROFILE_PICTURE] || '',
+        birthday: data[i][COL.BIRTHDAY] || '',
+        email: data[i][COL.EMAIL] || '',
+        schoolEmail: data[i][COL.SCHOOL_EMAIL] || '',
+        school: data[i][COL.SCHOOL] || '',
+        college: data[i][COL.COLLEGE] || '',
+        program: data[i][COL.PROGRAM] || '',
+        major: data[i][COL.MAJOR] || '',
+        year: data[i][COL.YEAR] || 1,
+        section: data[i][COL.SECTION] || '',
+        role: data[i][COL.ROLE] || 'student',
+        position: data[i][COL.POSITION] || '',
+        createdAt: data[i][COL.CREATED_AT] || ''
+      });
+    }
+  }
+  
+  // Sort by name
+  classmates.sort((a, b) => a.name.localeCompare(b.name));
+  
+  return { success: true, classmates: classmates };
+}
+
+/**
+ * Update user role and position (admin only)
+ */
+function updateUserRole(adminIdNumber, targetIdNumber, role, position) {
+  const ADMIN_USER_ID = '2025-00046';
+  
+  // Only allow admin
+  if (String(adminIdNumber) !== ADMIN_USER_ID) {
+    return { error: 'Unauthorized. Only admin can assign roles.' };
+  }
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const userSheet = ss.getSheetByName('UserAccounts');
+  
+  if (!userSheet) {
+    return { error: 'User sheet not found' };
+  }
+  
+  const data = userSheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(targetIdNumber)) {
+      // Update role (Column R - 18) and position (Column S - 19)
+      userSheet.getRange(i + 1, 18).setValue(role || 'student');
+      userSheet.getRange(i + 1, 19).setValue(position || '');
+      
+      return { 
+        success: true, 
+        user: {
+          idNumber: targetIdNumber,
+          role: role || 'student',
+          position: position || ''
+        }
+      };
+    }
+  }
+  
+  return { error: 'User not found' };
+}
+
+/**
+ * Upload profile picture to Google Drive
+ */
+function uploadProfilePicture(data) {
+  try {
+    const folder = DriveApp.getFolderById(PROFILE_PICTURE_FOLDER);
+    const blob = Utilities.newBlob(Utilities.base64Decode(data.data), data.mimeType, data.fileName);
+    const file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    const fileId = file.getId();
+    const url = `https://drive.google.com/thumbnail?id=${fileId}&sz=w200`;
+    
+    return { success: true, url: url, fileId: fileId };
+  } catch (error) {
+    return { error: error.message };
+  }
 }
 
 /**
