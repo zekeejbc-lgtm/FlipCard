@@ -108,6 +108,27 @@ type Announcement = {
   dismissedAt?: number;
 };
 
+type ClassSchedule = {
+  scheduleId: string;
+  type: 'semestral' | 'makeup' | 'activity' | 'special' | string;
+  semester: '1st' | '2nd' | string;
+  courseCode: string;
+  courseName: string;
+  teacher: string;
+  classroom: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  specificDate: string;
+  details: string;
+  isActive: boolean;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+  status: 'today' | 'upcoming' | 'completed' | 'scheduled';
+};
+
 type SubjectInfo = {
   code: string;
   name: string;
@@ -141,6 +162,25 @@ const PROGRESS_KEY_PREFIX = 'cumlaude_deck_progress_';
 
 const Icon = ({ name, className = "" }: { name: string; className?: string }) => (
   <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
+);
+
+// Floating Theme Toggle Component - Used across all views
+const FloatingThemeToggle = ({ darkMode, setDarkMode }: { darkMode: boolean; setDarkMode: (mode: boolean) => void }) => (
+  <button
+    onClick={() => {
+      const newMode = !darkMode;
+      setDarkMode(newMode);
+      localStorage.setItem('cumlaude_darkMode', String(newMode));
+    }}
+    className={`fixed top-4 right-4 z-[100] w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-110 ${
+      darkMode 
+        ? 'bg-amber-400 text-stone-900 hover:bg-amber-300' 
+        : 'bg-stone-800 text-amber-400 hover:bg-stone-700'
+    }`}
+    title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+  >
+    <Icon name={darkMode ? 'light_mode' : 'dark_mode'} className="text-lg" />
+  </button>
 );
 
 // Toast Container Component
@@ -415,7 +455,7 @@ const UploadModal = ({
   if (showInstructions) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto`}>
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-stone-800">How to Get a Link</h2>
             <button onClick={() => setShowInstructions(false)} className="text-stone-400 hover:text-stone-600">
@@ -460,9 +500,9 @@ const UploadModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto`}>
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-stone-800">Add Resource</h2>
+          <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Add Resource</h2>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-600" disabled={uploading}>
             <Icon name="close" />
           </button>
@@ -630,18 +670,18 @@ const AlertModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl animate-in fade-in zoom-in duration-200">
+      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-sm overflow-hidden shadow-xl animate-in fade-in zoom-in duration-200`}>
         <div className="p-6">
           <div className={`w-12 h-12 ${bg} rounded-full flex items-center justify-center mx-auto mb-4`}>
             <Icon name={icon} className={`text-2xl ${color}`} />
           </div>
-          <h3 className="text-lg font-bold text-stone-800 text-center mb-2">{title}</h3>
-          <p className="text-stone-600 text-center text-sm whitespace-pre-line">{message}</p>
+          <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-stone-800'} text-center mb-2`}>{title}</h3>
+          <p className={`${darkMode ? 'text-gray-300' : 'text-stone-600'} text-center text-sm whitespace-pre-line`}>{message}</p>
         </div>
-        <div className="border-t border-stone-200">
+        <div className={`border-t ${darkMode ? 'border-gray-700' : 'border-stone-200'}`}>
           <button
             onClick={onClose}
-            className="w-full py-3 text-stone-800 font-medium hover:bg-stone-50 transition-colors"
+            className={`w-full py-3 ${darkMode ? 'text-white hover:bg-gray-700' : 'text-stone-800 hover:bg-stone-50'} font-medium transition-colors`}
           >
             {buttonText}
           </button>
@@ -679,18 +719,18 @@ const ConfirmModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl animate-in fade-in zoom-in duration-200">
+      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-sm overflow-hidden shadow-xl animate-in fade-in zoom-in duration-200`}>
         <div className="p-6">
-          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className={`w-12 h-12 ${darkMode ? 'bg-red-900/30' : 'bg-red-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
             <Icon name="warning" className="text-2xl text-red-500" />
           </div>
-          <h3 className="text-lg font-bold text-stone-800 text-center mb-2">{title}</h3>
-          <p className="text-stone-600 text-center text-sm">{message}</p>
+          <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-stone-800'} text-center mb-2`}>{title}</h3>
+          <p className={`${darkMode ? 'text-gray-300' : 'text-stone-600'} text-center text-sm`}>{message}</p>
         </div>
-        <div className="flex border-t border-stone-200">
+        <div className={`flex border-t ${darkMode ? 'border-gray-700' : 'border-stone-200'}`}>
           <button
             onClick={onClose}
-            className="flex-1 py-3 text-stone-600 font-medium hover:bg-stone-50 transition-colors"
+            className={`flex-1 py-3 ${darkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-stone-600 hover:bg-stone-50'} font-medium transition-colors`}
           >
             Cancel
           </button>
@@ -738,7 +778,7 @@ const ExamDetailModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
+      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up`} onClick={e => e.stopPropagation()}>
         {/* Header with status color */}
         <div className={`p-6 ${
           status === 'ongoing' ? 'bg-green-500' :
@@ -950,16 +990,16 @@ const AddExamModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto`}>
         <div className="p-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-stone-800">Add Exam</h2>
-            <button onClick={onClose} className="p-2 hover:bg-stone-100 rounded-full">
-              <Icon name="close" className="text-stone-500" />
+            <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Add Exam</h2>
+            <button onClick={onClose} className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-full`}>
+              <Icon name="close" className={darkMode ? 'text-gray-400' : 'text-stone-500'} />
             </button>
           </div>
           
-          <p className="text-sm text-stone-500 mb-4">Schedule for {subjectName || subject}</p>
+          <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'} mb-4`}>Schedule for {subjectName || subject}</p>
           
           <div className="space-y-4">
             <div>
@@ -1931,12 +1971,14 @@ const ProfilePage = ({
   user,
   onClose,
   onLogout,
-  onUpdate
+  onUpdate,
+  darkMode = false
 }: {
   user: User;
   onClose: () => void;
   onLogout: () => void;
   onUpdate: (user: User) => void;
+  darkMode?: boolean;
 }) => {
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({ ...user, newUsername: '', newPassword: '', confirmPassword: '' });
@@ -2152,21 +2194,21 @@ const ProfilePage = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl my-4 max-h-[90vh] overflow-y-auto modal-content">
+      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-lg shadow-xl my-4 max-h-[90vh] overflow-y-auto modal-content`}>
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-stone-100 p-4 flex items-center justify-between z-10">
-          <h2 className="text-xl font-bold text-stone-800">{editing ? 'Edit Profile' : 'Profile'}</h2>
+        <div className={`sticky top-0 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-100'} border-b p-4 flex items-center justify-between z-10`}>
+          <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{editing ? 'Edit Profile' : 'Profile'}</h2>
           <div className="flex items-center gap-2">
             {!editing && (
               <button 
                 onClick={() => setEditing(true)} 
-                className="p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-lg transition-colors`}
                 title="Edit Profile"
               >
-                <Icon name="edit" className="text-stone-600" />
+                <Icon name="edit" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
               </button>
             )}
-            <button onClick={onClose} className="text-stone-400 hover:text-stone-600">
+            <button onClick={onClose} className={darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-stone-400 hover:text-stone-600'}>
               <Icon name="close" />
             </button>
           </div>
@@ -2184,48 +2226,48 @@ const ProfilePage = ({
 
             {/* Basic Info Section */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-stone-500 uppercase tracking-wider">Basic Information</h3>
+              <h3 className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-stone-500'} uppercase tracking-wider`}>Basic Information</h3>
               
               {/* Name */}
               <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">Full Name *</label>
+                <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1`}>Full Name *</label>
                 <input
                   type="text"
                   value={editData.name || ''}
                   onChange={(e) => setEditData(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+                  className={`w-full p-3 border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-stone-200'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none`}
                 />
               </div>
 
               {/* Birthday */}
               <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">Birthday</label>
+                <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1`}>Birthday</label>
                 <input
                   type="date"
                   value={editData.birthday || ''}
                   onChange={(e) => setEditData(prev => ({ ...prev, birthday: e.target.value }))}
-                  className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+                  className={`w-full p-3 border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-stone-200'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none`}
                 />
               </div>
 
               {/* Personal Email */}
               <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">Personal Email</label>
+                <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1`}>Personal Email</label>
                 <div className="relative">
                   <input
                     type="email"
                     value={editData.email || ''}
                     onChange={(e) => setEditData(prev => ({ ...prev, email: e.target.value }))}
-                    className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                    className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${darkMode ? 'bg-gray-700 text-white' : ''} ${
                       editData.email !== user.email && emailStatus.available === true ? 'border-emerald-500' :
                       editData.email !== user.email && emailStatus.available === false ? 'border-red-500' :
-                      'border-stone-200'
+                      darkMode ? 'border-gray-600' : 'border-stone-200'
                     }`}
                   />
                   {editData.email !== user.email && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
                       {emailStatus.checking ? (
-                        <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+                        <div className={`w-5 h-5 border-2 ${darkMode ? 'border-gray-500 border-t-gray-300' : 'border-stone-300 border-t-stone-600'} rounded-full animate-spin`} />
                       ) : emailStatus.available === true ? (
                         <Icon name="check_circle" className="text-emerald-500" />
                       ) : emailStatus.available === false ? (
@@ -2238,22 +2280,22 @@ const ProfilePage = ({
 
               {/* School Email */}
               <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">School Email</label>
+                <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1`}>School Email</label>
                 <div className="relative">
                   <input
                     type="email"
                     value={editData.schoolEmail || ''}
                     onChange={(e) => setEditData(prev => ({ ...prev, schoolEmail: e.target.value }))}
-                    className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                    className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${darkMode ? 'bg-gray-700 text-white' : ''} ${
                       editData.schoolEmail !== user.schoolEmail && schoolEmailStatus.available === true ? 'border-emerald-500' :
                       editData.schoolEmail !== user.schoolEmail && schoolEmailStatus.available === false ? 'border-red-500' :
-                      'border-stone-200'
+                      darkMode ? 'border-gray-600' : 'border-stone-200'
                     }`}
                   />
                   {editData.schoolEmail !== user.schoolEmail && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
                       {schoolEmailStatus.checking ? (
-                        <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+                        <div className={`w-5 h-5 border-2 ${darkMode ? 'border-gray-500 border-t-gray-300' : 'border-stone-300 border-t-stone-600'} rounded-full animate-spin`} />
                       ) : schoolEmailStatus.available === true ? (
                         <Icon name="check_circle" className="text-emerald-500" />
                       ) : schoolEmailStatus.available === false ? (
@@ -2267,27 +2309,27 @@ const ProfilePage = ({
 
             {/* Credentials Section */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-stone-500 uppercase tracking-wider">Change Credentials (Optional)</h3>
+              <h3 className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-stone-500'} uppercase tracking-wider`}>Change Credentials (Optional)</h3>
               
               {/* New Username */}
               <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">New Username</label>
+                <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1`}>New Username</label>
                 <div className="relative">
                   <input
                     type="text"
                     value={editData.newUsername || ''}
                     onChange={(e) => setEditData(prev => ({ ...prev, newUsername: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))}
                     placeholder={user.username || 'Leave blank to keep current'}
-                    className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                    className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${darkMode ? 'bg-gray-700 text-white placeholder-gray-500' : ''} ${
                       editData.newUsername && editData.newUsername !== user.username && usernameStatus.available === true ? 'border-emerald-500' :
                       editData.newUsername && editData.newUsername !== user.username && usernameStatus.available === false ? 'border-red-500' :
-                      'border-stone-200'
+                      darkMode ? 'border-gray-600' : 'border-stone-200'
                     }`}
                   />
                   {editData.newUsername && editData.newUsername !== user.username && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
                       {usernameStatus.checking ? (
-                        <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+                        <div className={`w-5 h-5 border-2 ${darkMode ? 'border-gray-500 border-t-gray-300' : 'border-stone-300 border-t-stone-600'} rounded-full animate-spin`} />
                       ) : usernameStatus.available === true ? (
                         <Icon name="check_circle" className="text-emerald-500" />
                       ) : usernameStatus.available === false ? (
@@ -2296,51 +2338,51 @@ const ProfilePage = ({
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-stone-400 mt-1">Current: @{user.username || 'none'}</p>
+                <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'} mt-1`}>Current: @{user.username || 'none'}</p>
               </div>
 
               {/* New Password */}
               <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">New Password</label>
+                <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1`}>New Password</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={editData.newPassword || ''}
                     onChange={(e) => setEditData(prev => ({ ...prev, newPassword: e.target.value }))}
                     placeholder="Leave blank to keep current"
-                    className="w-full p-3 pr-10 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+                    className={`w-full p-3 pr-10 border ${darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-500' : 'border-stone-200'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none`}
                   />
                   <button 
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                    className={`absolute right-3 top-1/2 -translate-y-1/2 ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-stone-400 hover:text-stone-600'}`}
                   >
                     <Icon name={showPassword ? 'visibility_off' : 'visibility'} />
                   </button>
                 </div>
-                <p className="text-xs text-stone-400 mt-1">Minimum 8 characters</p>
+                <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'} mt-1`}>Minimum 8 characters</p>
               </div>
 
               {/* Confirm Password */}
               {editData.newPassword && (
                 <div>
-                  <label className="block text-sm font-medium text-stone-600 mb-1">Confirm New Password</label>
+                  <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1`}>Confirm New Password</label>
                   <div className="relative">
                     <input
                       type={showConfirmPassword ? 'text' : 'password'}
                       value={editData.confirmPassword || ''}
                       onChange={(e) => setEditData(prev => ({ ...prev, confirmPassword: e.target.value }))}
                       placeholder="Re-enter new password"
-                      className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                      className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${darkMode ? 'bg-gray-700 text-white placeholder-gray-500' : ''} ${
                         editData.confirmPassword && editData.newPassword === editData.confirmPassword ? 'border-emerald-500' :
                         editData.confirmPassword && editData.newPassword !== editData.confirmPassword ? 'border-red-500' :
-                        'border-stone-200'
+                        darkMode ? 'border-gray-600' : 'border-stone-200'
                       }`}
                     />
                     <button 
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                      className={`absolute right-3 top-1/2 -translate-y-1/2 ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-stone-400 hover:text-stone-600'}`}
                     >
                       <Icon name={showConfirmPassword ? 'visibility_off' : 'visibility'} />
                     </button>
@@ -2350,12 +2392,12 @@ const ProfilePage = ({
             </div>
 
             {/* Admin-only Fields Notice */}
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className={`${darkMode ? 'bg-amber-900/30 border-amber-700' : 'bg-amber-50 border-amber-200'} border rounded-xl p-4`}>
               <div className="flex items-start gap-3">
-                <Icon name="info" className="text-amber-600 mt-0.5" />
+                <Icon name="info" className={darkMode ? 'text-amber-400 mt-0.5' : 'text-amber-600 mt-0.5'} />
                 <div>
-                  <p className="text-sm font-medium text-amber-800">Academic Information</p>
-                  <p className="text-xs text-amber-700 mt-1">
+                  <p className={`text-sm font-medium ${darkMode ? 'text-amber-300' : 'text-amber-800'}`}>Academic Information</p>
+                  <p className={`text-xs ${darkMode ? 'text-amber-400' : 'text-amber-700'} mt-1`}>
                     To change your School, College, Program, Major, Year Level, or Section, please contact your class admin or system administrator.
                   </p>
                 </div>
@@ -2363,7 +2405,7 @@ const ProfilePage = ({
             </div>
             
             {editError && (
-              <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg flex items-center gap-2">
+              <div className={`text-red-500 text-sm ${darkMode ? 'bg-red-900/30' : 'bg-red-50'} p-3 rounded-lg flex items-center gap-2`}>
                 <Icon name="error" className="text-lg" />
                 {editError}
               </div>
@@ -2372,14 +2414,14 @@ const ProfilePage = ({
             <div className="flex gap-3 pt-2">
               <button
                 onClick={() => { setEditing(false); setEditData({ ...user, newUsername: '', newPassword: '', confirmPassword: '' }); setEditError(''); }}
-                className="flex-1 py-3 border border-stone-300 text-stone-700 rounded-xl font-semibold hover:bg-stone-50 transition-all"
+                className={`flex-1 py-3 border ${darkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-stone-300 text-stone-700 hover:bg-stone-50'} rounded-xl font-semibold transition-all`}
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={loading || usernameStatus.checking || emailStatus.checking || schoolEmailStatus.checking}
-                className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                className={`flex-1 py-3 ${darkMode ? 'bg-gray-600 hover:bg-gray-500' : 'bg-stone-800 hover:bg-stone-900'} text-white rounded-xl font-semibold disabled:opacity-50 transition-all flex items-center justify-center gap-2`}
               >
                 {loading ? (
                   <>
@@ -2398,23 +2440,23 @@ const ProfilePage = ({
         ) : (
           <>
             {/* Profile Header */}
-            <div className="p-6 bg-gradient-to-b from-stone-100 to-white">
+            <div className={`p-6 ${darkMode ? 'bg-gradient-to-b from-gray-700 to-gray-800' : 'bg-gradient-to-b from-stone-100 to-white'}`}>
               <div className="flex flex-col items-center">
-                <div className="w-24 h-24 rounded-full bg-stone-200 overflow-hidden border-4 border-white shadow-lg mb-3">
+                <div className={`w-24 h-24 rounded-full ${darkMode ? 'bg-gray-600' : 'bg-stone-200'} overflow-hidden border-4 ${darkMode ? 'border-gray-800' : 'border-white'} shadow-lg mb-3`}>
                   {user.profilePicture ? (
                     <img src={user.profilePicture} alt={user.name} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-stone-300">
-                      <Icon name="person" className="text-4xl text-stone-500" />
+                    <div className={`w-full h-full flex items-center justify-center ${darkMode ? 'bg-gray-600' : 'bg-stone-300'}`}>
+                      <Icon name="person" className={`text-4xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />
                     </div>
                   )}
                 </div>
-                <h3 className="text-xl font-bold text-stone-800">{user.name}</h3>
+                <h3 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{user.name}</h3>
                 {user.username && (
-                  <p className="text-stone-500">@{user.username}</p>
+                  <p className={darkMode ? 'text-gray-400' : 'text-stone-500'}>@{user.username}</p>
                 )}
                 {user.role && user.role !== 'student' && (
-                  <span className="mt-2 px-3 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-full capitalize">
+                  <span className={`mt-2 px-3 py-1 ${darkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700'} text-xs font-medium rounded-full capitalize`}>
                     {user.role.replace('class-', '').replace(/-/g, ' ')}
                   </span>
                 )}
@@ -2425,78 +2467,78 @@ const ProfilePage = ({
             <div className="p-4 space-y-1">
               {/* Read-only fields */}
               {readOnlyFields.map((row, idx) => (
-                <div key={idx} className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all">
-                  <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center">
-                    <Icon name={row.icon} className="text-stone-600" />
+                <div key={idx} className={`flex items-center gap-3 p-3 rounded-xl ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-50'} transition-all`}>
+                  <div className={`w-10 h-10 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} flex items-center justify-center`}>
+                    <Icon name={row.icon} className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-stone-500">{row.label}</p>
-                    <p className="text-sm font-medium text-stone-800 truncate">{row.value}</p>
+                    <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>{row.label}</p>
+                    <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-800'} truncate`}>{row.value}</p>
                   </div>
                 </div>
               ))}
               
               {/* Contact Info */}
-              <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all">
-                <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center">
-                  <Icon name="mail" className="text-stone-600" />
+              <div className={`flex items-center gap-3 p-3 rounded-xl ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-50'} transition-all`}>
+                <div className={`w-10 h-10 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} flex items-center justify-center`}>
+                  <Icon name="mail" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-stone-500">Email</p>
-                  <p className="text-sm font-medium text-stone-800 truncate">{user.email || '-'}</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>Email</p>
+                  <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-800'} truncate`}>{user.email || '-'}</p>
                 </div>
-                <Icon name="edit" className="text-stone-300 text-sm" />
+                <Icon name="edit" className={`text-sm ${darkMode ? 'text-gray-600' : 'text-stone-300'}`} />
               </div>
               
-              <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all">
-                <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center">
-                  <Icon name="school" className="text-stone-600" />
+              <div className={`flex items-center gap-3 p-3 rounded-xl ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-50'} transition-all`}>
+                <div className={`w-10 h-10 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} flex items-center justify-center`}>
+                  <Icon name="school" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-stone-500">School Email</p>
-                  <p className="text-sm font-medium text-stone-800 truncate">{user.schoolEmail || '-'}</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>School Email</p>
+                  <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-800'} truncate`}>{user.schoolEmail || '-'}</p>
                 </div>
-                <Icon name="edit" className="text-stone-300 text-sm" />
+                <Icon name="edit" className={`text-sm ${darkMode ? 'text-gray-600' : 'text-stone-300'}`} />
               </div>
               
-              <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all">
-                <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center">
-                  <Icon name="cake" className="text-stone-600" />
+              <div className={`flex items-center gap-3 p-3 rounded-xl ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-50'} transition-all`}>
+                <div className={`w-10 h-10 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} flex items-center justify-center`}>
+                  <Icon name="cake" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-stone-500">Birthday</p>
-                  <p className="text-sm font-medium text-stone-800 truncate">
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>Birthday</p>
+                  <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-800'} truncate`}>
                     {user.birthday ? new Date(user.birthday).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}
                   </p>
                 </div>
-                <Icon name="edit" className="text-stone-300 text-sm" />
+                <Icon name="edit" className={`text-sm ${darkMode ? 'text-gray-600' : 'text-stone-300'}`} />
               </div>
               
               {/* Academic Info - read only */}
-              <div className="mt-4 pt-4 border-t border-stone-100">
-                <p className="text-xs text-stone-400 mb-2 px-3">Academic Information</p>
+              <div className={`mt-4 pt-4 border-t ${darkMode ? 'border-gray-700' : 'border-stone-100'}`}>
+                <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'} mb-2 px-3`}>Academic Information</p>
                 {adminOnlyFields.map((row, idx) => (
-                  <div key={idx} className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all">
-                    <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center">
-                      <Icon name={row.icon} className="text-stone-600" />
+                  <div key={idx} className={`flex items-center gap-3 p-3 rounded-xl ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-50'} transition-all`}>
+                    <div className={`w-10 h-10 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} flex items-center justify-center`}>
+                      <Icon name={row.icon} className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-stone-500">{row.label}</p>
-                      <p className="text-sm font-medium text-stone-800 truncate">{row.value}</p>
+                      <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>{row.label}</p>
+                      <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-800'} truncate`}>{row.value}</p>
                     </div>
-                    <Icon name="lock" className="text-stone-300 text-sm" />
+                    <Icon name="lock" className={`text-sm ${darkMode ? 'text-gray-600' : 'text-stone-300'}`} />
                   </div>
                 ))}
               </div>
               
               {/* Member Since */}
-              <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-all mt-4 pt-4 border-t border-stone-100">
-                <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center">
-                  <Icon name="event" className="text-stone-600" />
+              <div className={`flex items-center gap-3 p-3 rounded-xl ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-50'} transition-all mt-4 pt-4 border-t ${darkMode ? 'border-gray-700' : 'border-stone-100'}`}>
+                <div className={`w-10 h-10 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} flex items-center justify-center`}>
+                  <Icon name="event" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-stone-500">Member Since</p>
-                  <p className="text-sm font-medium text-stone-800 truncate">
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>Member Since</p>
+                  <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-800'} truncate`}>
                     {user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '-'}
                   </p>
                 </div>
@@ -2504,10 +2546,10 @@ const ProfilePage = ({
             </div>
 
             {/* Actions */}
-            <div className="p-4 border-t border-stone-100 space-y-3">
+            <div className={`p-4 border-t ${darkMode ? 'border-gray-700' : 'border-stone-100'} space-y-3`}>
               <button
                 onClick={onLogout}
-                className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-semibold hover:bg-red-100 transition-all flex items-center justify-center gap-2"
+                className={`w-full py-3 ${darkMode ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50' : 'bg-red-50 text-red-600 hover:bg-red-100'} rounded-xl font-semibold transition-all flex items-center justify-center gap-2`}
               >
                 <Icon name="logout" />
                 Sign Out
@@ -2572,13 +2614,15 @@ const ClassPage = ({
   onBack,
   addToast,
   updateToast,
-  removeToast
+  removeToast,
+  darkMode = false
 }: {
   user: User;
   onBack: () => void;
   addToast: (message: string, type: Toast['type'], progress?: number) => number;
   updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
   removeToast: (id: number) => void;
+  darkMode?: boolean;
 }) => {
   const [classmates, setClassmates] = useState<Classmate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2707,18 +2751,37 @@ const ClassPage = ({
   });
 
   const getRoleColor = (role: string) => {
-    const colors: Record<string, string> = {
+    const colors: Record<string, string> = darkMode ? {
+      'superadmin': 'bg-red-900/30 text-red-400',
+      'admin': 'bg-amber-900/30 text-amber-400',
+      'faculty': 'bg-blue-900/30 text-blue-400',
+      'student': 'bg-gray-700 text-gray-300',
+      'guest': 'bg-gray-700 text-gray-400',
+    } : {
       'superadmin': 'bg-red-100 text-red-800',
       'admin': 'bg-amber-100 text-amber-800',
       'faculty': 'bg-blue-100 text-blue-800',
       'student': 'bg-stone-100 text-stone-600',
       'guest': 'bg-gray-100 text-gray-600',
     };
-    return colors[role] || 'bg-stone-100 text-stone-600';
+    return colors[role] || (darkMode ? 'bg-gray-700 text-gray-300' : 'bg-stone-100 text-stone-600');
   };
 
   const getPositionColor = (position: string) => {
-    const colors: Record<string, string> = {
+    const colors: Record<string, string> = darkMode ? {
+      'Mayor': 'bg-amber-900/30 text-amber-400',
+      'Vice Mayor': 'bg-blue-900/30 text-blue-400',
+      'Secretary': 'bg-purple-900/30 text-purple-400',
+      'Assistant Secretary': 'bg-violet-900/30 text-violet-400',
+      'Treasurer': 'bg-emerald-900/30 text-emerald-400',
+      'Auditor': 'bg-cyan-900/30 text-cyan-400',
+      'Business Manager': 'bg-orange-900/30 text-orange-400',
+      'Internal Public Information Officer': 'bg-pink-900/30 text-pink-400',
+      'External Public Information Officer': 'bg-rose-900/30 text-rose-400',
+      'Marshal 1': 'bg-indigo-900/30 text-indigo-400',
+      'Marshal 2': 'bg-indigo-900/30 text-indigo-400',
+      'Marshal 3': 'bg-indigo-900/30 text-indigo-400',
+    } : {
       'Mayor': 'bg-amber-100 text-amber-800',
       'Vice Mayor': 'bg-blue-100 text-blue-800',
       'Secretary': 'bg-purple-100 text-purple-800',
@@ -2732,7 +2795,7 @@ const ClassPage = ({
       'Marshal 2': 'bg-indigo-100 text-indigo-800',
       'Marshal 3': 'bg-indigo-100 text-indigo-800',
     };
-    return colors[position] || 'bg-stone-100 text-stone-600';
+    return colors[position] || (darkMode ? 'bg-gray-700 text-gray-300' : 'bg-stone-100 text-stone-600');
   };
 
   const formatRole = (role: string) => {
@@ -2749,49 +2812,49 @@ const ClassPage = ({
   };
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-8">
+    <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-stone-50'} pb-8`}>
       {/* Header */}
-      <header className="bg-white border-b border-stone-200 sticky top-0 z-40">
+      <header className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-40`}>
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
-                <Icon name="arrow_back" className="text-stone-600" />
+              <button onClick={onBack} className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-xl transition-colors`}>
+                <Icon name="arrow_back" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
               </button>
               <div>
-                <h1 className="text-xl font-bold text-stone-800">My Class</h1>
-                <p className="text-sm text-stone-500">Section {user.section} • {classmates.length} classmates</p>
+                <h1 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>My Class</h1>
+                <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>Section {user.section} • {classmates.length} classmates</p>
               </div>
             </div>
             
             {/* View Toggle */}
-            <div className="flex items-center gap-2 bg-stone-100 rounded-xl p-1">
+            <div className={`flex items-center gap-2 ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} rounded-xl p-1`}>
               <button
                 onClick={() => setViewMode('card')}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'card' ? 'bg-white shadow-sm' : 'hover:bg-stone-200'}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'card' ? (darkMode ? 'bg-gray-600 shadow-sm' : 'bg-white shadow-sm') : (darkMode ? 'hover:bg-gray-600' : 'hover:bg-stone-200')}`}
                 title="Card View"
               >
-                <Icon name="grid_view" className={viewMode === 'card' ? 'text-stone-800' : 'text-stone-500'} />
+                <Icon name="grid_view" className={viewMode === 'card' ? (darkMode ? 'text-white' : 'text-stone-800') : (darkMode ? 'text-gray-400' : 'text-stone-500')} />
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white shadow-sm' : 'hover:bg-stone-200'}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? (darkMode ? 'bg-gray-600 shadow-sm' : 'bg-white shadow-sm') : (darkMode ? 'hover:bg-gray-600' : 'hover:bg-stone-200')}`}
                 title="List View"
               >
-                <Icon name="view_list" className={viewMode === 'list' ? 'text-stone-800' : 'text-stone-500'} />
+                <Icon name="view_list" className={viewMode === 'list' ? (darkMode ? 'text-white' : 'text-stone-800') : (darkMode ? 'text-gray-400' : 'text-stone-500')} />
               </button>
             </div>
           </div>
           
           {/* Search Bar */}
           <div className="mt-4 relative">
-            <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+            <Icon name="search" className={`absolute left-3 top-1/2 -translate-y-1/2 ${darkMode ? 'text-gray-500' : 'text-stone-400'}`} />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search classmates..."
-              className="w-full pl-10 pr-4 py-3 bg-stone-100 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+              className={`w-full pl-10 pr-4 py-3 ${darkMode ? 'bg-gray-700 text-white placeholder-gray-500' : 'bg-stone-100'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none`}
             />
           </div>
         </div>
@@ -2800,26 +2863,26 @@ const ClassPage = ({
       <div className="max-w-4xl mx-auto px-4 py-6">
         {!user.section ? (
           <div className="text-center py-16">
-            <div className="w-20 h-20 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Icon name="group_off" className="text-4xl text-stone-400" />
+            <div className={`w-20 h-20 ${darkMode ? 'bg-gray-800' : 'bg-stone-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+              <Icon name="group_off" className={`text-4xl ${darkMode ? 'text-gray-600' : 'text-stone-400'}`} />
             </div>
-            <h3 className="text-xl font-bold text-stone-800 mb-2">No Section Assigned</h3>
-            <p className="text-stone-500">You need to have a section assigned to view your classmates.</p>
+            <h3 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'} mb-2`}>No Section Assigned</h3>
+            <p className={darkMode ? 'text-gray-400' : 'text-stone-500'}>You need to have a section assigned to view your classmates.</p>
           </div>
         ) : loading ? (
           <div className="text-center py-16">
-            <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-stone-500">Loading classmates...</p>
+            <div className={`w-8 h-8 border-2 ${darkMode ? 'border-gray-600 border-t-gray-300' : 'border-stone-300 border-t-stone-800'} rounded-full animate-spin mx-auto mb-4`} />
+            <p className={darkMode ? 'text-gray-400' : 'text-stone-500'}>Loading classmates...</p>
           </div>
         ) : sortedClassmates.length === 0 ? (
           <div className="text-center py-16">
-            <div className="w-20 h-20 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Icon name="person_search" className="text-4xl text-stone-400" />
+            <div className={`w-20 h-20 ${darkMode ? 'bg-gray-800' : 'bg-stone-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+              <Icon name="person_search" className={`text-4xl ${darkMode ? 'text-gray-600' : 'text-stone-400'}`} />
             </div>
-            <h3 className="text-xl font-bold text-stone-800 mb-2">
+            <h3 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'} mb-2`}>
               {searchQuery ? 'No Results Found' : 'No Classmates Yet'}
             </h3>
-            <p className="text-stone-500">
+            <p className={darkMode ? 'text-gray-400' : 'text-stone-500'}>
               {searchQuery ? 'Try a different search term.' : 'Be the first in your section!'}
             </p>
           </div>
@@ -2830,15 +2893,15 @@ const ClassPage = ({
               <button
                 key={classmate.idNumber}
                 onClick={() => setSelectedClassmate(classmate)}
-                className="bg-white rounded-2xl p-4 border border-stone-200 hover:border-stone-300 hover:shadow-md transition-all text-left group"
+                className={`${darkMode ? 'bg-gray-800 border-gray-700 hover:border-gray-600' : 'bg-white border-stone-200 hover:border-stone-300'} rounded-2xl p-4 border hover:shadow-md transition-all text-left group`}
               >
                 <div className="relative">
-                  <div className="w-16 h-16 mx-auto rounded-full bg-stone-200 overflow-hidden mb-3">
+                  <div className={`w-16 h-16 mx-auto rounded-full ${darkMode ? 'bg-gray-700' : 'bg-stone-200'} overflow-hidden mb-3`}>
                     {classmate.profilePicture ? (
                       <img src={classmate.profilePicture} alt={classmate.name} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-stone-300">
-                        <Icon name="person" className="text-2xl text-stone-500" />
+                      <div className={`w-full h-full flex items-center justify-center ${darkMode ? 'bg-gray-600' : 'bg-stone-300'}`}>
+                        <Icon name="person" className={`text-2xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />
                       </div>
                     )}
                   </div>
@@ -2848,9 +2911,9 @@ const ClassPage = ({
                     </div>
                   )}
                 </div>
-                <h3 className="font-semibold text-stone-800 text-sm text-center truncate">{classmate.name}</h3>
+                <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'} text-sm text-center truncate`}>{classmate.name}</h3>
                 {classmate.username && (
-                  <p className="text-xs text-stone-400 text-center truncate">@{classmate.username}</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'} text-center truncate`}>@{classmate.username}</p>
                 )}
                 {/* Show position badge first, then role badge */}
                 {classmate.position && (
@@ -2866,7 +2929,7 @@ const ClassPage = ({
                 {isAdmin && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleAssignRole(classmate); }}
-                    className="mt-3 w-full py-1.5 text-xs bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                    className={`mt-3 w-full py-1.5 text-xs ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-stone-100 hover:bg-stone-200'} rounded-lg transition-colors opacity-0 group-hover:opacity-100`}
                   >
                     <Icon name="admin_panel_settings" className="text-sm" /> Assign
                   </button>
@@ -2876,20 +2939,20 @@ const ClassPage = ({
           </div>
         ) : (
           /* List View */
-          <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100 overflow-hidden">
+          <div className={`${darkMode ? 'bg-gray-800 border-gray-700 divide-gray-700' : 'bg-white border-stone-200 divide-stone-100'} rounded-2xl border divide-y overflow-hidden`}>
             {sortedClassmates.map(classmate => (
               <button
                 key={classmate.idNumber}
                 onClick={() => setSelectedClassmate(classmate)}
-                className="w-full p-3 sm:p-4 hover:bg-stone-50 transition-all flex items-center gap-3 sm:gap-4 text-left group"
+                className={`w-full p-3 sm:p-4 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-50'} transition-all flex items-center gap-3 sm:gap-4 text-left group`}
               >
                 <div className="relative flex-shrink-0">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-stone-200 overflow-hidden">
+                  <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-stone-200'} overflow-hidden`}>
                     {classmate.profilePicture ? (
                       <img src={classmate.profilePicture} alt={classmate.name} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-stone-300">
-                        <Icon name="person" className="text-lg sm:text-xl text-stone-500" />
+                      <div className={`w-full h-full flex items-center justify-center ${darkMode ? 'bg-gray-600' : 'bg-stone-300'}`}>
+                        <Icon name="person" className={`text-lg sm:text-xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />
                       </div>
                     )}
                   </div>
@@ -2901,7 +2964,7 @@ const ClassPage = ({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                    <h3 className="font-semibold text-stone-800 truncate text-sm sm:text-base">{classmate.name}</h3>
+                    <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'} truncate text-sm sm:text-base`}>{classmate.name}</h3>
                     {classmate.position && (
                       <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full ${getPositionColor(classmate.position)}`}>
                         {formatPosition(classmate.position)}
@@ -2913,20 +2976,20 @@ const ClassPage = ({
                       </span>
                     )}
                   </div>
-                  <p className="text-xs sm:text-sm text-stone-500 truncate">
+                  <p className={`text-xs sm:text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'} truncate`}>
                     {classmate.username ? `@${classmate.username}` : classmate.idNumber}
                   </p>
                 </div>
                 {isAdmin && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleAssignRole(classmate); }}
-                    className="p-1.5 sm:p-2 hover:bg-stone-200 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                    className={`p-1.5 sm:p-2 ${darkMode ? 'hover:bg-gray-600' : 'hover:bg-stone-200'} rounded-lg transition-colors opacity-0 group-hover:opacity-100`}
                     title="Assign Role"
                   >
-                    <Icon name="admin_panel_settings" className="text-stone-600 text-lg sm:text-xl" />
+                    <Icon name="admin_panel_settings" className={`${darkMode ? 'text-gray-300' : 'text-stone-600'} text-lg sm:text-xl`} />
                   </button>
                 )}
-                <Icon name="chevron_right" className="text-stone-300 text-lg sm:text-xl" />
+                <Icon name="chevron_right" className={`${darkMode ? 'text-gray-600' : 'text-stone-300'} text-lg sm:text-xl`} />
               </button>
             ))}
           </div>
@@ -2936,23 +2999,23 @@ const ClassPage = ({
       {/* Classmate Detail Modal */}
       {selectedClassmate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl modal-content max-h-[90vh] overflow-y-auto relative">
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-sm shadow-xl modal-content max-h-[90vh] overflow-y-auto relative`}>
             {/* Close button */}
             <button 
               onClick={() => setSelectedClassmate(null)}
-              className="absolute top-2 right-2 sm:top-3 sm:right-3 p-1.5 sm:p-2 hover:bg-stone-100 rounded-full transition-colors z-10"
+              className={`absolute top-2 right-2 sm:top-3 sm:right-3 p-1.5 sm:p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-full transition-colors z-10`}
             >
-              <Icon name="close" className="text-stone-500" />
+              <Icon name="close" className={darkMode ? 'text-gray-400' : 'text-stone-500'} />
             </button>
             
-            <div className="p-4 sm:p-6 text-center border-b border-stone-100">
+            <div className={`p-4 sm:p-6 text-center border-b ${darkMode ? 'border-gray-700' : 'border-stone-100'}`}>
               <div className="relative inline-block">
-                <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-full bg-stone-200 overflow-hidden mb-3 border-4 border-white shadow-lg">
+                <div className={`w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-full ${darkMode ? 'bg-gray-700' : 'bg-stone-200'} overflow-hidden mb-3 border-4 ${darkMode ? 'border-gray-800' : 'border-white'} shadow-lg`}>
                   {selectedClassmate.profilePicture ? (
                     <img src={selectedClassmate.profilePicture} alt={selectedClassmate.name} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-stone-300">
-                      <Icon name="person" className="text-3xl sm:text-4xl text-stone-500" />
+                    <div className={`w-full h-full flex items-center justify-center ${darkMode ? 'bg-gray-600' : 'bg-stone-300'}`}>
+                      <Icon name="person" className={`text-3xl sm:text-4xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />
                     </div>
                   )}
                 </div>
@@ -2962,9 +3025,9 @@ const ClassPage = ({
                   </div>
                 )}
               </div>
-              <h2 className="text-lg sm:text-xl font-bold text-stone-800">{selectedClassmate.name}</h2>
+              <h2 className={`text-lg sm:text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{selectedClassmate.name}</h2>
               {selectedClassmate.username && (
-                <p className="text-sm text-stone-500">@{selectedClassmate.username}</p>
+                <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>@{selectedClassmate.username}</p>
               )}
               
               {/* Position Badge */}
@@ -2985,38 +3048,38 @@ const ClassPage = ({
             </div>
             
             <div className="p-3 sm:p-4 space-y-2">
-              <div className="flex items-center gap-3 p-2.5 sm:p-3 bg-stone-50 rounded-xl">
-                <Icon name="badge" className="text-stone-500 text-lg sm:text-xl" />
+              <div className={`flex items-center gap-3 p-2.5 sm:p-3 ${darkMode ? 'bg-gray-700' : 'bg-stone-50'} rounded-xl`}>
+                <Icon name="badge" className={`${darkMode ? 'text-gray-400' : 'text-stone-500'} text-lg sm:text-xl`} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-stone-400">ID Number</p>
-                  <p className="text-sm font-medium text-stone-700">{selectedClassmate.idNumber}</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>ID Number</p>
+                  <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-700'}`}>{selectedClassmate.idNumber}</p>
                 </div>
               </div>
               
-              <div className="flex items-center gap-3 p-2.5 sm:p-3 bg-stone-50 rounded-xl">
-                <Icon name="psychology" className="text-stone-500 text-lg sm:text-xl" />
+              <div className={`flex items-center gap-3 p-2.5 sm:p-3 ${darkMode ? 'bg-gray-700' : 'bg-stone-50'} rounded-xl`}>
+                <Icon name="psychology" className={`${darkMode ? 'text-gray-400' : 'text-stone-500'} text-lg sm:text-xl`} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-stone-400">Major</p>
-                  <p className="text-sm font-medium text-stone-700">{selectedClassmate.major || '-'}</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Major</p>
+                  <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-700'}`}>{selectedClassmate.major || '-'}</p>
                 </div>
               </div>
               
               {selectedClassmate.email && (
-                <div className="flex items-center gap-3 p-2.5 sm:p-3 bg-stone-50 rounded-xl">
-                  <Icon name="mail" className="text-stone-500 text-lg sm:text-xl" />
+                <div className={`flex items-center gap-3 p-2.5 sm:p-3 ${darkMode ? 'bg-gray-700' : 'bg-stone-50'} rounded-xl`}>
+                  <Icon name="mail" className={`${darkMode ? 'text-gray-400' : 'text-stone-500'} text-lg sm:text-xl`} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs text-stone-400">Email</p>
-                    <p className="text-sm font-medium text-stone-700 truncate">{selectedClassmate.email}</p>
+                    <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Email</p>
+                    <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-700'} truncate`}>{selectedClassmate.email}</p>
                   </div>
                 </div>
               )}
               
               {selectedClassmate.birthday && (
-                <div className="flex items-center gap-3 p-2.5 sm:p-3 bg-stone-50 rounded-xl">
-                  <Icon name="cake" className="text-stone-500 text-lg sm:text-xl" />
+                <div className={`flex items-center gap-3 p-2.5 sm:p-3 ${darkMode ? 'bg-gray-700' : 'bg-stone-50'} rounded-xl`}>
+                  <Icon name="cake" className={`${darkMode ? 'text-gray-400' : 'text-stone-500'} text-lg sm:text-xl`} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs text-stone-400">Birthday</p>
-                    <p className="text-sm font-medium text-stone-700">
+                    <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Birthday</p>
+                    <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-700'}`}>
                       {new Date(selectedClassmate.birthday).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
                     </p>
                   </div>
@@ -3024,11 +3087,11 @@ const ClassPage = ({
               )}
             </div>
             
-            <div className="p-3 sm:p-4 border-t border-stone-100 flex gap-2 sm:gap-3">
+            <div className={`p-3 sm:p-4 border-t ${darkMode ? 'border-gray-700' : 'border-stone-100'} flex gap-2 sm:gap-3`}>
               {isAdmin && (
                 <button
                   onClick={() => { setSelectedClassmate(null); handleAssignRole(selectedClassmate); }}
-                  className="flex-1 py-2.5 sm:py-3 bg-purple-100 text-purple-700 rounded-xl font-semibold hover:bg-purple-200 transition-all flex items-center justify-center gap-1.5 sm:gap-2 text-sm sm:text-base"
+                  className={`flex-1 py-2.5 sm:py-3 ${darkMode ? 'bg-purple-900/30 text-purple-400 hover:bg-purple-900/50' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'} rounded-xl font-semibold transition-all flex items-center justify-center gap-1.5 sm:gap-2 text-sm sm:text-base`}
                 >
                   <Icon name="admin_panel_settings" className="text-lg sm:text-xl" />
                   <span className="hidden sm:inline">Assign Role</span>
@@ -3037,7 +3100,7 @@ const ClassPage = ({
               )}
               <button
                 onClick={() => setSelectedClassmate(null)}
-                className={`${isAdmin ? 'flex-1' : 'w-full'} py-2.5 sm:py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-all text-sm sm:text-base`}
+                className={`${isAdmin ? 'flex-1' : 'w-full'} py-2.5 sm:py-3 ${darkMode ? 'bg-gray-600 hover:bg-gray-500' : 'bg-stone-800 hover:bg-stone-900'} text-white rounded-xl font-semibold transition-all text-sm sm:text-base`}
               >
                 Close
               </button>
@@ -3049,73 +3112,73 @@ const ClassPage = ({
       {/* Role Assignment Modal */}
       {showRoleModal && editingRole && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl modal-content max-h-[90vh] overflow-y-auto">
-            <div className="p-3 sm:p-4 border-b border-stone-100 flex items-center justify-between">
-              <h2 className="text-base sm:text-lg font-bold text-stone-800">Assign Role & Position</h2>
-              <button onClick={() => { setShowRoleModal(false); setEditingRole(null); }} className="text-stone-400 hover:text-stone-600 p-1">
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-sm shadow-xl modal-content max-h-[90vh] overflow-y-auto`}>
+            <div className={`p-3 sm:p-4 border-b ${darkMode ? 'border-gray-700' : 'border-stone-100'} flex items-center justify-between`}>
+              <h2 className={`text-base sm:text-lg font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Assign Role & Position</h2>
+              <button onClick={() => { setShowRoleModal(false); setEditingRole(null); }} className={`${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-stone-400 hover:text-stone-600'} p-1`}>
                 <Icon name="close" />
               </button>
             </div>
             
             <div className="p-3 sm:p-4">
-              <div className="flex items-center gap-3 mb-4 sm:mb-6 p-2.5 sm:p-3 bg-stone-50 rounded-xl">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-stone-200 overflow-hidden flex-shrink-0">
+              <div className={`flex items-center gap-3 mb-4 sm:mb-6 p-2.5 sm:p-3 ${darkMode ? 'bg-gray-700' : 'bg-stone-50'} rounded-xl`}>
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full ${darkMode ? 'bg-gray-600' : 'bg-stone-200'} overflow-hidden flex-shrink-0`}>
                   {editingRole.classmate.profilePicture ? (
                     <img src={editingRole.classmate.profilePicture} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-stone-300">
-                      <Icon name="person" className="text-lg sm:text-xl text-stone-500" />
+                    <div className={`w-full h-full flex items-center justify-center ${darkMode ? 'bg-gray-600' : 'bg-stone-300'}`}>
+                      <Icon name="person" className={`text-lg sm:text-xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />
                     </div>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-stone-800 truncate">{editingRole.classmate.name}</h3>
-                  <p className="text-xs sm:text-sm text-stone-500">{editingRole.classmate.idNumber}</p>
+                  <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'} truncate`}>{editingRole.classmate.name}</h3>
+                  <p className={`text-xs sm:text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{editingRole.classmate.idNumber}</p>
                 </div>
               </div>
               
               <div className="space-y-3 sm:space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-stone-600 mb-1.5 sm:mb-2">Role</label>
+                  <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1.5 sm:mb-2`}>Role</label>
                   <select
                     value={editingRole.role}
                     onChange={(e) => setEditingRole(prev => prev ? { ...prev, role: e.target.value } : null)}
-                    className="w-full p-2.5 sm:p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white text-sm sm:text-base"
+                    className={`w-full p-2.5 sm:p-3 border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-stone-200 bg-white'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none text-sm sm:text-base`}
                   >
                     {ROLE_OPTIONS.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
-                  <p className="text-xs text-stone-400 mt-1">User's access level in the system</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'} mt-1`}>User's access level in the system</p>
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-stone-600 mb-1.5 sm:mb-2">Class Position</label>
+                  <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1.5 sm:mb-2`}>Class Position</label>
                   <select
                     value={editingRole.position}
                     onChange={(e) => setEditingRole(prev => prev ? { ...prev, position: e.target.value } : null)}
-                    className="w-full p-2.5 sm:p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white text-sm sm:text-base"
+                    className={`w-full p-2.5 sm:p-3 border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-stone-200 bg-white'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none text-sm sm:text-base`}
                   >
                     {POSITION_OPTIONS.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
-                  <p className="text-xs text-stone-400 mt-1">Class officer position (if applicable)</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'} mt-1`}>Class officer position (if applicable)</p>
                 </div>
               </div>
             </div>
             
-            <div className="p-3 sm:p-4 border-t border-stone-100 flex gap-2 sm:gap-3">
+            <div className={`p-3 sm:p-4 border-t ${darkMode ? 'border-gray-700' : 'border-stone-100'} flex gap-2 sm:gap-3`}>
               <button
                 onClick={() => { setShowRoleModal(false); setEditingRole(null); }}
-                className="flex-1 py-2.5 sm:py-3 border border-stone-300 text-stone-700 rounded-xl font-semibold hover:bg-stone-50 transition-all text-sm sm:text-base"
+                className={`flex-1 py-2.5 sm:py-3 border ${darkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-stone-300 text-stone-700 hover:bg-stone-50'} rounded-xl font-semibold transition-all text-sm sm:text-base`}
               >
                 Cancel
               </button>
               <button
                 onClick={saveRole}
                 disabled={savingRole}
-                className="flex-1 py-2.5 sm:py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5 sm:gap-2 text-sm sm:text-base"
+                className={`flex-1 py-2.5 sm:py-3 ${darkMode ? 'bg-gray-600 hover:bg-gray-500' : 'bg-stone-800 hover:bg-stone-900'} text-white rounded-xl font-semibold disabled:opacity-50 transition-all flex items-center justify-center gap-1.5 sm:gap-2 text-sm sm:text-base`}
               >
                 {savingRole ? (
                   <>
@@ -3139,42 +3202,42 @@ const ClassPage = ({
 };
 
 // Finance Page Component (Under Development)
-const FinancePage = ({ onBack }: { onBack: () => void }) => {
+const FinancePage = ({ onBack, darkMode }: { onBack: () => void; darkMode: boolean }) => {
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-stone-50'}`}>
       {/* Header */}
-      <header className="bg-white border-b border-stone-200 sticky top-0 z-40">
+      <header className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-40`}>
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
-            <Icon name="arrow_back" className="text-stone-600" />
+          <button onClick={onBack} className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-xl transition-colors`}>
+            <Icon name="arrow_back" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-stone-800">Finance</h1>
-            <p className="text-xs text-stone-500">Track payments & dues</p>
+            <h1 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Finance</h1>
+            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>Track payments & dues</p>
           </div>
         </div>
       </header>
 
       {/* Under Development Notice */}
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-amber-50 border-2 border-dashed border-amber-300 rounded-2xl p-8 text-center">
-          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Icon name="engineering" className="text-4xl text-amber-600" />
+        <div className={`${darkMode ? 'bg-amber-900/20 border-amber-700' : 'bg-amber-50 border-amber-300'} border-2 border-dashed rounded-2xl p-8 text-center`}>
+          <div className={`w-20 h-20 ${darkMode ? 'bg-amber-900/30' : 'bg-amber-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+            <Icon name="engineering" className={`text-4xl ${darkMode ? 'text-amber-400' : 'text-amber-600'}`} />
           </div>
-          <h2 className="text-2xl font-bold text-amber-800 mb-2">Under Development</h2>
-          <p className="text-amber-700 mb-4">The Finance module is currently being built. Check back soon!</p>
-          <div className="flex flex-wrap gap-3 justify-center text-sm text-amber-600">
-            <span className="px-3 py-1.5 bg-amber-100 rounded-full flex items-center gap-1.5">
+          <h2 className={`text-2xl font-bold ${darkMode ? 'text-amber-300' : 'text-amber-800'} mb-2`}>Under Development</h2>
+          <p className={`${darkMode ? 'text-amber-400' : 'text-amber-700'} mb-4`}>The Finance module is currently being built. Check back soon!</p>
+          <div className={`flex flex-wrap gap-3 justify-center text-sm ${darkMode ? 'text-amber-400' : 'text-amber-600'}`}>
+            <span className={`px-3 py-1.5 ${darkMode ? 'bg-amber-900/30' : 'bg-amber-100'} rounded-full flex items-center gap-1.5`}>
               <Icon name="payments" className="text-base" /> Payment Tracking
             </span>
-            <span className="px-3 py-1.5 bg-amber-100 rounded-full flex items-center gap-1.5">
+            <span className={`px-3 py-1.5 ${darkMode ? 'bg-amber-900/30' : 'bg-amber-100'} rounded-full flex items-center gap-1.5`}>
               <Icon name="receipt_long" className="text-base" /> Dues Management
             </span>
-            <span className="px-3 py-1.5 bg-amber-100 rounded-full flex items-center gap-1.5">
+            <span className={`px-3 py-1.5 ${darkMode ? 'bg-amber-900/30' : 'bg-amber-100'} rounded-full flex items-center gap-1.5`}>
               <Icon name="account_balance" className="text-base" /> Balance History
             </span>
           </div>
-          <p className="text-xs text-amber-500 mt-6">Expected features coming in future updates</p>
+          <p className={`text-xs ${darkMode ? 'text-amber-500' : 'text-amber-500'} mt-6`}>Expected features coming in future updates</p>
         </div>
       </div>
     </div>
@@ -3182,87 +3245,1432 @@ const FinancePage = ({ onBack }: { onBack: () => void }) => {
 };
 
 // Attendance Page Component (Under Development)
-const AttendancePage = ({ onBack }: { onBack: () => void }) => {
+const AttendancePage = ({ onBack, darkMode }: { onBack: () => void; darkMode: boolean }) => {
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-stone-50'}`}>
       {/* Header */}
-      <header className="bg-white border-b border-stone-200 sticky top-0 z-40">
+      <header className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-40`}>
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
-            <Icon name="arrow_back" className="text-stone-600" />
+          <button onClick={onBack} className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-xl transition-colors`}>
+            <Icon name="arrow_back" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-stone-800">Attendance</h1>
-            <p className="text-xs text-stone-500">Track your attendance records</p>
+            <h1 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Attendance</h1>
+            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>Track your attendance records</p>
           </div>
         </div>
       </header>
 
       {/* Under Development Notice */}
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-blue-50 border-2 border-dashed border-blue-300 rounded-2xl p-8 text-center">
-          <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Icon name="engineering" className="text-4xl text-blue-600" />
+        <div className={`${darkMode ? 'bg-blue-900/20 border-blue-700' : 'bg-blue-50 border-blue-300'} border-2 border-dashed rounded-2xl p-8 text-center`}>
+          <div className={`w-20 h-20 ${darkMode ? 'bg-blue-900/30' : 'bg-blue-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+            <Icon name="engineering" className={`text-4xl ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
           </div>
-          <h2 className="text-2xl font-bold text-blue-800 mb-2">Under Development</h2>
-          <p className="text-blue-700 mb-4">The Attendance module is currently being built. Check back soon!</p>
-          <div className="flex flex-wrap gap-3 justify-center text-sm text-blue-600">
-            <span className="px-3 py-1.5 bg-blue-100 rounded-full flex items-center gap-1.5">
+          <h2 className={`text-2xl font-bold ${darkMode ? 'text-blue-300' : 'text-blue-800'} mb-2`}>Under Development</h2>
+          <p className={`${darkMode ? 'text-blue-400' : 'text-blue-700'} mb-4`}>The Attendance module is currently being built. Check back soon!</p>
+          <div className={`flex flex-wrap gap-3 justify-center text-sm ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+            <span className={`px-3 py-1.5 ${darkMode ? 'bg-blue-900/30' : 'bg-blue-100'} rounded-full flex items-center gap-1.5`}>
               <Icon name="fact_check" className="text-base" /> Attendance Records
             </span>
-            <span className="px-3 py-1.5 bg-blue-100 rounded-full flex items-center gap-1.5">
+            <span className={`px-3 py-1.5 ${darkMode ? 'bg-blue-900/30' : 'bg-blue-100'} rounded-full flex items-center gap-1.5`}>
               <Icon name="insert_chart" className="text-base" /> Statistics
             </span>
-            <span className="px-3 py-1.5 bg-blue-100 rounded-full flex items-center gap-1.5">
+            <span className={`px-3 py-1.5 ${darkMode ? 'bg-blue-900/30' : 'bg-blue-100'} rounded-full flex items-center gap-1.5`}>
               <Icon name="notifications_active" className="text-base" /> Absence Alerts
             </span>
           </div>
-          <p className="text-xs text-blue-500 mt-6">Expected features coming in future updates</p>
+          <p className={`text-xs ${darkMode ? 'text-blue-500' : 'text-blue-500'} mt-6`}>Expected features coming in future updates</p>
         </div>
       </div>
     </div>
   );
 };
 
-// Schedule Page Component (Under Development)
-const SchedulePage = ({ onBack }: { onBack: () => void }) => {
+// Schedule Page Component - Full Implementation
+const SchedulePage = ({ 
+  onBack,
+  user,
+  subjects,
+  subjectInfo,
+  addToast,
+  updateToast,
+  removeToast,
+  semesterConfig,
+  setSemesterConfig,
+  academicYear,
+  darkMode,
+  setDarkMode
+}: { 
+  onBack: () => void;
+  user: User | null;
+  subjects: string[];
+  subjectInfo: Record<string, SubjectInfo>;
+  addToast: (message: string, type: Toast['type'], progress?: number) => number;
+  updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
+  removeToast: (id: number) => void;
+  semesterConfig: Array<{ semester: string; startDate: string; endDate: string; academicYear: string; isActive: boolean }>;
+  setSemesterConfig: React.Dispatch<React.SetStateAction<Array<{ semester: string; startDate: string; endDate: string; academicYear: string; isActive: boolean }>>>;
+  academicYear: string;
+  darkMode: boolean;
+  setDarkMode: (mode: boolean) => void;
+}) => {
+  const [schedules, setSchedules] = useState<ClassSchedule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'calendar' | 'list' | 'table'>('list');
+  const [selectedSemester, setSelectedSemester] = useState<'1st' | '2nd' | ''>('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<ClassSchedule | null>(null);
+  const [selectedSchedule, setSelectedSchedule] = useState<ClassSchedule | null>(null);
+  const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [showSemesterConfig, setShowSemesterConfig] = useState(false);
+  const [isCreatingNewCourse, setIsCreatingNewCourse] = useState(false);
+  const [newCourseCode, setNewCourseCode] = useState('');
+  const [newCourseName, setNewCourseName] = useState('');
+  const [editingSemesterConfig, setEditingSemesterConfig] = useState<{
+    firstStart: string;
+    firstEnd: string;
+    secondStart: string;
+    secondEnd: string;
+    academicYear: string;
+  }>({
+    firstStart: '',
+    firstEnd: '',
+    secondStart: '',
+    secondEnd: '',
+    academicYear: ''
+  });
+
+  // Admin ID for super admin access
+  const ADMIN_USER_ID = '2025-00046';
+  const isAdmin = user?.idNumber === ADMIN_USER_ID;
+  
+  // Check if user can manage schedules (Mayor, Vice Mayor, Secretary, PIOs, Admin)
+  const canManage = user && (isAdmin || ['class-president', 'class-vice-president', 'class-secretary', 'internal-pio', 'external-pio'].includes(user.role || ''));
+  
+  // PIOs can only add non-semestral schedules (Admin can do everything)
+  const canManageSemestral = user && (isAdmin || ['class-president', 'class-vice-president', 'class-secretary'].includes(user.role || ''));
+
+  // Initialize semester config editing state from props
+  useEffect(() => {
+    if (semesterConfig.length > 0) {
+      const first = semesterConfig.find(s => s.semester === '1st');
+      const second = semesterConfig.find(s => s.semester === '2nd');
+      setEditingSemesterConfig({
+        firstStart: first?.startDate || '',
+        firstEnd: first?.endDate || '',
+        secondStart: second?.startDate || '',
+        secondEnd: second?.endDate || '',
+        academicYear: first?.academicYear || academicYear || ''
+      });
+    }
+  }, [semesterConfig, academicYear]);
+
+  // Save semester configuration
+  const handleSaveSemesterConfig = async () => {
+    if (!user || !canManage) return;
+    
+    const toastId = addToast('Saving semester configuration...', 'loading');
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'updateSemesterConfig',
+          config: {
+            firstSemesterStart: editingSemesterConfig.firstStart,
+            firstSemesterEnd: editingSemesterConfig.firstEnd,
+            secondSemesterStart: editingSemesterConfig.secondStart,
+            secondSemesterEnd: editingSemesterConfig.secondEnd,
+            academicYear: editingSemesterConfig.academicYear
+          },
+          userId: user.idNumber
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        updateToast(toastId, 'Semester configuration saved!', 'success');
+        setTimeout(() => removeToast(toastId), 3000);
+        // Update parent state
+        const newConfig = [
+          { 
+            semester: '1st', 
+            startDate: editingSemesterConfig.firstStart, 
+            endDate: editingSemesterConfig.firstEnd, 
+            academicYear: editingSemesterConfig.academicYear,
+            isActive: result.currentSemester === '1st'
+          },
+          { 
+            semester: '2nd', 
+            startDate: editingSemesterConfig.secondStart, 
+            endDate: editingSemesterConfig.secondEnd, 
+            academicYear: editingSemesterConfig.academicYear,
+            isActive: result.currentSemester === '2nd'
+          }
+        ];
+        setSemesterConfig(newConfig);
+        setShowSemesterConfig(false);
+      } else {
+        updateToast(toastId, result.error || 'Failed to save', 'error');
+        setTimeout(() => removeToast(toastId), 3000);
+      }
+    } catch (error) {
+      updateToast(toastId, 'Network error', 'error');
+      setTimeout(() => removeToast(toastId), 3000);
+    }
+  };
+
+  // Fetch schedules from backend
+  const fetchSchedules = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getClassSchedules', semester: selectedSemester || undefined })
+      });
+      const result = await response.json();
+      if (result.success) {
+        setSchedules(result.schedules || []);
+      } else {
+        console.error('Failed to fetch schedules:', result.error);
+      }
+    } catch (error) {
+      console.error('Error fetching schedules:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSchedules();
+  }, [selectedSemester]);
+
+  // Add schedule handler
+  const handleAddSchedule = async (scheduleData: Partial<ClassSchedule>) => {
+    if (!user) return false;
+    
+    const toastId = addToast('Adding schedule...', 'loading');
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'addClassSchedule',
+          ...scheduleData,
+          userId: user.idNumber,
+          userName: user.name
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        updateToast(toastId, 'Schedule added successfully!', 'success');
+        setTimeout(() => removeToast(toastId), 3000);
+        await fetchSchedules();
+        return true;
+      } else {
+        updateToast(toastId, result.error || 'Failed to add schedule', 'error');
+        setTimeout(() => removeToast(toastId), 3000);
+        return false;
+      }
+    } catch (error) {
+      updateToast(toastId, 'Network error', 'error');
+      setTimeout(() => removeToast(toastId), 3000);
+      return false;
+    }
+  };
+
+  // Update schedule handler
+  const handleUpdateSchedule = async (scheduleData: Partial<ClassSchedule>) => {
+    if (!user || !editingSchedule) return false;
+    
+    const toastId = addToast('Updating schedule...', 'loading');
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'updateClassSchedule',
+          scheduleId: editingSchedule.scheduleId,
+          ...scheduleData,
+          userId: user.idNumber
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        updateToast(toastId, 'Schedule updated successfully!', 'success');
+        setTimeout(() => removeToast(toastId), 3000);
+        await fetchSchedules();
+        return true;
+      } else {
+        updateToast(toastId, result.error || 'Failed to update schedule', 'error');
+        setTimeout(() => removeToast(toastId), 3000);
+        return false;
+      }
+    } catch (error) {
+      updateToast(toastId, 'Network error', 'error');
+      setTimeout(() => removeToast(toastId), 3000);
+      return false;
+    }
+  };
+
+  // Delete schedule handler
+  const handleDeleteSchedule = async (scheduleId: string) => {
+    if (!user) return;
+    
+    const toastId = addToast('Deleting schedule...', 'loading');
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'deleteClassSchedule',
+          scheduleId,
+          userId: user.idNumber
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        updateToast(toastId, 'Schedule deleted', 'success');
+        setTimeout(() => removeToast(toastId), 3000);
+        await fetchSchedules();
+      } else {
+        updateToast(toastId, result.error || 'Failed to delete', 'error');
+        setTimeout(() => removeToast(toastId), 3000);
+      }
+    } catch (error) {
+      updateToast(toastId, 'Network error', 'error');
+      setTimeout(() => removeToast(toastId), 3000);
+    }
+    setScheduleToDelete(null);
+  };
+
+  // Helper functions
+  const formatTime = (timeStr: string) => {
+    if (!timeStr) return '';
+    try {
+      const [hours, minutes] = timeStr.split(':');
+      const hour = parseInt(hours);
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const hour12 = hour % 12 || 12;
+      return `${hour12}:${minutes} ${ampm}`;
+    } catch {
+      return timeStr;
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const getScheduleTypeColor = (type: string) => {
+    switch (type) {
+      case 'semestral': return 'bg-purple-100 text-purple-700 border-purple-200';
+      case 'makeup': return 'bg-orange-100 text-orange-700 border-orange-200';
+      case 'activity': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'special': return 'bg-pink-100 text-pink-700 border-pink-200';
+      default: return 'bg-stone-100 text-stone-700 border-stone-200';
+    }
+  };
+
+  const getScheduleTypeIcon = (type: string) => {
+    switch (type) {
+      case 'semestral': return 'school';
+      case 'makeup': return 'update';
+      case 'activity': return 'celebration';
+      case 'special': return 'star';
+      default: return 'event';
+    }
+  };
+
+  // Separate semestral and special schedules
+  const semestralSchedules = schedules.filter(s => s.type === 'semestral');
+  const specialSchedules = schedules.filter(s => s.type !== 'semestral');
+
+  // Group semestral schedules by day
+  const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const schedulesByDay: Record<string, ClassSchedule[]> = {};
+  dayOrder.forEach(day => {
+    schedulesByDay[day] = semestralSchedules.filter(s => s.dayOfWeek === day).sort((a, b) => a.startTime.localeCompare(b.startTime));
+  });
+
+  // Calendar view helpers
+  const toDateKey = (d: Date | string) => {
+    const date = typeof d === 'string' ? new Date(d) : d;
+    return date.toISOString().split('T')[0];
+  };
+
+  const monthStart = new Date(calendarMonth);
+  monthStart.setDate(1);
+  const year = monthStart.getFullYear();
+  const month = monthStart.getMonth();
+  const startDay = monthStart.getDay();
+  const todayKey = toDateKey(new Date());
+
+  const gridDays = Array.from({ length: 42 }, (_, idx) => {
+    const date = new Date(year, month, idx - startDay + 1);
+    return { date, inMonth: date.getMonth() === month };
+  });
+
+  // Build calendar events map
+  const calendarEvents: Record<string, ClassSchedule[]> = {};
+  
+  // Add special schedules by their specific dates
+  specialSchedules.forEach(s => {
+    if (s.specificDate) {
+      const key = s.specificDate;
+      if (!calendarEvents[key]) calendarEvents[key] = [];
+      calendarEvents[key].push(s);
+    }
+  });
+
+  // Add semestral schedules for each day of week in the displayed month
+  gridDays.forEach(({ date, inMonth }) => {
+    if (!inMonth) return;
+    const dayName = dayOrder[date.getDay() === 0 ? 6 : date.getDay() - 1];
+    const actualDayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
+    const key = toDateKey(date);
+    
+    semestralSchedules.forEach(s => {
+      if (s.dayOfWeek === actualDayName) {
+        if (!calendarEvents[key]) calendarEvents[key] = [];
+        calendarEvents[key].push(s);
+      }
+    });
+  });
+
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className={`min-h-screen ${darkMode ? 'bg-stone-900' : 'bg-stone-50'}`}>
+      <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
       {/* Header */}
-      <header className="bg-white border-b border-stone-200 sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-xl transition-colors">
-            <Icon name="arrow_back" className="text-stone-600" />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-stone-800">Class Schedule</h1>
-            <p className="text-xs text-stone-500">Your weekly class timetable</p>
+      <header className={`${darkMode ? 'bg-stone-800 border-stone-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-40`}>
+        <div className="max-w-6xl mx-auto px-4 py-3">
+          {/* Mobile Header */}
+          <div className="flex items-center justify-between gap-2 sm:hidden">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <button onClick={onBack} className={`p-1.5 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-full flex-shrink-0`}>
+                <Icon name="arrow_back" className={`${darkMode ? 'text-stone-300' : 'text-stone-600'} text-xl`} />
+              </button>
+              <div className="min-w-0">
+                <h1 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'} text-base truncate`}>Class Schedule</h1>
+                <p className={`text-xs ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>{schedules.length} schedules</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              {canManage && (
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="p-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                >
+                  <Icon name="add" className="text-lg" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Desktop Header */}
+          <div className="hidden sm:flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button onClick={onBack} className="p-2 hover:bg-stone-100 rounded-full">
+                <Icon name="arrow_back" className="text-stone-600" />
+              </button>
+              <div>
+                <h1 className="text-xl font-bold text-stone-800">Class Schedule</h1>
+                <p className="text-xs text-stone-500">{schedules.length} total schedules</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Semester Filter */}
+              <select
+                value={selectedSemester}
+                onChange={(e) => setSelectedSemester(e.target.value as '1st' | '2nd' | '')}
+                className="px-3 py-2 border border-stone-200 rounded-xl text-sm bg-white"
+              >
+                <option value="">All Semesters</option>
+                <option value="1st">1st Semester</option>
+                <option value="2nd">2nd Semester</option>
+              </select>
+              {canManageSemestral && (
+                <button
+                  onClick={() => setShowSemesterConfig(true)}
+                  className="p-2 border border-stone-200 rounded-xl text-stone-600 hover:bg-stone-50 transition-colors"
+                  title="Semester Settings"
+                >
+                  <Icon name="settings" className="text-lg" />
+                </button>
+              )}
+              {canManage && (
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-medium hover:bg-purple-700 transition-colors"
+                >
+                  <Icon name="add" className="text-sm" />
+                  Add Schedule
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* View Mode Tabs */}
+          <div className="flex items-center gap-1 mt-3 bg-stone-100 p-1 rounded-xl">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                viewMode === 'list' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+              }`}
+            >
+              <Icon name="view_list" className="text-base" />
+              <span className="hidden sm:inline">List</span>
+            </button>
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                viewMode === 'calendar' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+              }`}
+            >
+              <Icon name="calendar_month" className="text-base" />
+              <span className="hidden sm:inline">Calendar</span>
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                viewMode === 'table' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+              }`}
+            >
+              <Icon name="table_chart" className="text-base" />
+              <span className="hidden sm:inline">Table</span>
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Under Development Notice */}
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-purple-50 border-2 border-dashed border-purple-300 rounded-2xl p-8 text-center">
-          <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Icon name="engineering" className="text-4xl text-purple-600" />
+      {/* Main Content */}
+      <main className="max-w-6xl mx-auto p-4">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
-          <h2 className="text-2xl font-bold text-purple-800 mb-2">Under Development</h2>
-          <p className="text-purple-700 mb-4">The Class Schedule module is currently being built. Check back soon!</p>
-          <div className="flex flex-wrap gap-3 justify-center text-sm text-purple-600">
-            <span className="px-3 py-1.5 bg-purple-100 rounded-full flex items-center gap-1.5">
-              <Icon name="calendar_month" className="text-base" /> Weekly Timetable
-            </span>
-            <span className="px-3 py-1.5 bg-purple-100 rounded-full flex items-center gap-1.5">
-              <Icon name="room" className="text-base" /> Room Information
-            </span>
-            <span className="px-3 py-1.5 bg-purple-100 rounded-full flex items-center gap-1.5">
-              <Icon name="alarm" className="text-base" /> Class Reminders
-            </span>
+        ) : schedules.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Icon name="calendar_month" className="text-4xl text-purple-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-stone-600 mb-2">No Schedules Yet</h3>
+            <p className="text-stone-400 mb-4">
+              {canManage ? 'Add your first class schedule to get started' : 'No class schedules have been added yet'}
+            </p>
+            {canManage && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-6 py-3 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 transition-colors"
+              >
+                Add Schedule
+              </button>
+            )}
           </div>
-          <p className="text-xs text-purple-500 mt-6">Expected features coming in future updates</p>
+        ) : (
+          <>
+            {/* LIST VIEW */}
+            {viewMode === 'list' && (
+              <div className="space-y-6">
+                {/* Semestral Schedules by Day */}
+                {semestralSchedules.length > 0 && (
+                  <div>
+                    <h2 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2">
+                      <Icon name="school" className="text-purple-600" />
+                      Semestral Schedule
+                      {selectedSemester && <span className="text-sm font-normal text-purple-600">({selectedSemester} Sem)</span>}
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {dayOrder.map(day => {
+                        const daySchedules = schedulesByDay[day];
+                        if (daySchedules.length === 0) return null;
+                        const isToday = day === ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
+                        
+                        return (
+                          <div key={day} className={`bg-white rounded-xl border ${isToday ? 'border-purple-300 ring-2 ring-purple-100' : 'border-stone-200'} overflow-hidden`}>
+                            <div className={`px-4 py-2 ${isToday ? 'bg-purple-600 text-white' : 'bg-stone-100 text-stone-700'} font-semibold text-sm flex items-center justify-between`}>
+                              <span>{day}</span>
+                              {isToday && <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">Today</span>}
+                            </div>
+                            <div className="divide-y divide-stone-100">
+                              {daySchedules.map(schedule => (
+                                <div
+                                  key={schedule.scheduleId}
+                                  onClick={() => setSelectedSchedule(schedule)}
+                                  className="p-3 hover:bg-stone-50 cursor-pointer transition-colors"
+                                >
+                                  <div className="flex items-start justify-between">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-stone-800">{schedule.courseCode}</span>
+                                        {schedule.semester && (
+                                          <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">{schedule.semester}</span>
+                                        )}
+                                      </div>
+                                      {schedule.courseName && (
+                                        <p className="text-xs text-stone-500 truncate">{schedule.courseName}</p>
+                                      )}
+                                      <div className="flex items-center gap-3 mt-1 text-xs text-stone-600">
+                                        <span className="flex items-center gap-1">
+                                          <Icon name="schedule" className="text-sm" />
+                                          {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
+                                        </span>
+                                        {schedule.classroom && (
+                                          <span className="flex items-center gap-1">
+                                            <Icon name="room" className="text-sm" />
+                                            {schedule.classroom}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {schedule.teacher && (
+                                        <p className="text-xs text-stone-400 mt-1">
+                                          <Icon name="person" className="text-sm inline mr-1" />{schedule.teacher}
+                                        </p>
+                                      )}
+                                    </div>
+                                    {canManage && (
+                                      <div className="flex items-center gap-1 flex-shrink-0">
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setEditingSchedule(schedule); }}
+                                          className="p-1 text-stone-400 hover:text-blue-500"
+                                        >
+                                          <Icon name="edit" className="text-sm" />
+                                        </button>
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setScheduleToDelete(schedule.scheduleId); }}
+                                          className="p-1 text-stone-400 hover:text-red-500"
+                                        >
+                                          <Icon name="delete" className="text-sm" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Special Schedules */}
+                {specialSchedules.length > 0 && (
+                  <div>
+                    <h2 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2">
+                      <Icon name="event" className="text-orange-500" />
+                      Special Schedules
+                    </h2>
+                    <div className="space-y-3">
+                      {specialSchedules.map(schedule => (
+                        <div
+                          key={schedule.scheduleId}
+                          onClick={() => setSelectedSchedule(schedule)}
+                          className={`bg-white border rounded-xl p-4 hover:shadow-md transition-all cursor-pointer ${
+                            schedule.status === 'today' ? 'border-green-300 bg-green-50' :
+                            schedule.status === 'completed' ? 'border-stone-200 opacity-60' :
+                            'border-stone-200 hover:border-purple-300'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0 flex-1">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${getScheduleTypeColor(schedule.type)}`}>
+                                <Icon name={getScheduleTypeIcon(schedule.type)} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-stone-800">{schedule.courseCode}</span>
+                                  <span className={`px-2 py-0.5 text-xs rounded-full font-medium capitalize ${getScheduleTypeColor(schedule.type)}`}>
+                                    {schedule.type}
+                                  </span>
+                                  {schedule.status === 'today' && (
+                                    <span className="px-2 py-0.5 text-xs rounded-full bg-green-500 text-white font-medium">
+                                      Today
+                                    </span>
+                                  )}
+                                </div>
+                                {schedule.courseName && (
+                                  <p className="text-sm text-stone-500">{schedule.courseName}</p>
+                                )}
+                                <div className="flex items-center gap-4 mt-2 text-sm text-stone-600 flex-wrap">
+                                  <span className="flex items-center gap-1">
+                                    <Icon name="event" className="text-base" />
+                                    {formatDate(schedule.specificDate)}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Icon name="schedule" className="text-base" />
+                                    {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
+                                  </span>
+                                  {schedule.classroom && (
+                                    <span className="flex items-center gap-1">
+                                      <Icon name="room" className="text-base" />
+                                      {schedule.classroom}
+                                    </span>
+                                  )}
+                                </div>
+                                {schedule.teacher && (
+                                  <p className="text-xs text-stone-400 mt-1">Teacher: {schedule.teacher}</p>
+                                )}
+                                {schedule.details && (
+                                  <p className="text-xs text-stone-500 mt-1 line-clamp-2 italic">"{schedule.details}"</p>
+                                )}
+                              </div>
+                            </div>
+                            {canManage && (
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setEditingSchedule(schedule); }}
+                                  className="p-1.5 text-stone-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg"
+                                >
+                                  <Icon name="edit" className="text-sm" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setScheduleToDelete(schedule.scheduleId); }}
+                                  className="p-1.5 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                                >
+                                  <Icon name="delete" className="text-sm" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* CALENDAR VIEW */}
+            {viewMode === 'calendar' && (
+              <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+                {/* Calendar Header */}
+                <div className="flex items-center justify-between p-4 border-b border-stone-200 bg-stone-50">
+                  <button
+                    onClick={() => setCalendarMonth(new Date(year, month - 1, 1))}
+                    className="p-2 hover:bg-stone-200 rounded-lg"
+                  >
+                    <Icon name="chevron_left" className="text-stone-600" />
+                  </button>
+                  <h3 className="text-lg font-semibold text-stone-800">
+                    {new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </h3>
+                  <button
+                    onClick={() => setCalendarMonth(new Date(year, month + 1, 1))}
+                    className="p-2 hover:bg-stone-200 rounded-lg"
+                  >
+                    <Icon name="chevron_right" className="text-stone-600" />
+                  </button>
+                </div>
+
+                {/* Calendar Grid */}
+                <div className="grid grid-cols-7 text-center text-xs font-medium text-stone-500 border-b border-stone-200">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                    <div key={d} className="py-2 bg-stone-50">{d}</div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7">
+                  {gridDays.map(({ date, inMonth }, idx) => {
+                    const key = toDateKey(date);
+                    const events = calendarEvents[key] || [];
+                    const isToday = key === todayKey;
+                    
+                    return (
+                      <div
+                        key={idx}
+                        className={`min-h-[80px] sm:min-h-[100px] p-1 border-b border-r border-stone-100 ${
+                          !inMonth ? 'bg-stone-50' : 'bg-white'
+                        }`}
+                      >
+                        <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${
+                          isToday ? 'bg-purple-600 text-white' : !inMonth ? 'text-stone-300' : 'text-stone-600'
+                        }`}>
+                          {date.getDate()}
+                        </div>
+                        <div className="space-y-0.5 overflow-y-auto max-h-[60px] sm:max-h-[80px]">
+                          {events.slice(0, 3).map((event, i) => (
+                            <button
+                              key={event.scheduleId + '-' + i}
+                              onClick={() => setSelectedSchedule(event)}
+                              className={`w-full text-left px-1 py-0.5 text-xs rounded truncate ${
+                                event.type === 'semestral' ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' :
+                                event.type === 'makeup' ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' :
+                                event.type === 'activity' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' :
+                                'bg-pink-100 text-pink-700 hover:bg-pink-200'
+                              }`}
+                            >
+                              {event.courseCode}
+                            </button>
+                          ))}
+                          {events.length > 3 && (
+                            <p className="text-xs text-stone-400 px-1">+{events.length - 3} more</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Legend */}
+                <div className="p-3 bg-stone-50 border-t border-stone-200 flex flex-wrap gap-3 text-xs">
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 bg-purple-200 rounded"></span> Semestral</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 bg-orange-200 rounded"></span> Makeup</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 bg-blue-200 rounded"></span> Activity</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 bg-pink-200 rounded"></span> Special</span>
+                </div>
+              </div>
+            )}
+
+            {/* TABLE VIEW - Semestral Only */}
+            {viewMode === 'table' && (
+              <div>
+                <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+                  <div className="p-4 bg-purple-50 border-b border-purple-100">
+                    <h3 className="font-semibold text-purple-800 flex items-center gap-2">
+                      <Icon name="table_chart" />
+                      Semestral Schedule Table
+                      {selectedSemester && <span className="text-sm font-normal">({selectedSemester} Semester)</span>}
+                    </h3>
+                    <p className="text-xs text-purple-600 mt-1">Regular class schedules for the semester</p>
+                  </div>
+                  
+                  {semestralSchedules.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <Icon name="event_busy" className="text-4xl text-stone-300 mb-2" />
+                      <p className="text-stone-500">No semestral schedules found</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-stone-50 border-b border-stone-200">
+                          <tr>
+                            <th className="text-left py-3 px-4 font-semibold text-stone-700">Day</th>
+                            <th className="text-left py-3 px-4 font-semibold text-stone-700">Time</th>
+                            <th className="text-left py-3 px-4 font-semibold text-stone-700">Course</th>
+                            <th className="text-left py-3 px-4 font-semibold text-stone-700 hidden md:table-cell">Course Title</th>
+                            <th className="text-left py-3 px-4 font-semibold text-stone-700">Teacher</th>
+                            <th className="text-left py-3 px-4 font-semibold text-stone-700">Room</th>
+                            <th className="text-left py-3 px-4 font-semibold text-stone-700 hidden lg:table-cell">Sem</th>
+                            {canManage && <th className="text-center py-3 px-4 font-semibold text-stone-700 w-20">Actions</th>}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-100">
+                          {dayOrder.map(day => {
+                            const daySchedules = schedulesByDay[day];
+                            if (daySchedules.length === 0) return null;
+                            const isToday = day === ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
+                            
+                            return daySchedules.map((schedule, idx) => (
+                              <tr 
+                                key={schedule.scheduleId} 
+                                className={`hover:bg-stone-50 cursor-pointer ${isToday ? 'bg-purple-50' : ''}`}
+                                onClick={() => setSelectedSchedule(schedule)}
+                              >
+                                <td className="py-3 px-4 font-medium text-stone-700">
+                                  {idx === 0 && (
+                                    <div className="flex items-center gap-2">
+                                      <span className={isToday ? 'text-purple-700' : ''}>{day.substring(0, 3)}</span>
+                                      {isToday && <span className="text-xs bg-purple-600 text-white px-1.5 py-0.5 rounded">Today</span>}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-stone-600 whitespace-nowrap">
+                                  {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
+                                </td>
+                                <td className="py-3 px-4 font-semibold text-stone-800">{schedule.courseCode}</td>
+                                <td className="py-3 px-4 text-stone-600 hidden md:table-cell max-w-[200px] truncate">{schedule.courseName || '-'}</td>
+                                <td className="py-3 px-4 text-stone-600">{schedule.teacher || '-'}</td>
+                                <td className="py-3 px-4 text-stone-600">{schedule.classroom || '-'}</td>
+                                <td className="py-3 px-4 text-stone-500 hidden lg:table-cell">
+                                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
+                                    {schedule.semester || '-'}
+                                  </span>
+                                </td>
+                                {canManage && (
+                                  <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        onClick={() => setEditingSchedule(schedule)}
+                                        className="p-1 text-stone-400 hover:text-blue-500"
+                                      >
+                                        <Icon name="edit" className="text-sm" />
+                                      </button>
+                                      <button
+                                        onClick={() => setScheduleToDelete(schedule.scheduleId)}
+                                        className="p-1 text-stone-400 hover:text-red-500"
+                                      >
+                                        <Icon name="delete" className="text-sm" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                            ));
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Special Schedules Below Table */}
+                {specialSchedules.length > 0 && (
+                  <div className="mt-6">
+                    <h3 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2">
+                      <Icon name="event" className="text-orange-500" />
+                      Special Schedules
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {specialSchedules.map(schedule => (
+                        <div
+                          key={schedule.scheduleId}
+                          onClick={() => setSelectedSchedule(schedule)}
+                          className={`bg-white border rounded-xl p-3 hover:shadow-md transition-all cursor-pointer ${getScheduleTypeColor(schedule.type)}`}
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <Icon name={getScheduleTypeIcon(schedule.type)} className="text-lg" />
+                            <span className="font-bold">{schedule.courseCode}</span>
+                            <span className="text-xs px-1.5 py-0.5 rounded capitalize opacity-80">{schedule.type}</span>
+                          </div>
+                          <p className="text-xs opacity-80">{formatDate(schedule.specificDate)} • {formatTime(schedule.startTime)}</p>
+                          {schedule.classroom && <p className="text-xs opacity-70">Room: {schedule.classroom}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </main>
+
+      {/* Semester Configuration Modal */}
+      {showSemesterConfig && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowSemesterConfig(false)}>
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Semester Settings</h2>
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>Configure academic year and semester dates</p>
+                </div>
+                <button
+                  onClick={() => setShowSemesterConfig(false)}
+                  className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-lg`}
+                >
+                  <Icon name="close" className={darkMode ? 'text-gray-400' : 'text-stone-600'} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Academic Year */}
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-2">Academic Year</label>
+                  <input
+                    type="text"
+                    value={editingSemesterConfig.academicYear}
+                    onChange={(e) => setEditingSemesterConfig(prev => ({ ...prev, academicYear: e.target.value }))}
+                    placeholder="2024-2025"
+                    className="w-full p-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                {/* 1st Semester */}
+                <div className="bg-purple-50 rounded-xl p-4">
+                  <h3 className="font-semibold text-purple-800 mb-3 flex items-center gap-2">
+                    <Icon name="looks_one" className="text-purple-600" />
+                    1st Semester
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-purple-700 mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={editingSemesterConfig.firstStart}
+                        onChange={(e) => setEditingSemesterConfig(prev => ({ ...prev, firstStart: e.target.value }))}
+                        className="w-full p-2 border border-purple-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-purple-700 mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={editingSemesterConfig.firstEnd}
+                        onChange={(e) => setEditingSemesterConfig(prev => ({ ...prev, firstEnd: e.target.value }))}
+                        className="w-full p-2 border border-purple-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2nd Semester */}
+                <div className="bg-blue-50 rounded-xl p-4">
+                  <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                    <Icon name="looks_two" className="text-blue-600" />
+                    2nd Semester
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-blue-700 mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={editingSemesterConfig.secondStart}
+                        onChange={(e) => setEditingSemesterConfig(prev => ({ ...prev, secondStart: e.target.value }))}
+                        className="w-full p-2 border border-blue-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-blue-700 mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={editingSemesterConfig.secondEnd}
+                        onChange={(e) => setEditingSemesterConfig(prev => ({ ...prev, secondEnd: e.target.value }))}
+                        className="w-full p-2 border border-blue-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Current Status Info */}
+                <div className="bg-stone-100 rounded-xl p-3">
+                  <p className="text-xs text-stone-600">
+                    <Icon name="info" className="text-sm inline mr-1" />
+                    The current semester is automatically determined based on today's date and these settings.
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowSemesterConfig(false)}
+                    className="flex-1 py-3 border border-stone-200 text-stone-700 rounded-xl font-medium hover:bg-stone-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveSemesterConfig}
+                    className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 transition-colors"
+                  >
+                    Save Settings
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Add/Edit Schedule Modal */}
+      {(showAddModal || editingSchedule) && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => { setShowAddModal(false); setEditingSchedule(null); setIsCreatingNewCourse(false); setNewCourseCode(''); setNewCourseName(''); }}>
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>
+                  {editingSchedule ? 'Edit Schedule' : 'Add Schedule'}
+                </h2>
+                <button onClick={() => { setShowAddModal(false); setEditingSchedule(null); setIsCreatingNewCourse(false); setNewCourseCode(''); setNewCourseName(''); }} className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-full`}>
+                  <Icon name="close" className={darkMode ? 'text-gray-400' : 'text-stone-500'} />
+                </button>
+              </div>
+
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.target as HTMLFormElement;
+                const formData = new FormData(form);
+                
+                const scheduleData = {
+                  type: formData.get('type') as string,
+                  semester: formData.get('semester') as string,
+                  courseCode: formData.get('courseCode') as string,
+                  courseName: formData.get('courseName') as string || subjectInfo[formData.get('courseCode') as string]?.name || '',
+                  teacher: formData.get('teacher') as string,
+                  classroom: formData.get('classroom') as string,
+                  dayOfWeek: formData.get('dayOfWeek') as string,
+                  startTime: formData.get('startTime') as string,
+                  endTime: formData.get('endTime') as string,
+                  specificDate: formData.get('specificDate') as string,
+                  details: formData.get('details') as string
+                };
+
+                let success;
+                if (editingSchedule) {
+                  success = await handleUpdateSchedule(scheduleData);
+                } else {
+                  success = await handleAddSchedule(scheduleData);
+                }
+
+                if (success) {
+                  setShowAddModal(false);
+                  setEditingSchedule(null);
+                  setIsCreatingNewCourse(false);
+                  setNewCourseCode('');
+                  setNewCourseName('');
+                  form.reset();
+                }
+              }} className="space-y-4">
+                {/* Schedule Type */}
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Schedule Type *</label>
+                  <select 
+                    name="type" 
+                    required 
+                    defaultValue={editingSchedule?.type || (canManageSemestral ? 'semestral' : 'activity')}
+                    className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    {canManageSemestral && (
+                      <option value="semestral">Semestral (Permanent)</option>
+                    )}
+                    <option value="makeup">Make-up Class</option>
+                    <option value="activity">Activity</option>
+                    <option value="special">Special Event</option>
+                  </select>
+                  <p className="text-xs text-stone-400 mt-1">
+                    {canManageSemestral 
+                      ? 'Semestral schedules are recurring weekly classes' 
+                      : 'PIOs can only add activities and special events'}
+                  </p>
+                </div>
+
+                {/* Semester (for semestral type) - only show for those with semestral access */}
+                {canManageSemestral && (
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Semester</label>
+                    <select 
+                      name="semester"
+                      defaultValue={editingSchedule?.semester || '1st'}
+                      className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                      <option value="1st">1st Semester</option>
+                      <option value="2nd">2nd Semester</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Course Code */}
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Course Code *</label>
+                  {!isCreatingNewCourse ? (
+                    <>
+                      <select 
+                        name="courseCode" 
+                        required={!isCreatingNewCourse}
+                        defaultValue={editingSchedule?.courseCode || ''}
+                        onChange={(e) => {
+                          if (e.target.value === '__CREATE_NEW__') {
+                            setIsCreatingNewCourse(true);
+                            e.target.value = '';
+                          }
+                        }}
+                        className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="">Select a course</option>
+                        <option value="__CREATE_NEW__" className="text-purple-600 font-medium">➕ Create New Course...</option>
+                        {subjects.map(s => (
+                          <option key={s} value={s}>{s} {subjectInfo[s]?.name ? `- ${subjectInfo[s].name}` : ''}</option>
+                        ))}
+                      </select>
+                    </>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <input 
+                          type="text"
+                          name="courseCode"
+                          required
+                          value={newCourseCode}
+                          onChange={(e) => setNewCourseCode(e.target.value.toUpperCase())}
+                          placeholder="e.g., MATH101"
+                          className="flex-1 px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 uppercase"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCreatingNewCourse(false);
+                            setNewCourseCode('');
+                            setNewCourseName('');
+                          }}
+                          className="px-3 py-2 text-stone-500 hover:text-stone-700 hover:bg-stone-100 rounded-lg"
+                          title="Cancel and select existing"
+                        >
+                          <Icon name="close" />
+                        </button>
+                      </div>
+                      <p className="text-xs text-purple-600">
+                        <Icon name="info" className="text-xs mr-1" />
+                        Creating a new course code
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Course Name (optional override) */}
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">
+                    Course Title {isCreatingNewCourse && <span className="text-red-500">*</span>}
+                  </label>
+                  <input 
+                    type="text" 
+                    name="courseName" 
+                    required={isCreatingNewCourse}
+                    value={isCreatingNewCourse ? newCourseName : undefined}
+                    defaultValue={!isCreatingNewCourse ? (editingSchedule?.courseName || '') : undefined}
+                    onChange={isCreatingNewCourse ? (e) => setNewCourseName(e.target.value) : undefined}
+                    placeholder={isCreatingNewCourse ? "e.g., Introduction to Mathematics" : "Auto-filled from course code"}
+                    className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                {/* Teacher */}
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Teacher/Instructor</label>
+                  <input 
+                    type="text" 
+                    name="teacher"
+                    defaultValue={editingSchedule?.teacher || ''}
+                    placeholder="e.g., Prof. Santos"
+                    className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                {/* Classroom */}
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Classroom/Venue *</label>
+                  <input 
+                    type="text" 
+                    name="classroom"
+                    required
+                    defaultValue={editingSchedule?.classroom || ''}
+                    placeholder="e.g., Room 101, Auditorium"
+                    className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                {/* Day of Week (for semestral) */}
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Day of Week (for Semestral)</label>
+                  <select 
+                    name="dayOfWeek"
+                    defaultValue={editingSchedule?.dayOfWeek || ''}
+                    className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">Select day (required for semestral)</option>
+                    <option value="Monday">Monday</option>
+                    <option value="Tuesday">Tuesday</option>
+                    <option value="Wednesday">Wednesday</option>
+                    <option value="Thursday">Thursday</option>
+                    <option value="Friday">Friday</option>
+                    <option value="Saturday">Saturday</option>
+                    <option value="Sunday">Sunday</option>
+                  </select>
+                </div>
+
+                {/* Specific Date (for non-semestral) */}
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Specific Date (for Special schedules)</label>
+                  <input 
+                    type="date" 
+                    name="specificDate"
+                    defaultValue={editingSchedule?.specificDate || ''}
+                    className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                {/* Time */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Start Time *</label>
+                    <input 
+                      type="time" 
+                      name="startTime" 
+                      required
+                      defaultValue={editingSchedule?.startTime || ''}
+                      className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">End Time *</label>
+                    <input 
+                      type="time" 
+                      name="endTime" 
+                      required
+                      defaultValue={editingSchedule?.endTime || ''}
+                      className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Details */}
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Details/Notes</label>
+                  <textarea 
+                    name="details" 
+                    rows={2}
+                    defaultValue={editingSchedule?.details || ''}
+                    placeholder="Additional information..."
+                    className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                  />
+                </div>
+
+                <button 
+                  type="submit" 
+                  className="w-full py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 flex items-center justify-center gap-2"
+                >
+                  <Icon name={editingSchedule ? 'save' : 'add'} />
+                  {editingSchedule ? 'Save Changes' : 'Add Schedule'}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Detail Modal */}
+      {selectedSchedule && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedSchedule(null)}>
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-slide-up`} onClick={e => e.stopPropagation()}>
+            {/* Header with type color */}
+            <div className={`p-6 ${
+              selectedSchedule.type === 'semestral' ? 'bg-purple-500' :
+              selectedSchedule.type === 'makeup' ? 'bg-orange-500' :
+              selectedSchedule.type === 'activity' ? 'bg-blue-500' : 'bg-pink-500'
+            } text-white rounded-t-2xl`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="px-2 py-1 bg-white/20 text-xs rounded-full font-medium capitalize">
+                    {selectedSchedule.type}
+                  </span>
+                  <h2 className="text-2xl font-bold mt-2">{selectedSchedule.courseCode}</h2>
+                  {selectedSchedule.courseName && <p className="text-white/80">{selectedSchedule.courseName}</p>}
+                </div>
+                <button onClick={() => setSelectedSchedule(null)} className="p-2 hover:bg-white/20 rounded-full">
+                  <Icon name="close" />
+                </button>
+              </div>
+              {selectedSchedule.semester && (
+                <span className="mt-3 inline-block px-3 py-1 bg-white/20 rounded-full text-sm font-medium">
+                  {selectedSchedule.semester} Semester
+                </span>
+              )}
+            </div>
+
+            {/* Details */}
+            <div className="p-6 space-y-4">
+              {/* Time */}
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                  <Icon name="schedule" />
+                </div>
+                <div>
+                  <p className="text-sm text-stone-500">Time</p>
+                  <p className="font-semibold text-stone-800">
+                    {formatTime(selectedSchedule.startTime)} - {formatTime(selectedSchedule.endTime)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Day/Date */}
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                  <Icon name="event" />
+                </div>
+                <div>
+                  <p className="text-sm text-stone-500">
+                    {selectedSchedule.type === 'semestral' ? 'Day' : 'Date'}
+                  </p>
+                  <p className="font-semibold text-stone-800">
+                    {selectedSchedule.type === 'semestral' 
+                      ? selectedSchedule.dayOfWeek 
+                      : formatDate(selectedSchedule.specificDate)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Classroom */}
+              {selectedSchedule.classroom && (
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                    <Icon name="room" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-stone-500">Classroom</p>
+                    <p className="font-semibold text-stone-800">{selectedSchedule.classroom}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Teacher */}
+              {selectedSchedule.teacher && (
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
+                    <Icon name="person" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-stone-500">Teacher</p>
+                    <p className="font-semibold text-stone-800">{selectedSchedule.teacher}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Details */}
+              {selectedSchedule.details && (
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                    <Icon name="notes" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-stone-500">Details</p>
+                    <p className="text-stone-700 whitespace-pre-wrap bg-amber-50 p-3 rounded-xl mt-1 text-sm">
+                      {selectedSchedule.details}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Added by */}
+              {selectedSchedule.createdByName && (
+                <div className="pt-4 border-t border-stone-200">
+                  <p className="text-xs text-stone-400">Added by {selectedSchedule.createdByName}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="p-4 border-t border-stone-200 flex gap-2">
+              <button
+                onClick={() => setSelectedSchedule(null)}
+                className="flex-1 py-3 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200 transition-colors"
+              >
+                Close
+              </button>
+              {canManage && (
+                <button
+                  onClick={() => { setEditingSchedule(selectedSchedule); setSelectedSchedule(null); }}
+                  className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Icon name="edit" /> Edit
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {scheduleToDelete && (
+        <ConfirmModal
+          isOpen={!!scheduleToDelete}
+          title="Delete Schedule"
+          message="Are you sure you want to delete this schedule? This action cannot be undone."
+          onConfirm={() => handleDeleteSchedule(scheduleToDelete)}
+          onClose={() => setScheduleToDelete(null)}
+        />
+      )}
     </div>
   );
 };
@@ -3339,7 +4747,7 @@ const LoginModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl my-4 max-h-[90vh] overflow-y-auto modal-content">
+      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl p-6 w-full max-w-md shadow-xl my-4 max-h-[90vh] overflow-y-auto modal-content`}>
         {mode === 'register' ? (
           <RegistrationForm 
             onRegister={(user) => {
@@ -3355,46 +4763,46 @@ const LoginModal = ({
           <>
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h2 className="text-xl font-bold text-stone-800">Welcome to CumLaude!</h2>
-                <p className="text-sm text-stone-500 mt-1">Sign in to your account</p>
+                <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Welcome to CumLaude!</h2>
+                <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'} mt-1`}>Sign in to your account</p>
               </div>
-              <button onClick={onClose} className="text-stone-400 hover:text-stone-600">
+              <button onClick={onClose} className={darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-stone-400 hover:text-stone-600'}>
                 <Icon name="close" />
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">Username</label>
+                <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1`}>Username</label>
                 <div className="relative">
-                  <Icon name="person" className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <Icon name="person" className={`absolute left-3 top-1/2 -translate-y-1/2 ${darkMode ? 'text-gray-500' : 'text-stone-400'}`} />
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value.toLowerCase())}
                     placeholder="Enter your username"
-                    className="w-full p-3 pl-10 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+                    className={`w-full p-3 pl-10 border ${darkMode ? 'border-gray-600 bg-gray-700 text-white placeholder-gray-500' : 'border-stone-200 bg-white'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none`}
                     onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">Password</label>
+                <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1`}>Password</label>
                 <div className="relative">
-                  <Icon name="lock" className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <Icon name="lock" className={`absolute left-3 top-1/2 -translate-y-1/2 ${darkMode ? 'text-gray-500' : 'text-stone-400'}`} />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your password"
-                    className="w-full p-3 pl-10 pr-10 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
+                    className={`w-full p-3 pl-10 pr-10 border ${darkMode ? 'border-gray-600 bg-gray-700 text-white placeholder-gray-500' : 'border-stone-200 bg-white'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none`}
                     onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
                   />
                   <button 
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                    className={`absolute right-3 top-1/2 -translate-y-1/2 ${darkMode ? 'text-gray-500 hover:text-gray-300' : 'text-stone-400 hover:text-stone-600'}`}
                   >
                     <Icon name={showPassword ? 'visibility_off' : 'visibility'} />
                   </button>
@@ -3627,6 +5035,21 @@ const App = () => {
   const [examToEdit, setExamToEdit] = useState<Exam | null>(null); // For editing exam
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null); // For exam detail view
   
+  // Semester State
+  const [currentSemester, setCurrentSemester] = useState<'1st' | '2nd'>('1st');
+  const [selectedSemesterView, setSelectedSemesterView] = useState<'1st' | '2nd' | null>(null); // Manual override
+  const [academicYear, setAcademicYear] = useState<string>('');
+  const [semesterConfig, setSemesterConfig] = useState<Array<{ semester: string; startDate: string; endDate: string; academicYear: string; isActive: boolean }>>([]);
+  const [semesterSubjects, setSemesterSubjects] = useState<string[]>([]); // Subjects filtered by semester
+  const [homeResourceTab, setHomeResourceTab] = useState<'subjects' | 'resources'>('subjects'); // Tab for home resources card
+  const [resourcePageTab, setResourcePageTab] = useState<'subjects' | 'resources'>('subjects'); // Tab for ALL_RESOURCES page
+  
+  // Theme State
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('cumlaude_darkMode');
+    return saved === 'true';
+  });
+  
   // Admin Announcement State
   const [showAnnouncementPanel, setShowAnnouncementPanel] = useState(false);
   const [activeAnnouncement, setActiveAnnouncement] = useState<Announcement | null>(null);
@@ -3660,6 +5083,7 @@ const App = () => {
   const [deckLoading, setDeckLoading] = useState<string | null>(null); // Track which deck is loading
   const [activeResource, setActiveResource] = useState<Resource | null>(null);
   const [previousView, setPreviousView] = useState<AppView>('HOME'); // Track where we came from
+  const [viewHistory, setViewHistory] = useState<AppView[]>(['HOME']); // Navigation history stack
 
   // Calendar View State
   const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
@@ -3698,6 +5122,16 @@ const App = () => {
     }, 1000); // Update every second for countdown
     return () => clearInterval(interval);
   }, []);
+
+  // Dark mode effect
+  useEffect(() => {
+    localStorage.setItem('cumlaude_darkMode', String(darkMode));
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
 
   // Session State
   const [queue, setQueue] = useState<Card[]>([]);
@@ -3790,6 +5224,37 @@ const App = () => {
         } catch (e) {
           // ignore
         }
+      }
+      
+      // Load cached semester configuration
+      const cachedCurrentSemester = localStorage.getItem('cumlaude_currentSemester');
+      if (cachedCurrentSemester) {
+        setCurrentSemester(cachedCurrentSemester as '1st' | '2nd');
+      }
+      const cachedAcademicYear = localStorage.getItem('cumlaude_academicYear');
+      if (cachedAcademicYear) {
+        setAcademicYear(cachedAcademicYear);
+      }
+      const cachedSemesterConfig = localStorage.getItem('cumlaude_semesterConfig');
+      if (cachedSemesterConfig) {
+        try {
+          setSemesterConfig(JSON.parse(cachedSemesterConfig));
+        } catch (e) {
+          // ignore
+        }
+      }
+      const cachedSemesterSubjects = localStorage.getItem('cumlaude_semesterSubjects');
+      if (cachedSemesterSubjects) {
+        try {
+          setSemesterSubjects(JSON.parse(cachedSemesterSubjects));
+        } catch (e) {
+          // ignore
+        }
+      }
+      // Load cached semester view selection (manual override)
+      const cachedSelectedSemesterView = localStorage.getItem('cumlaude_selectedSemesterView');
+      if (cachedSelectedSemesterView) {
+        setSelectedSemesterView(cachedSelectedSemesterView as '1st' | '2nd');
       }
       
       // Load cached resources
@@ -4176,6 +5641,42 @@ const App = () => {
         localStorage.setItem('cumlaude_exams', JSON.stringify(data.exams));
       }
 
+      // Process semester configuration
+      if (data.currentSemester) {
+        setCurrentSemester(data.currentSemester);
+        localStorage.setItem('cumlaude_currentSemester', data.currentSemester);
+      }
+      if (data.academicYear) {
+        setAcademicYear(data.academicYear);
+        localStorage.setItem('cumlaude_academicYear', data.academicYear);
+      }
+      if (data.semesterConfig && Array.isArray(data.semesterConfig)) {
+        setSemesterConfig(data.semesterConfig);
+        localStorage.setItem('cumlaude_semesterConfig', JSON.stringify(data.semesterConfig));
+      }
+      
+      // Fetch semester-specific subjects based on class schedules
+      try {
+        const semesterResponse = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'getSubjectsBySemester',
+            semester: data.currentSemester || '1st'
+          })
+        });
+        const semesterData = await semesterResponse.json();
+        if (semesterData.success && semesterData.subjects) {
+          // Extract subject codes - subjects could be objects {code, name} or strings
+          const subjectCodes = semesterData.subjects.map((s: any) => 
+            typeof s === 'string' ? s : s.code
+          );
+          setSemesterSubjects(subjectCodes);
+          localStorage.setItem('cumlaude_semesterSubjects', JSON.stringify(subjectCodes));
+        }
+      } catch (semErr) {
+        console.warn('Failed to load semester subjects:', semErr);
+      }
+
       // Process active announcement from backend (dismissal is now tracked server-side)
       if (data.activeAnnouncement) {
         setActiveAnnouncement({
@@ -4265,9 +5766,87 @@ const App = () => {
 
   const ADMIN_USER_ID = '2025-00046';
 
+  // Semester Switch Function
+  const handleSemesterSwitch = async (semester: '1st' | '2nd') => {
+    setSelectedSemesterView(semester);
+    localStorage.setItem('cumlaude_selectedSemesterView', semester);
+    
+    // Fetch subjects for the selected semester
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'getSubjectsBySemester',
+          semester
+        })
+      });
+      const data = await response.json();
+      if (data.success && data.subjects) {
+        const subjectCodes = data.subjects.map((s: any) => typeof s === 'string' ? s : s.code);
+        setSemesterSubjects(subjectCodes);
+        localStorage.setItem('cumlaude_semesterSubjects', JSON.stringify(subjectCodes));
+      }
+    } catch (err) {
+      console.warn('Failed to load semester subjects:', err);
+    }
+  };
+  
+  // Reset to current semester (auto-detect)
+  const handleResetToCurrentSemester = async () => {
+    setSelectedSemesterView(null);
+    localStorage.removeItem('cumlaude_selectedSemesterView');
+    
+    // Fetch subjects for current semester
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'getSubjectsBySemester',
+          semester: currentSemester
+        })
+      });
+      const data = await response.json();
+      if (data.success && data.subjects) {
+        const subjectCodes = data.subjects.map((s: any) => typeof s === 'string' ? s : s.code);
+        setSemesterSubjects(subjectCodes);
+        localStorage.setItem('cumlaude_semesterSubjects', JSON.stringify(subjectCodes));
+      }
+    } catch (err) {
+      console.warn('Failed to load semester subjects:', err);
+    }
+  };
+
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem(STORAGE_KEY_USER);
+  };
+
+  // Navigation helpers
+  const navigateTo = (newView: AppView) => {
+    setViewHistory(prev => [...prev, view]);
+    setView(newView);
+  };
+  
+  const goBack = () => {
+    if (viewHistory.length > 1) {
+      const newHistory = [...viewHistory];
+      const previousView = newHistory.pop()!;
+      setViewHistory(newHistory);
+      setView(previousView);
+    } else {
+      setView('HOME');
+    }
+  };
+  
+  const resetHome = () => {
+    setViewHistory(['HOME']);
+    setView('HOME');
+    setActiveSubject(null);
+    setActiveDeck(null);
+    setActiveResource(null);
+    setQueue([]);
+    setCurrentIndex(0);
+    setScores({});
   };
 
   const handleAdminClearAllCache = async () => {
@@ -5209,8 +6788,7 @@ const App = () => {
     }, 200);
   };
 
-  const resetHome = () => {
-    setView('HOME');
+  const resetHomeState = () => {
     setActiveSubject(null);
     setActiveDeck(null);
     setActiveResource(null);
@@ -5225,16 +6803,27 @@ const App = () => {
   // Default subjects if no decks loaded yet
   const defaultSubjects = ['FL111', 'FL112', 'EDUC112', 'EDUC111', 'GE111', 'GE112', 'PE111', 'NSTP111'];
   
-  // Priority: apiSubjects from Category sheet > deckSubjects from D1 > defaults
-  const displaySubjects = apiSubjects.length > 0 ? apiSubjects : (deckSubjects.length > 0 ? deckSubjects : defaultSubjects);
+  // Get the active semester (manual override or auto-detected)
+  const activeSemester = selectedSemesterView || currentSemester;
+  
+  // Priority: semester subjects from ClassSchedule > apiSubjects from Category sheet > deckSubjects from D1 > defaults
+  // When semesterSubjects is populated, it filters subjects based on class schedules for the current semester
+  const baseSubjects = apiSubjects.length > 0 ? apiSubjects : (deckSubjects.length > 0 ? deckSubjects : defaultSubjects);
+  
+  // If we have semester subjects from schedules, filter the base subjects to only show those in current semester
+  // If no schedules exist yet, show all subjects
+  const displaySubjects = semesterSubjects.length > 0 
+    ? baseSubjects.filter(s => semesterSubjects.includes(s))
+    : baseSubjects;
 
   // --- Views ---
 
   // HOME View
   if (view === 'HOME') {
     return (
-      <div className="min-h-screen bg-[#F5F5F4]">
+      <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-[#F5F5F4]'}`}>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         
         {/* Update Available Toast */}
         {showUpdateToast && newVersionAvailable && (
@@ -5313,13 +6902,14 @@ const App = () => {
               setShowProfile(false);
             }}
             onUpdate={(updatedUser) => setUser(updatedUser)}
+            darkMode={darkMode}
           />
         )}
 
         {/* Admin Announcement Panel */}
         {showAnnouncementPanel && user?.idNumber === ADMIN_USER_ID && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
+            <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-md shadow-xl overflow-hidden`}>
               <div className="bg-gradient-to-r from-amber-500 to-amber-400 p-4 text-white">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -5335,44 +6925,44 @@ const App = () => {
               <div className="p-4 space-y-4">
                 {/* Preset Announcements */}
                 <div>
-                  <h3 className="text-sm font-semibold text-stone-600 mb-2">Quick Presets</h3>
+                  <h3 className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-stone-600'} mb-2`}>Quick Presets</h3>
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       onClick={() => showPresetAnnouncement('congratulations')}
-                      className="p-3 bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl text-left hover:shadow-md transition-all"
+                      className={`p-3 ${darkMode ? 'bg-emerald-900/30 border-emerald-700' : 'bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200'} border rounded-xl text-left hover:shadow-md transition-all`}
                     >
                       <span className="text-2xl">🎉</span>
-                      <p className="font-semibold text-emerald-800 text-sm mt-1">Congrats!</p>
-                      <p className="text-xs text-emerald-600">Celebration</p>
+                      <p className={`font-semibold ${darkMode ? 'text-emerald-400' : 'text-emerald-800'} text-sm mt-1`}>Congrats!</p>
+                      <p className={`text-xs ${darkMode ? 'text-emerald-500' : 'text-emerald-600'}`}>Celebration</p>
                     </button>
                     <button
                       onClick={() => showPresetAnnouncement('post-final')}
-                      className="p-3 bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-xl text-left hover:shadow-md transition-all"
+                      className={`p-3 ${darkMode ? 'bg-purple-900/30 border-purple-700' : 'bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200'} border rounded-xl text-left hover:shadow-md transition-all`}
                     >
                       <span className="text-2xl">🎓</span>
-                      <p className="font-semibold text-purple-800 text-sm mt-1">Post-Final!</p>
-                      <p className="text-xs text-purple-600">Finals done</p>
+                      <p className={`font-semibold ${darkMode ? 'text-purple-400' : 'text-purple-800'} text-sm mt-1`}>Post-Final!</p>
+                      <p className={`text-xs ${darkMode ? 'text-purple-500' : 'text-purple-600'}`}>Finals done</p>
                     </button>
                     <button
                       onClick={() => showPresetAnnouncement('good-luck')}
-                      className="p-3 bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-xl text-left hover:shadow-md transition-all"
+                      className={`p-3 ${darkMode ? 'bg-green-900/30 border-green-700' : 'bg-gradient-to-br from-green-50 to-green-100 border-green-200'} border rounded-xl text-left hover:shadow-md transition-all`}
                     >
                       <span className="text-2xl">🍀</span>
-                      <p className="font-semibold text-green-800 text-sm mt-1">Good Luck!</p>
-                      <p className="text-xs text-green-600">Before exam</p>
+                      <p className={`font-semibold ${darkMode ? 'text-green-400' : 'text-green-800'} text-sm mt-1`}>Good Luck!</p>
+                      <p className={`text-xs ${darkMode ? 'text-green-500' : 'text-green-600'}`}>Before exam</p>
                     </button>
                   </div>
                 </div>
 
                 {/* Custom Announcement */}
                 <div>
-                  <h3 className="text-sm font-semibold text-stone-600 mb-2">Custom Announcement</h3>
+                  <h3 className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-stone-600'} mb-2`}>Custom Announcement</h3>
                   <div className="space-y-3">
                     <div className="flex gap-2">
                       <select
                         value={customAnnouncementEmoji}
                         onChange={(e) => setCustomAnnouncementEmoji(e.target.value)}
-                        className="w-16 p-2 border border-stone-200 rounded-lg text-xl"
+                        className={`w-16 p-2 border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-stone-200'} rounded-lg text-xl`}
                       >
                         <option value="🎉">🎉</option>
                         <option value="🎓">🎓</option>
@@ -5388,18 +6978,18 @@ const App = () => {
                         placeholder="Title"
                         value={customAnnouncementTitle}
                         onChange={(e) => setCustomAnnouncementTitle(e.target.value)}
-                        className="flex-1 p-2 border border-stone-200 rounded-lg text-sm"
+                        className={`flex-1 p-2 border ${darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-500' : 'border-stone-200'} rounded-lg text-sm`}
                       />
                     </div>
                     <textarea
                       placeholder="Your announcement message..."
                       value={customAnnouncementMessage}
                       onChange={(e) => setCustomAnnouncementMessage(e.target.value)}
-                      className="w-full p-3 border border-stone-200 rounded-lg text-sm h-24 resize-none"
+                      className={`w-full p-3 border ${darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-500' : 'border-stone-200'} rounded-lg text-sm h-24 resize-none`}
                     />
                     <button
                       onClick={showCustomAnnouncement}
-                      className="w-full py-2 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-colors"
+                      className={`w-full py-2 ${darkMode ? 'bg-gray-600 hover:bg-gray-500' : 'bg-stone-800 hover:bg-stone-900'} text-white rounded-xl font-semibold transition-colors`}
                     >
                       Show Announcement
                     </button>
@@ -5413,7 +7003,7 @@ const App = () => {
         {/* Active Announcement Modal */}
         {activeAnnouncement && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-            <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden animate-slide-up">
+            <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden animate-slide-up`}>
               {/* Header */}
               <div className={`relative p-8 text-center overflow-hidden ${
                 activeAnnouncement.type === 'congratulations' ? 'bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600' :
@@ -5445,7 +7035,7 @@ const App = () => {
               
               {/* Content */}
               <div className="p-6 text-center">
-                <p className="text-stone-600 leading-relaxed whitespace-pre-line">
+                <p className={`${darkMode ? 'text-gray-300' : 'text-stone-600'} leading-relaxed whitespace-pre-line`}>
                   {activeAnnouncement.message}
                 </p>
                 
@@ -5489,7 +7079,7 @@ const App = () => {
         {/* Ongoing Exam Alert Modal */}
         {ongoingExamAlert && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
-            <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-slide-up">
+            <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-slide-up`}>
               <div className="bg-gradient-to-r from-green-500 to-emerald-500 p-4 text-white">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center animate-pulse">
@@ -5541,7 +7131,7 @@ const App = () => {
         {/* Completed Exam Celebration Modal */}
         {completedExamAlert && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
-            <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden animate-slide-up">
+            <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden animate-slide-up`}>
               <div className="bg-gradient-to-br from-purple-500 via-pink-500 to-amber-500 p-8 text-white text-center relative overflow-hidden">
                 {/* Confetti effect */}
                 <div className="absolute inset-0 opacity-20">
@@ -5575,17 +7165,17 @@ const App = () => {
         )}
         
         {/* Header */}
-        <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
+        <header className={`${darkMode ? 'bg-stone-800 border-stone-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-10`}>
           <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-stone-800 rounded-xl flex items-center justify-center">
-                <Icon name="school" className="text-white" />
+              <div className={`w-10 h-10 ${darkMode ? 'bg-amber-500' : 'bg-stone-800'} rounded-xl flex items-center justify-center`}>
+                <Icon name="school" className={darkMode ? 'text-stone-900' : 'text-white'} />
               </div>
               <div>
-                <h1 className="font-bold text-stone-800">CumLaude!</h1>
+                <h1 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>CumLaude!</h1>
                 <div className="flex items-center gap-1.5">
                   <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-stone-400'}`}></span>
-                  <span className="text-xs text-stone-500">{isOnline ? 'Online' : 'Offline'}</span>
+                  <span className={`text-xs ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>{isOnline ? 'Online' : 'Offline'}</span>
                 </div>
               </div>
             </div>
@@ -5594,62 +7184,62 @@ const App = () => {
             <div className="hidden sm:flex items-center gap-2">
               {user && (
                 <button
-                  onClick={() => setView('CALENDAR')}
-                  className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
+                  onClick={() => navigateTo('CALENDAR')}
+                  className={`p-2 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors`}
                   title="Schedule"
                 >
-                  <Icon name="event" className="text-stone-600" />
+                  <Icon name="event" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
                 </button>
               )}
               {user && user.section && (
                 <button
-                  onClick={() => setView('CLASS')}
-                  className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
+                  onClick={() => navigateTo('CLASS')}
+                  className={`p-2 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors`}
                   title="My Class"
                 >
-                  <Icon name="groups" className="text-stone-600" />
+                  <Icon name="groups" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
                 </button>
               )}
               {user && (
                 <button
-                  onClick={() => { setUserAnalytics(null); setView('ANALYTICS'); }}
-                  className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
+                  onClick={() => { setUserAnalytics(null); navigateTo('ANALYTICS'); }}
+                  className={`p-2 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors`}
                   title="View Analytics"
                 >
-                  <Icon name="analytics" className="text-stone-600" />
+                  <Icon name="analytics" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
                 </button>
               )}
               {user && (
                 <button
                   onClick={() => setShowNotificationSettings(true)}
-                  className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
+                  className={`p-2 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors`}
                   title="Notification Settings"
                 >
-                  <Icon name="notifications" className="text-stone-600" />
+                  <Icon name="notifications" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
                 </button>
               )}
               {user ? (
                 <button
                   onClick={() => setShowProfile(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors"
+                  className={`flex items-center gap-2 px-4 py-2 ${darkMode ? 'bg-stone-700 hover:bg-stone-600' : 'bg-stone-100 hover:bg-stone-200'} rounded-xl transition-colors`}
                   title="View Profile"
                 >
                   {user.profilePicture ? (
                     <img src={user.profilePicture} alt={user.name} className="w-6 h-6 rounded-full object-cover" />
                   ) : (
-                    <Icon name="person" className="text-stone-600" />
+                    <Icon name="person" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
                   )}
-                  <span className="text-sm font-medium text-stone-700">
+                  <span className={`text-sm font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>
                     {user.name.split(' ')[0]}
                   </span>
                 </button>
               ) : (
                 <button
                   onClick={() => setShowLogin(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors"
+                  className={`flex items-center gap-2 px-4 py-2 ${darkMode ? 'bg-stone-700 hover:bg-stone-600' : 'bg-stone-100 hover:bg-stone-200'} rounded-xl transition-colors`}
                 >
-                  <Icon name="login" className="text-stone-600" />
-                  <span className="text-sm font-medium text-stone-700">Login</span>
+                  <Icon name="login" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
+                  <span className={`text-sm font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>Login</span>
                 </button>
               )}
             </div>
@@ -5659,28 +7249,28 @@ const App = () => {
               {user ? (
                 <button
                   onClick={() => setShowProfile(true)}
-                  className="w-9 h-9 rounded-full bg-stone-100 hover:bg-stone-200 flex items-center justify-center overflow-hidden transition-colors"
+                  className={`w-9 h-9 rounded-full ${darkMode ? 'bg-stone-700 hover:bg-stone-600' : 'bg-stone-100 hover:bg-stone-200'} flex items-center justify-center overflow-hidden transition-colors`}
                   title="View Profile"
                 >
                   {user.profilePicture ? (
                     <img src={user.profilePicture} alt={user.name} className="w-full h-full object-cover" />
                   ) : (
-                    <Icon name="person" className="text-stone-600" />
+                    <Icon name="person" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
                   )}
                 </button>
               ) : (
                 <button
                   onClick={() => setShowLogin(true)}
-                  className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
+                  className={`p-2 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors`}
                 >
-                  <Icon name="login" className="text-stone-600" />
+                  <Icon name="login" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
                 </button>
               )}
               <button
                 onClick={() => setShowMobileMenu(true)}
-                className="p-2 hover:bg-stone-100 rounded-xl transition-colors"
+                className={`p-2 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors`}
               >
-                <Icon name="menu" className="text-stone-600" />
+                <Icon name="menu" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
               </button>
             </div>
           </div>
@@ -5690,29 +7280,29 @@ const App = () => {
         {showMobileMenu && (
           <div className="fixed inset-0 z-50 sm:hidden">
             <div className="absolute inset-0 bg-black/50" onClick={() => setShowMobileMenu(false)} />
-            <div className="absolute right-0 top-0 bottom-0 w-72 bg-white shadow-xl animate-slide-left">
-              <div className="p-4 border-b border-stone-100 flex items-center justify-between">
-                <h2 className="font-bold text-stone-800">Menu</h2>
-                <button onClick={() => setShowMobileMenu(false)} className="p-2 hover:bg-stone-100 rounded-lg">
-                  <Icon name="close" className="text-stone-600" />
+            <div className={`absolute right-0 top-0 bottom-0 w-72 ${darkMode ? 'bg-stone-800' : 'bg-white'} shadow-xl animate-slide-left`}>
+              <div className={`p-4 border-b ${darkMode ? 'border-stone-700' : 'border-stone-100'} flex items-center justify-between`}>
+                <h2 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>Menu</h2>
+                <button onClick={() => setShowMobileMenu(false)} className={`p-2 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-lg`}>
+                  <Icon name="close" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
                 </button>
               </div>
               
               {user && (
-                <div className="p-4 border-b border-stone-100">
+                <div className={`p-4 border-b ${darkMode ? 'border-stone-700' : 'border-stone-100'}`}>
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-stone-200 overflow-hidden">
+                    <div className={`w-12 h-12 rounded-full ${darkMode ? 'bg-stone-700' : 'bg-stone-200'} overflow-hidden`}>
                       {user.profilePicture ? (
                         <img src={user.profilePicture} alt={user.name} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-stone-300">
-                          <Icon name="person" className="text-xl text-stone-500" />
+                        <div className={`w-full h-full flex items-center justify-center ${darkMode ? 'bg-stone-600' : 'bg-stone-300'}`}>
+                          <Icon name="person" className={`text-xl ${darkMode ? 'text-stone-400' : 'text-stone-500'}`} />
                         </div>
                       )}
                     </div>
                     <div>
-                      <p className="font-semibold text-stone-800">{user.name}</p>
-                      <p className="text-xs text-stone-500">ID: {user.idNumber}</p>
+                      <p className={`font-semibold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>{user.name}</p>
+                      <p className={`text-xs ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>ID: {user.idNumber}</p>
                     </div>
                   </div>
                 </div>
@@ -5721,85 +7311,85 @@ const App = () => {
               <div className="p-2">
                 {user && (
                   <button
-                    onClick={() => { setView('CALENDAR'); setShowMobileMenu(false); }}
-                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                    onClick={() => { navigateTo('CALENDAR'); setShowMobileMenu(false); }}
+                    className={`w-full flex items-center gap-3 p-3 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors text-left`}
                   >
-                    <Icon name="event" className="text-stone-600" />
-                    <span className="font-medium text-stone-700">Schedule</span>
+                    <Icon name="event" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
+                    <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>Schedule</span>
                   </button>
                 )}
                 
                 {user && user.section && (
                   <button
-                    onClick={() => { setView('CLASS'); setShowMobileMenu(false); }}
-                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                    onClick={() => { navigateTo('CLASS'); setShowMobileMenu(false); }}
+                    className={`w-full flex items-center gap-3 p-3 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors text-left`}
                   >
-                    <Icon name="groups" className="text-stone-600" />
-                    <span className="font-medium text-stone-700">My Class</span>
-                    <span className="ml-auto text-xs text-stone-400">{user.section}</span>
+                    <Icon name="groups" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
+                    <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>My Class</span>
+                    <span className={`ml-auto text-xs ${darkMode ? 'text-stone-500' : 'text-stone-400'}`}>{user.section}</span>
                   </button>
                 )}
                 
                 {user && (
                   <button
-                    onClick={() => { setUserAnalytics(null); setView('ANALYTICS'); setShowMobileMenu(false); }}
-                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                    onClick={() => { setUserAnalytics(null); navigateTo('ANALYTICS'); setShowMobileMenu(false); }}
+                    className={`w-full flex items-center gap-3 p-3 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors text-left`}
                   >
-                    <Icon name="analytics" className="text-stone-600" />
-                    <span className="font-medium text-stone-700">Analytics</span>
+                    <Icon name="analytics" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
+                    <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>Analytics</span>
                   </button>
                 )}
                 
                 {user && (
                   <button
                     onClick={() => { setShowNotificationSettings(true); setShowMobileMenu(false); }}
-                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                    className={`w-full flex items-center gap-3 p-3 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors text-left`}
                   >
-                    <Icon name="notifications" className="text-stone-600" />
-                    <span className="font-medium text-stone-700">Notifications</span>
+                    <Icon name="notifications" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
+                    <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>Notifications</span>
                   </button>
                 )}
                 
                 {user && (
                   <button
-                    onClick={() => { setView('ALL_RESOURCES'); setShowMobileMenu(false); }}
-                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                    onClick={() => { navigateTo('ALL_RESOURCES'); setShowMobileMenu(false); }}
+                    className={`w-full flex items-center gap-3 p-3 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors text-left`}
                   >
-                    <Icon name="folder_open" className="text-stone-600" />
-                    <span className="font-medium text-stone-700">All Resources</span>
+                    <Icon name="folder_open" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
+                    <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>All Resources</span>
                   </button>
                 )}
 
                 {/* Coming Soon Items - only show when logged in */}
                 {user && (
-                  <div className="mt-2 pt-2 border-t border-stone-100">
-                    <p className="px-3 py-1 text-xs text-stone-400 font-medium">Coming Soon</p>
+                  <div className={`mt-2 pt-2 border-t ${darkMode ? 'border-stone-700' : 'border-stone-100'}`}>
+                    <p className={`px-3 py-1 text-xs ${darkMode ? 'text-stone-500' : 'text-stone-400'} font-medium`}>Coming Soon</p>
                     
                     <button
-                      onClick={() => { setView('FINANCE'); setShowMobileMenu(false); }}
-                      className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                      onClick={() => { navigateTo('FINANCE'); setShowMobileMenu(false); }}
+                      className={`w-full flex items-center gap-3 p-3 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors text-left`}
                     >
                       <Icon name="payments" className="text-amber-500" />
-                      <span className="font-medium text-stone-700">Finance</span>
-                      <span className="ml-auto px-1.5 py-0.5 bg-amber-100 text-amber-600 text-[10px] font-bold rounded">SOON</span>
+                      <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>Finance</span>
+                      <span className={`ml-auto px-1.5 py-0.5 ${darkMode ? 'bg-amber-900/30 text-amber-400' : 'bg-amber-100 text-amber-600'} text-[10px] font-bold rounded`}>SOON</span>
                     </button>
                     
                     <button
-                      onClick={() => { setView('ATTENDANCE'); setShowMobileMenu(false); }}
-                      className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                      onClick={() => { navigateTo('ATTENDANCE'); setShowMobileMenu(false); }}
+                      className={`w-full flex items-center gap-3 p-3 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors text-left`}
                     >
                       <Icon name="fact_check" className="text-cyan-500" />
-                      <span className="font-medium text-stone-700">Attendance</span>
-                      <span className="ml-auto px-1.5 py-0.5 bg-cyan-100 text-cyan-600 text-[10px] font-bold rounded">SOON</span>
+                      <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>Attendance</span>
+                      <span className={`ml-auto px-1.5 py-0.5 ${darkMode ? 'bg-cyan-900/30 text-cyan-400' : 'bg-cyan-100 text-cyan-600'} text-[10px] font-bold rounded`}>SOON</span>
                     </button>
                     
                     <button
-                    onClick={() => { setView('SCHEDULE'); setShowMobileMenu(false); }}
-                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                    onClick={() => { navigateTo('SCHEDULE'); setShowMobileMenu(false); }}
+                    className={`w-full flex items-center gap-3 p-3 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors text-left`}
                   >
                     <Icon name="calendar_month" className="text-violet-500" />
-                    <span className="font-medium text-stone-700">Class Schedule</span>
-                    <span className="ml-auto px-1.5 py-0.5 bg-violet-100 text-violet-600 text-[10px] font-bold rounded">SOON</span>
+                    <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>Class Schedule</span>
+                    <span className={`ml-auto px-1.5 py-0.5 ${darkMode ? 'bg-violet-900/30 text-violet-400' : 'bg-violet-100 text-violet-600'} text-[10px] font-bold rounded`}>SOON</span>
                   </button>
                   </div>
                 )}
@@ -5807,19 +7397,19 @@ const App = () => {
                 {user && (
                   <button
                     onClick={() => { setShowProfile(true); setShowMobileMenu(false); }}
-                    className="w-full flex items-center gap-3 p-3 hover:bg-stone-100 rounded-xl transition-colors text-left"
+                    className={`w-full flex items-center gap-3 p-3 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors text-left`}
                   >
-                    <Icon name="person" className="text-stone-600" />
-                    <span className="font-medium text-stone-700">My Profile</span>
+                    <Icon name="person" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
+                    <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>My Profile</span>
                   </button>
                 )}
               </div>
               
               {!user && (
-                <div className="p-4 border-t border-stone-100 mt-auto">
+                <div className={`p-4 border-t ${darkMode ? 'border-stone-700' : 'border-stone-100'} mt-auto`}>
                   <button
                     onClick={() => { setShowLogin(true); setShowMobileMenu(false); }}
-                    className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-colors flex items-center justify-center gap-2"
+                    className={`w-full py-3 ${darkMode ? 'bg-amber-500 text-stone-900 hover:bg-amber-400' : 'bg-stone-800 text-white hover:bg-stone-900'} rounded-xl font-semibold transition-colors flex items-center justify-center gap-2`}
                   >
                     <Icon name="login" />
                     Sign In
@@ -5833,12 +7423,12 @@ const App = () => {
         {/* Notification Settings Modal */}
         {showNotificationSettings && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+            <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-md shadow-xl`}>
               <div className="p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-bold text-stone-800">Notification Settings</h2>
-                  <button onClick={() => setShowNotificationSettings(false)} className="p-2 hover:bg-stone-100 rounded-full">
-                    <Icon name="close" className="text-stone-500" />
+                  <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Notification Settings</h2>
+                  <button onClick={() => setShowNotificationSettings(false)} className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-full`}>
+                    <Icon name="close" className={darkMode ? 'text-gray-400' : 'text-stone-500'} />
                   </button>
                 </div>
 
@@ -5975,72 +7565,109 @@ const App = () => {
             </div>
           )}
 
-          {/* Subjects Section - Only show when logged in */}
+          {/* Features Section - Only show when logged in */}
           {user ? (
             <>
-              <h2 className="text-lg font-bold text-stone-800 mb-4">Subjects</h2>
-              
-              {loading ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {/* Skeleton Loading Cards with Shimmer */}
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                    <div key={i} className="bg-white p-4 rounded-xl border border-stone-200">
-                      <div className="w-10 h-10 skeleton-shimmer rounded-lg mb-3"></div>
-                      <div className="h-5 skeleton-shimmer rounded w-16 mb-2"></div>
-                      <div className="h-3 skeleton-shimmer rounded w-full mb-2"></div>
-                      <div className="h-3 skeleton-shimmer rounded w-20"></div>
+              {/* Feature Cards Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {/* Subjects & Resources - Main Feature */}
+                <button
+                  onClick={() => navigateTo('ALL_RESOURCES')}
+                  className="col-span-2 sm:col-span-1 bg-gradient-to-br from-blue-500 to-blue-600 p-4 sm:p-5 rounded-2xl text-left hover:shadow-lg hover:scale-[1.02] transition-all group text-white relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                  <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center mb-3 group-hover:bg-white/30 transition-colors">
+                    <Icon name="menu_book" className="text-2xl" />
+                  </div>
+                  <h3 className="font-bold text-lg">Subjects</h3>
+                  <p className="text-sm text-blue-100 mt-1">
+                    {displaySubjects.length} subjects • {Object.values(resources).reduce((sum, arr) => sum + arr.length, 0)} resources
+                  </p>
+                </button>
+
+                {/* Exam Schedule */}
+                <button
+                  onClick={() => navigateTo('CALENDAR')}
+                  className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} p-4 rounded-2xl border text-left hover:border-amber-300 hover:shadow-lg hover:scale-[1.02] transition-all group relative overflow-hidden`}
+                >
+                  {exams.filter(e => getExamStatus(e) === 'ongoing').length > 0 && (
+                    <span className="absolute top-2 right-2 px-2 py-0.5 bg-green-500 text-white text-[10px] rounded-full font-bold animate-pulse">
+                      LIVE
+                    </span>
+                  )}
+                  <div className={`w-10 h-10 ${darkMode ? 'bg-amber-900/30' : 'bg-amber-100'} rounded-xl flex items-center justify-center mb-3 text-amber-600 group-hover:scale-110 transition-transform`}>
+                    <Icon name="event" />
+                  </div>
+                  <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Exam Schedule</h3>
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-400'} mt-1`}>
+                    {exams.filter(e => getExamStatus(e) === 'upcoming').length} upcoming
+                  </p>
+                </button>
+
+                {/* Class Schedule */}
+                <button
+                  onClick={() => navigateTo('SCHEDULE')}
+                  className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} p-4 rounded-2xl border text-left hover:border-purple-300 hover:shadow-lg hover:scale-[1.02] transition-all group`}
+                >
+                  <div className={`w-10 h-10 ${darkMode ? 'bg-purple-900/30' : 'bg-purple-100'} rounded-xl flex items-center justify-center mb-3 text-purple-600 group-hover:scale-110 transition-transform`}>
+                    <Icon name="calendar_month" />
+                  </div>
+                  <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Class Schedule</h3>
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-400'} mt-1`}>Weekly timetable</p>
+                </button>
+
+                {/* My Class - only show if user has section */}
+                {user.section && (
+                  <button
+                    onClick={() => navigateTo('CLASS')}
+                    className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} p-4 rounded-2xl border text-left hover:border-indigo-300 hover:shadow-lg hover:scale-[1.02] transition-all group`}
+                  >
+                    <div className={`w-10 h-10 ${darkMode ? 'bg-indigo-900/30' : 'bg-indigo-100'} rounded-xl flex items-center justify-center mb-3 text-indigo-600 group-hover:scale-110 transition-transform`}>
+                      <Icon name="groups" />
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {displaySubjects.map(subject => {
-                    const deckCount = decks.filter(d => d.subject === subject).length;
-                    const resourceCount = (resources[subject] || []).length;
-                    const info = subjectInfo[subject];
-                    const courseName = info?.name || null;
-                    return (
-                      <button
-                        key={subject}
-                        onClick={() => openSubject(subject)}
-                        className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-stone-400 hover:shadow-md transition-all group"
-                      >
-                        <div className="w-10 h-10 bg-stone-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-stone-800 group-hover:text-white transition-colors">
-                          <Icon name="book_2" />
-                        </div>
-                        <h3 className="font-semibold text-stone-800">{subject}</h3>
-                        {courseName && (
-                          <p className="text-xs text-stone-500 mt-0.5 line-clamp-2">{courseName}</p>
-                        )}
-                        <div className="flex items-center gap-2 mt-1 text-xs text-stone-400">
-                          <span>{deckCount} {deckCount === 1 ? 'deck' : 'decks'}</span>
-                          {resourceCount > 0 && (
-                            <>
-                              <span>•</span>
-                              <span className="flex items-center gap-0.5">
-                                <Icon name="folder" className="text-xs" />
-                                {resourceCount}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+                    <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>My Class</h3>
+                    <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-400'} mt-1`}>Section {user.section}</p>
+                  </button>
+                )}
+
+                {/* Finance - Coming Soon */}
+                <button
+                  onClick={() => navigateTo('FINANCE')}
+                  className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} p-4 rounded-2xl border text-left hover:border-amber-300 hover:shadow-lg hover:scale-[1.02] transition-all group relative`}
+                >
+                  <span className={`absolute top-2 right-2 px-1.5 py-0.5 ${darkMode ? 'bg-amber-900/30 text-amber-400' : 'bg-amber-100 text-amber-600'} text-[10px] font-bold rounded`}>SOON</span>
+                  <div className={`w-10 h-10 ${darkMode ? 'bg-amber-900/30' : 'bg-amber-100'} rounded-xl flex items-center justify-center mb-3 text-amber-600 group-hover:scale-110 transition-transform`}>
+                    <Icon name="payments" />
+                  </div>
+                  <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Finance</h3>
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-400'} mt-1`}>Track payments</p>
+                </button>
+
+                {/* Attendance - Coming Soon */}
+                <button
+                  onClick={() => navigateTo('ATTENDANCE')}
+                  className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} p-4 rounded-2xl border text-left hover:border-cyan-300 hover:shadow-lg hover:scale-[1.02] transition-all group relative`}
+                >
+                  <span className={`absolute top-2 right-2 px-1.5 py-0.5 ${darkMode ? 'bg-cyan-900/30 text-cyan-400' : 'bg-cyan-100 text-cyan-600'} text-[10px] font-bold rounded`}>SOON</span>
+                  <div className={`w-10 h-10 ${darkMode ? 'bg-cyan-900/30' : 'bg-cyan-100'} rounded-xl flex items-center justify-center mb-3 text-cyan-600 group-hover:scale-110 transition-transform`}>
+                    <Icon name="fact_check" />
+                  </div>
+                  <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Attendance</h3>
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-400'} mt-1`}>Track attendance</p>
+                </button>
+              </div>
             </>
           ) : (
             /* Login Prompt for non-logged in users */
-            <div className="bg-stone-100 border-2 border-dashed border-stone-300 rounded-2xl p-8 text-center">
-              <div className="w-16 h-16 bg-stone-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Icon name="lock" className="text-3xl text-stone-500" />
+            <div className={`${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-stone-100 border-stone-300'} border-2 border-dashed rounded-2xl p-8 text-center`}>
+              <div className={`w-16 h-16 ${darkMode ? 'bg-gray-700' : 'bg-stone-200'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+                <Icon name="lock" className={`text-3xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />
               </div>
-              <h3 className="text-xl font-bold text-stone-800 mb-2">Sign in to view subjects</h3>
-              <p className="text-stone-500 mb-4">Log in to access your courses and flashcards</p>
+              <h3 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'} mb-2`}>Sign in to get started</h3>
+              <p className={`${darkMode ? 'text-gray-400' : 'text-stone-500'} mb-4`}>Log in to access all features</p>
               <button
                 onClick={() => setShowLogin(true)}
-                className="px-6 py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-colors inline-flex items-center gap-2"
+                className={`px-6 py-3 ${darkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-stone-800 hover:bg-stone-900'} text-white rounded-xl font-semibold transition-colors inline-flex items-center gap-2`}
               >
                 <Icon name="login" />
                 Sign In
@@ -6048,127 +7675,14 @@ const App = () => {
             </div>
           )}
 
-          {/* Quick Stats Row - Only show when logged in */}
-          {user && (
-            <div className={`grid ${user.section ? 'grid-cols-3' : 'grid-cols-2'} gap-3 mt-8`}>
-              {/* Exams Quick View */}
-              <button
-                onClick={() => setView('CALENDAR')}
-                className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-amber-300 hover:shadow-md transition-all"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
-                    <Icon name="event" />
-                  </div>
-                  {exams.filter(e => getExamStatus(e) === 'ongoing').length > 0 && (
-                    <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-medium animate-pulse">
-                      {exams.filter(e => getExamStatus(e) === 'ongoing').length} NOW
-                    </span>
-                  )}
-                </div>
-                <h3 className="font-semibold text-stone-800">Schedule</h3>
-                <p className="text-xs text-stone-400 mt-1">
-                  {exams.filter(e => getExamStatus(e) === 'upcoming').length} upcoming
-                  {exams.filter(e => getExamStatus(e) === 'completed').length > 0 && ` • ${exams.filter(e => getExamStatus(e) === 'completed').length} done`}
-                </p>
-              </button>
-
-              {/* Class Quick View - only show if user has section */}
-              {user.section && (
-                <button
-                  onClick={() => setView('CLASS')}
-                  className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-purple-300 hover:shadow-md transition-all"
-                >
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 mb-2">
-                    <Icon name="groups" />
-                  </div>
-                  <h3 className="font-semibold text-stone-800">My Class</h3>
-                  <p className="text-xs text-stone-400 mt-1">
-                    Section {user.section}
-                  </p>
-                </button>
-              )}
-
-              {/* Resources Quick View */}
-              {(() => {
-                const totalResources = Object.values(resources).reduce((sum, arr) => sum + arr.length, 0);
-                return (
-                  <button
-                    onClick={() => setView('ALL_RESOURCES')}
-                    className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-blue-300 hover:shadow-md transition-all"
-                  >
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mb-2">
-                      <Icon name="folder_open" />
-                    </div>
-                    <h3 className="font-semibold text-stone-800">Resources</h3>
-                    <p className="text-xs text-stone-400 mt-1">
-                      {totalResources} files across {Object.keys(resources).length} subjects
-                    </p>
-                  </button>
-                );
-              })()}
-
-              {/* Finance Quick View */}
-              <button
-                onClick={() => setView('FINANCE')}
-                className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-amber-300 hover:shadow-md transition-all relative overflow-hidden"
-              >
-                <div className="absolute top-2 right-2">
-                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-600 text-[10px] font-bold rounded">SOON</span>
-                </div>
-                <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600 mb-2">
-                  <Icon name="payments" />
-                </div>
-                <h3 className="font-semibold text-stone-800">Finance</h3>
-              <p className="text-xs text-stone-400 mt-1">
-                Track payments & dues
-              </p>
-            </button>
-
-            {/* Attendance Quick View */}
-            <button
-              onClick={() => setView('ATTENDANCE')}
-              className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-cyan-300 hover:shadow-md transition-all relative overflow-hidden"
-            >
-              <div className="absolute top-2 right-2">
-                <span className="px-1.5 py-0.5 bg-cyan-100 text-cyan-600 text-[10px] font-bold rounded">SOON</span>
-              </div>
-              <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center text-cyan-600 mb-2">
-                <Icon name="fact_check" />
-              </div>
-              <h3 className="font-semibold text-stone-800">Attendance</h3>
-              <p className="text-xs text-stone-400 mt-1">
-                Track your attendance
-              </p>
-            </button>
-
-            {/* Class Schedule Quick View */}
-            <button
-              onClick={() => setView('SCHEDULE')}
-              className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-violet-300 hover:shadow-md transition-all relative overflow-hidden"
-            >
-              <div className="absolute top-2 right-2">
-                <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 text-[10px] font-bold rounded">SOON</span>
-              </div>
-              <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center text-violet-600 mb-2">
-                <Icon name="calendar_month" />
-              </div>
-              <h3 className="font-semibold text-stone-800">Class Schedule</h3>
-              <p className="text-xs text-stone-400 mt-1">
-                Weekly timetable
-              </p>
-            </button>
-            </div>
-          )}
-
           {/* Upcoming Exam Preview (show only if there are upcoming exams AND logged in) */}
           {user && exams.filter(e => getExamStatus(e) === 'upcoming' || getExamStatus(e) === 'ongoing').length > 0 && (
             <>
-              <h2 className="text-lg font-bold text-stone-800 mb-4 mt-8 flex items-center justify-between">
+              <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-stone-800'} mb-4 mt-6 flex items-center justify-between`}>
                 <span className="flex items-center gap-2">
                   <Icon name="event" className="text-amber-500" /> Next Exams
                 </span>
-                <button onClick={() => setView('CALENDAR')} className="text-sm text-stone-500 hover:text-stone-700">
+                <button onClick={() => setView('CALENDAR')} className={`text-sm ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-stone-500 hover:text-stone-700'}`}>
                   View all →
                 </button>
               </h2>
@@ -6179,25 +7693,25 @@ const App = () => {
                   return (
                     <div 
                       key={exam.examId} 
-                      className={`p-3 rounded-xl border ${isOngoing ? 'bg-green-50 border-green-200' : 'bg-white border-stone-200'} flex items-center gap-3 cursor-pointer hover:shadow-md transition-all`}
+                      className={`p-3 rounded-xl border ${isOngoing ? (darkMode ? 'bg-green-900/30 border-green-800' : 'bg-green-50 border-green-200') : (darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200')} flex items-center gap-3 cursor-pointer hover:shadow-md transition-all`}
                       onClick={() => setSelectedExam(exam)}
                     >
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isOngoing ? 'bg-green-500 text-white' : 'bg-amber-100 text-amber-600'}`}>
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isOngoing ? 'bg-green-500 text-white' : (darkMode ? 'bg-amber-900/50 text-amber-400' : 'bg-amber-100 text-amber-600')}`}>
                         <Icon name={isOngoing ? 'schedule' : 'event'} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className={`font-semibold ${isOngoing ? 'text-green-800' : 'text-stone-800'}`}>{exam.courseCode}</span>
-                          <span className={`text-xs ${isOngoing ? 'text-green-600' : 'text-stone-500'}`}>• {exam.examType}</span>
+                          <span className={`font-semibold ${isOngoing ? (darkMode ? 'text-green-200' : 'text-green-800') : (darkMode ? 'text-white' : 'text-stone-800')}`}>{exam.courseCode}</span>
+                          <span className={`text-xs ${isOngoing ? (darkMode ? 'text-green-400' : 'text-green-600') : (darkMode ? 'text-gray-400' : 'text-stone-500')}`}>• {exam.examType}</span>
                         </div>
-                        <p className={`text-xs ${isOngoing ? 'text-green-600' : 'text-stone-400'}`}>
+                        <p className={`text-xs ${isOngoing ? (darkMode ? 'text-green-400' : 'text-green-600') : (darkMode ? 'text-gray-400' : 'text-stone-400')}`}>
                           {isOngoing ? `Now until ${formatExamTime(exam.endTime)}` : `${formatExamDate(exam.date)} • ${formatExamTime(exam.startTime)}`} • Room: {exam.room}
                         </p>
                       </div>
                       {isOngoing ? (
                         <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-medium animate-pulse">NOW</span>
                       ) : (
-                        <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full font-medium whitespace-nowrap">
+                        <span className={`px-2 py-1 ${darkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700'} text-xs rounded-full font-medium whitespace-nowrap`}>
                           {formatCountdown(exam)}
                         </span>
                       )}
@@ -6359,8 +7873,9 @@ const App = () => {
     );
 
     return (
-      <div className="min-h-screen bg-[#F5F5F4]">
+      <div className={`min-h-screen ${darkMode ? 'bg-stone-900' : 'bg-[#F5F5F4]'}`}>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <LoginModal 
           isOpen={showLogin} 
           onClose={() => setShowLogin(false)} 
@@ -7007,13 +8522,16 @@ const App = () => {
   // RESOURCE_VIEW
   if (view === 'RESOURCE_VIEW' && activeResource) {
     return (
-      <ResourceViewer 
-        resource={activeResource} 
-        onClose={() => { 
-          setActiveResource(null); 
-          setView(previousView === 'ALL_RESOURCES' ? 'ALL_RESOURCES' : 'SUBJECT'); 
-        }} 
-      />
+      <>
+        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
+        <ResourceViewer 
+          resource={activeResource} 
+          onClose={() => { 
+            setActiveResource(null); 
+            goBack();
+          }} 
+        />
+      </>
     );
   }
 
@@ -7027,16 +8545,17 @@ const App = () => {
     const hasProgress = answeredCount > 0;
 
     return (
-      <div className="min-h-screen bg-[#F5F5F4] flex flex-col">
-        <header className="bg-white border-b border-stone-200 sticky top-0 z-10 px-4 py-3">
+      <div className={`min-h-screen ${darkMode ? 'bg-stone-900' : 'bg-[#F5F5F4]'} flex flex-col`}>
+        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
+        <header className={`${darkMode ? 'bg-stone-800 border-stone-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-10 px-4 py-3`}>
           <div className="max-w-5xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button onClick={() => activeSubject ? setView('SUBJECT') : resetHome()} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
-                <Icon name="arrow_back" className="text-stone-600" />
+              <button onClick={goBack} className={`p-2 -ml-2 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-full`}>
+                <Icon name="arrow_back" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
               </button>
               <div>
-                <h1 className="font-bold text-stone-800">{activeDeck.name}</h1>
-                <p className="text-xs text-stone-500">{activeDeck.cards.length} cards</p>
+                <h1 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>{activeDeck.name}</h1>
+                <p className={`text-xs ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>{activeDeck.cards.length} cards</p>
               </div>
             </div>
           </div>
@@ -7201,15 +8720,16 @@ const App = () => {
     const incorrectSoFar = Object.values(scores).filter(s => s === 'incorrect').length;
 
     return (
-      <div className="h-[100dvh] bg-[#E7E5E4] flex flex-col overflow-hidden">
-        <header className="flex-shrink-0 bg-[#F5F5F4] px-4 py-3 border-b border-stone-200/50">
+      <div className={`h-[100dvh] ${darkMode ? 'bg-gray-900' : 'bg-[#E7E5E4]'} flex flex-col overflow-hidden`}>
+        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
+        <header className={`flex-shrink-0 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#F5F5F4] border-stone-200/50'} px-4 py-3 border-b`}>
           <div className="flex justify-between items-center">
-            <button onClick={() => setView('DECK_OVERVIEW')} className="p-2 -ml-2">
-              <Icon name="close" className="text-stone-500" />
+            <button onClick={goBack} className="p-2 -ml-2">
+              <Icon name="close" className={darkMode ? 'text-gray-400' : 'text-stone-500'} />
             </button>
             <div className="text-center flex-1">
-              <p className="text-sm font-semibold text-stone-800">{activeDeck?.name}</p>
-              <p className="text-xs text-stone-400">
+              <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{activeDeck?.name}</p>
+              <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>
                 {playMode === 'shuffle' ? 'Shuffled' : 'In Order'} • Card {currentIndex + 1} of {queue.length}
               </p>
             </div>
@@ -7217,7 +8737,7 @@ const App = () => {
           </div>
           {/* Progress Bar */}
           <div className="mt-2">
-            <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
+            <div className={`h-2 ${darkMode ? 'bg-gray-700' : 'bg-stone-200'} rounded-full overflow-hidden`}>
               <div className="h-full flex transition-all">
                 <div 
                   className="bg-emerald-500"
@@ -7228,7 +8748,7 @@ const App = () => {
                   style={{ width: `${(incorrectSoFar / queue.length) * 100}%` }}
                 />
                 <div 
-                  className="bg-stone-400"
+                  className={darkMode ? 'bg-gray-600' : 'bg-stone-400'}
                   style={{ width: `${((currentIndex - correctSoFar - incorrectSoFar) / queue.length) * 100}%` }}
                 />
               </div>
@@ -7242,7 +8762,7 @@ const App = () => {
                   <Icon name="close" className="text-xs" /> {incorrectSoFar}
                 </span>
               </div>
-              <span className="text-stone-500">{progress}%</span>
+              <span className={darkMode ? 'text-gray-500' : 'text-stone-500'}>{progress}%</span>
             </div>
           </div>
         </header>
@@ -7254,41 +8774,41 @@ const App = () => {
           >
             <div className={`w-full h-full duration-500 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
               {/* Front */}
-              <div className="absolute inset-0 backface-hidden bg-white rounded-3xl shadow-xl p-6 flex flex-col items-center justify-between">
-                <div className="w-full flex justify-between text-xs font-bold text-stone-300 uppercase">
+              <div className={`absolute inset-0 backface-hidden ${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-3xl shadow-xl p-6 flex flex-col items-center justify-between`}>
+                <div className={`w-full flex justify-between text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-stone-300'} uppercase`}>
                   <span>Question</span>
                   <span>{currentIndex + 1}/{queue.length}</span>
                 </div>
-                <p className="text-lg md:text-xl font-medium text-stone-800 text-center px-2 overflow-y-auto max-h-[70%]">{card.q}</p>
-                <p className="text-xs text-stone-300 uppercase">Tap to flip</p>
+                <p className={`text-lg md:text-xl font-medium ${darkMode ? 'text-white' : 'text-stone-800'} text-center px-2 overflow-y-auto max-h-[70%]`}>{card.q}</p>
+                <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-300'} uppercase`}>Tap to flip</p>
               </div>
               {/* Back */}
-              <div className="absolute inset-0 backface-hidden rotate-y-180 bg-stone-800 rounded-3xl shadow-xl p-6 flex flex-col items-center justify-between text-white">
-                <div className="w-full flex justify-between text-xs font-bold text-stone-500 uppercase">
+              <div className={`absolute inset-0 backface-hidden rotate-y-180 ${darkMode ? 'bg-blue-900' : 'bg-stone-800'} rounded-3xl shadow-xl p-6 flex flex-col items-center justify-between text-white`}>
+                <div className={`w-full flex justify-between text-xs font-bold ${darkMode ? 'text-blue-300' : 'text-stone-500'} uppercase`}>
                   <span>Answer</span>
                   <span>{currentIndex + 1}/{queue.length}</span>
                 </div>
                 <p className="text-lg md:text-xl font-medium text-center px-2 overflow-y-auto max-h-[70%]">{card.a}</p>
-                <p className="text-xs text-stone-500 uppercase">Mark result</p>
+                <p className={`text-xs ${darkMode ? 'text-blue-300' : 'text-stone-500'} uppercase`}>Mark result</p>
               </div>
             </div>
           </div>
         </main>
 
-        <footer className="flex-shrink-0 bg-[#F5F5F4] p-4 border-t border-stone-200">
+        <footer className={`flex-shrink-0 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#F5F5F4] border-stone-200'} p-4 border-t`}>
           <div className="max-w-sm mx-auto">
             {!isFlipped ? (
               <div className="flex gap-3">
                 <button 
                   onClick={() => currentIndex > 0 && setCurrentIndex(c => c - 1)}
                   disabled={currentIndex === 0}
-                  className="w-14 h-14 rounded-xl bg-stone-200 flex items-center justify-center disabled:opacity-30"
+                  className={`w-14 h-14 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-stone-200'} flex items-center justify-center disabled:opacity-30`}
                 >
-                  <Icon name="arrow_back" className="text-stone-600" />
+                  <Icon name="arrow_back" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
                 </button>
                 <button 
                   onClick={() => setIsFlipped(true)}
-                  className="flex-1 h-14 bg-stone-800 text-white rounded-xl font-semibold"
+                  className={`flex-1 h-14 ${darkMode ? 'bg-blue-600' : 'bg-stone-800'} text-white rounded-xl font-semibold`}
                 >
                   Reveal
                 </button>
@@ -7297,13 +8817,13 @@ const App = () => {
               <div className="grid grid-cols-2 gap-3">
                 <button 
                   onClick={() => handleScore('incorrect')}
-                  className="h-14 bg-red-50 text-red-600 border border-red-200 rounded-xl font-semibold flex items-center justify-center gap-2"
+                  className={`h-14 ${darkMode ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-red-50 text-red-600 border-red-200'} border rounded-xl font-semibold flex items-center justify-center gap-2`}
                 >
                   <Icon name="close" /> Missed
                 </button>
                 <button 
                   onClick={() => handleScore('correct')}
-                  className="h-14 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-xl font-semibold flex items-center justify-center gap-2"
+                  className={`h-14 ${darkMode ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800' : 'bg-emerald-50 text-emerald-600 border-emerald-200'} border rounded-xl font-semibold flex items-center justify-center gap-2`}
                 >
                   <Icon name="check" /> Got it
                 </button>
@@ -7329,49 +8849,50 @@ const App = () => {
     const totalCorrect = fullProgress ? Object.values(fullProgress.cardStatuses).filter(s => s === 'correct').length : 0;
 
     return (
-      <div className="min-h-screen bg-[#F5F5F4] p-4 flex items-center justify-center">
-        <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-sm border border-stone-200 text-center">
+      <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-[#F5F5F4]'} p-4 flex items-center justify-center`}>
+        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
+        <div className={`w-full max-w-sm ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} rounded-2xl p-6 shadow-sm border text-center`}>
           <div className="w-20 h-20 mx-auto mb-4 relative">
             <svg className="w-full h-full -rotate-90">
-              <circle cx="40" cy="40" r="35" stroke="#E7E5E4" strokeWidth="6" fill="none" />
+              <circle cx="40" cy="40" r="35" stroke={darkMode ? '#374151' : '#E7E5E4'} strokeWidth="6" fill="none" />
               <circle cx="40" cy="40" r="35" stroke={percentage >= 70 ? '#10B981' : percentage >= 50 ? '#F59E0B' : '#EF4444'} strokeWidth="6" fill="none" 
                 strokeDasharray="220" strokeDashoffset={220 - (220 * percentage / 100)} />
             </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-xl font-bold">{percentage}%</span>
+            <span className={`absolute inset-0 flex items-center justify-center text-xl font-bold ${darkMode ? 'text-white' : ''}`}>{percentage}%</span>
           </div>
           
-          <h2 className="text-xl font-bold text-stone-800 mb-1">
+          <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'} mb-1`}>
             {percentage >= 80 ? 'Excellent!' : percentage >= 60 ? 'Good Job!' : percentage >= 40 ? 'Keep Practicing!' : 'Keep Going!'}
           </h2>
-          <p className="text-stone-500 text-sm mb-4">Session Complete</p>
+          <p className={`${darkMode ? 'text-gray-400' : 'text-stone-500'} text-sm mb-4`}>Session Complete</p>
 
           {/* Session Stats */}
-          <div className="flex justify-center gap-6 mb-4 p-4 bg-stone-50 rounded-xl">
+          <div className={`flex justify-center gap-6 mb-4 p-4 ${darkMode ? 'bg-gray-700' : 'bg-stone-50'} rounded-xl`}>
             <div>
               <div className="text-2xl font-bold text-emerald-600">{correct}</div>
-              <div className="text-xs text-stone-400">Correct</div>
+              <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-400'}`}>Correct</div>
             </div>
-            <div className="w-px bg-stone-200"></div>
+            <div className={`w-px ${darkMode ? 'bg-gray-600' : 'bg-stone-200'}`}></div>
             <div>
               <div className="text-2xl font-bold text-red-500">{incorrect}</div>
-              <div className="text-xs text-stone-400">Missed</div>
+              <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-400'}`}>Missed</div>
             </div>
           </div>
 
           {/* Overall Deck Progress */}
           {fullProgress && totalDeckCards > total && (
-            <div className="mb-4 p-4 bg-blue-50 rounded-xl text-left">
-              <p className="text-xs text-blue-600 font-semibold mb-2">Overall Deck Progress</p>
-              <div className="h-2 bg-blue-100 rounded-full overflow-hidden mb-2">
+            <div className={`mb-4 p-4 ${darkMode ? 'bg-blue-900/30' : 'bg-blue-50'} rounded-xl text-left`}>
+              <p className={`text-xs ${darkMode ? 'text-blue-400' : 'text-blue-600'} font-semibold mb-2`}>Overall Deck Progress</p>
+              <div className={`h-2 ${darkMode ? 'bg-blue-900/50' : 'bg-blue-100'} rounded-full overflow-hidden mb-2`}>
                 <div 
                   className="h-full bg-blue-500 rounded-full transition-all"
                   style={{ width: `${(totalAnswered / totalDeckCards) * 100}%` }}
                 />
               </div>
-              <p className="text-xs text-blue-700">
+              <p className={`text-xs ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
                 {totalAnswered} of {totalDeckCards} cards completed ({Math.round((totalAnswered / totalDeckCards) * 100)}%)
               </p>
-              <p className="text-xs text-blue-600 mt-1">
+              <p className={`text-xs ${darkMode ? 'text-blue-400' : 'text-blue-600'} mt-1`}>
                 Accuracy: {totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0}%
               </p>
             </div>
@@ -7379,17 +8900,17 @@ const App = () => {
 
           <div className="space-y-2">
             {incorrect > 0 && (
-              <button onClick={() => startSession('retry', playMode)} className="w-full py-3 bg-red-50 text-red-600 border border-red-200 rounded-xl font-semibold flex items-center justify-center gap-2">
+              <button onClick={() => startSession('retry', playMode)} className={`w-full py-3 ${darkMode ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-red-50 text-red-600 border-red-200'} border rounded-xl font-semibold flex items-center justify-center gap-2`}>
                 <Icon name="refresh" /> Review Missed ({incorrect})
               </button>
             )}
-            <button onClick={() => startSession('new', playMode)} className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold flex items-center justify-center gap-2">
+            <button onClick={() => startSession('new', playMode)} className={`w-full py-3 ${darkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-stone-800'} text-white rounded-xl font-semibold flex items-center justify-center gap-2`}>
               <Icon name="replay" /> Play Again
             </button>
-            <button onClick={() => startSession('smart', playMode)} className="w-full py-3 bg-stone-100 text-stone-800 rounded-xl font-semibold flex items-center justify-center gap-2">
+            <button onClick={() => startSession('smart', playMode)} className={`w-full py-3 ${darkMode ? 'bg-gray-700 text-white' : 'bg-stone-100 text-stone-800'} rounded-xl font-semibold flex items-center justify-center gap-2`}>
               <Icon name="psychology" /> Smart Review
             </button>
-            <button onClick={() => setView('DECK_OVERVIEW')} className="w-full py-3 text-stone-500 text-sm">
+            <button onClick={goBack} className={`w-full py-3 ${darkMode ? 'text-gray-400' : 'text-stone-500'} text-sm`}>
               Back to Deck
             </button>
           </div>
@@ -7406,8 +8927,9 @@ const App = () => {
     }
 
     return (
-      <div className="min-h-screen bg-[#F5F5F4]">
+      <div className={`min-h-screen ${darkMode ? 'bg-stone-900' : 'bg-[#F5F5F4]'}`}>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <LoginModal 
           isOpen={showLogin} 
           onClose={() => setShowLogin(false)} 
@@ -7418,14 +8940,14 @@ const App = () => {
         />
         
         {/* Header */}
-        <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
+        <header className={`${darkMode ? 'bg-stone-800 border-stone-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-10`}>
           <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-            <button onClick={resetHome} className="p-2 -ml-2 text-stone-600 hover:bg-stone-100 rounded-lg">
+            <button onClick={goBack} className={`p-2 -ml-2 ${darkMode ? 'text-stone-300 hover:bg-stone-700' : 'text-stone-600 hover:bg-stone-100'} rounded-lg`}>
               <Icon name="arrow_back" />
             </button>
             <div>
-              <h1 className="text-lg font-bold text-stone-800">My Analytics</h1>
-              <p className="text-sm text-stone-500">Track your learning progress</p>
+              <h1 className={`text-lg font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>My Analytics</h1>
+              <p className={`text-sm ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>Track your learning progress</p>
             </div>
           </div>
         </header>
@@ -7761,28 +9283,29 @@ const App = () => {
       }
     };
 
-    const getResourceColor = (category: string) => {
+    const getResourceColor = (category: string, isDark: boolean = false) => {
       switch (category.toLowerCase()) {
         case 'lesson ppt':
         case 'ppt':
-          return 'bg-orange-100 text-orange-600';
+          return isDark ? 'bg-orange-900/30 text-orange-400' : 'bg-orange-100 text-orange-600';
         case 'lesson pdf':
         case 'pdf':
-          return 'bg-red-100 text-red-600';
+          return isDark ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-600';
         case 'reviewer':
-          return 'bg-purple-100 text-purple-600';
+          return isDark ? 'bg-purple-900/30 text-purple-400' : 'bg-purple-100 text-purple-600';
         case 'video':
-          return 'bg-pink-100 text-pink-600';
+          return isDark ? 'bg-pink-900/30 text-pink-400' : 'bg-pink-100 text-pink-600';
         case 'link':
-          return 'bg-blue-100 text-blue-600';
+          return isDark ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-600';
         default:
-          return 'bg-stone-100 text-stone-600';
+          return isDark ? 'bg-stone-700 text-stone-300' : 'bg-stone-100 text-stone-600';
       }
     };
     
     return (
-      <div className="min-h-screen bg-[#F5F5F4]">
+      <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-[#F5F5F4]'}`}>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <LoginModal 
           isOpen={showLogin} 
           onClose={() => setShowLogin(false)} 
@@ -7793,166 +9316,296 @@ const App = () => {
         />
         
         {/* Header */}
-        <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
-          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-            <button onClick={resetHome} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
-              <Icon name="arrow_back" className="text-stone-600" />
-            </button>
-            <div className="flex-1">
-              <h1 className="font-bold text-stone-800 text-lg">All Resources</h1>
-              <p className="text-xs text-stone-500">{allResourcesList.length} total files</p>
+        <header className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-10`}>
+          <div className="max-w-5xl mx-auto px-4 py-3">
+            <div className="flex items-center gap-3">
+              <button onClick={goBack} className={`p-2 -ml-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-full`}>
+                <Icon name="arrow_back" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
+              </button>
+              <div className="flex-1 min-w-0">
+                <h1 className={`font-bold ${darkMode ? 'text-white' : 'text-stone-800'} text-lg`}>Subjects & Resources</h1>
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>
+                  {displaySubjects.length} subjects • {allResourcesList.length} resources
+                </p>
+              </div>
+              {/* Semester Toggle */}
+              <div className={`hidden sm:flex items-center ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} rounded-lg p-0.5`}>
+                <button
+                  onClick={() => handleSemesterSwitch('1st')}
+                  className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${
+                    activeSemester === '1st'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : darkMode ? 'text-gray-300 hover:text-white' : 'text-stone-600 hover:text-stone-800'
+                  }`}
+                >
+                  1st
+                </button>
+                <button
+                  onClick={() => handleSemesterSwitch('2nd')}
+                  className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${
+                    activeSemester === '2nd'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : darkMode ? 'text-gray-300 hover:text-white' : 'text-stone-600 hover:text-stone-800'
+                  }`}
+                >
+                  2nd
+                </button>
+              </div>
+            </div>
+            
+            {/* Tab Navigation */}
+            <div className={`flex gap-1 mt-3 ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} p-1 rounded-xl`}>
+              <button
+                onClick={() => setResourcePageTab('subjects')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  resourcePageTab === 'subjects' 
+                    ? darkMode ? 'bg-gray-600 text-white shadow-sm' : 'bg-white text-stone-800 shadow-sm'
+                    : darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-stone-500 hover:text-stone-700'
+                }`}
+              >
+                <Icon name="book_2" className="text-base" />
+                Subjects
+                <span className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
+                  resourcePageTab === 'subjects' 
+                    ? darkMode ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-600'
+                    : darkMode ? 'bg-gray-600 text-gray-300' : 'bg-stone-200 text-stone-600'
+                }`}>
+                  {displaySubjects.length}
+                </span>
+              </button>
+              <button
+                onClick={() => setResourcePageTab('resources')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  resourcePageTab === 'resources' 
+                    ? darkMode ? 'bg-gray-600 text-white shadow-sm' : 'bg-white text-stone-800 shadow-sm'
+                    : darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-stone-500 hover:text-stone-700'
+                }`}
+              >
+                <Icon name="folder_open" className="text-base" />
+                Resources
+                <span className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
+                  resourcePageTab === 'resources' 
+                    ? darkMode ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-600'
+                    : darkMode ? 'bg-gray-600 text-gray-300' : 'bg-stone-200 text-stone-600'
+                }`}>
+                  {allResourcesList.length}
+                </span>
+              </button>
             </div>
           </div>
         </header>
 
         <main className="max-w-5xl mx-auto p-4">
-          {/* Search and Filters */}
-          <div className="bg-white rounded-xl border border-stone-200 p-4 mb-4 space-y-3">
-            {/* Search Bar */}
-            <div className="relative">
-              <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-              <input
-                type="text"
-                placeholder="Search resources by name, type, or subject..."
-                value={resourceSearchQuery}
-                onChange={(e) => setResourceSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              {resourceSearchQuery && (
-                <button
-                  onClick={() => setResourceSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-stone-100 rounded-full"
-                >
-                  <Icon name="close" className="text-stone-400 text-sm" />
-                </button>
-              )}
-            </div>
-            
-            {/* Filter Dropdowns */}
-            <div className="flex gap-3">
-              {/* Subject Filter */}
-              <div className="flex-1">
-                <select
-                  value={selectedSubjectFilter}
-                  onChange={(e) => setSelectedSubjectFilter(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
-                >
-                  <option value="">All Subjects</option>
-                  {displaySubjects.map(s => (
-                    <option key={s} value={s}>{s} {subjectInfo[s]?.name ? `- ${subjectInfo[s].name}` : ''}</option>
-                  ))}
-                </select>
+          {resourcePageTab === 'subjects' ? (
+            /* SUBJECTS TAB */
+            <>
+              {/* Mobile Semester Toggle */}
+              <div className="sm:hidden flex items-center justify-center gap-2 mb-4">
+                <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>Semester:</span>
+                <div className={`flex items-center ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} rounded-lg p-0.5`}>
+                  <button
+                    onClick={() => handleSemesterSwitch('1st')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      activeSemester === '1st'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : darkMode ? 'text-gray-300' : 'text-stone-600'
+                    }`}
+                  >
+                    1st Semester
+                  </button>
+                  <button
+                    onClick={() => handleSemesterSwitch('2nd')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      activeSemester === '2nd'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : darkMode ? 'text-gray-300' : 'text-stone-600'
+                    }`}
+                  >
+                    2nd Semester
+                  </button>
+                </div>
               </div>
-              
-              {/* Type Filter */}
-              <div className="flex-1">
-                <select
-                  value={selectedCategoryFilter}
-                  onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
-                >
-                  <option value="">All Types</option>
-                  {resourceCategories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            
-            {/* Active Filters Display */}
-            {(selectedSubjectFilter || selectedCategoryFilter || resourceSearchQuery) && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-stone-500">Filters:</span>
-                {resourceSearchQuery && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
-                    "{resourceSearchQuery}"
-                    <button onClick={() => setResourceSearchQuery('')} className="hover:text-blue-900">
-                      <Icon name="close" className="text-xs" />
-                    </button>
-                  </span>
-                )}
-                {selectedSubjectFilter && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
-                    {selectedSubjectFilter}
-                    <button onClick={() => setSelectedSubjectFilter('')} className="hover:text-green-900">
-                      <Icon name="close" className="text-xs" />
-                    </button>
-                  </span>
-                )}
-                {selectedCategoryFilter && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
-                    {selectedCategoryFilter}
-                    <button onClick={() => setSelectedCategoryFilter('')} className="hover:text-purple-900">
-                      <Icon name="close" className="text-xs" />
-                    </button>
-                  </span>
-                )}
-                <button
-                  onClick={() => {
-                    setResourceSearchQuery('');
-                    setSelectedSubjectFilter('');
-                    setSelectedCategoryFilter('');
-                  }}
-                  className="text-xs text-stone-500 hover:text-stone-700 underline"
-                >
-                  Clear all
-                </button>
-              </div>
-            )}
-          </div>
 
-          {/* Results Count */}
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm text-stone-500">
-              Showing {filteredResources.length} of {allResourcesList.length} resources
-            </p>
-          </div>
-
-          {/* Resources Grid */}
-          {filteredResources.length === 0 ? (
-            <div className="text-center py-12">
-              <Icon name="search_off" className="text-5xl text-stone-300 mb-4" />
-              <h3 className="text-lg font-semibold text-stone-600 mb-2">No Resources Found</h3>
-              <p className="text-stone-400">
-                {allResourcesList.length === 0 
-                  ? 'No resources have been added yet' 
-                  : 'Try adjusting your filters or search query'}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {filteredResources.map((resource, idx) => (
-                <button
-                  key={`${resource.subject}-${resource.name}-${idx}`}
-                  onClick={() => {
-                    setActiveSubject(resource.subject);
-                    setActiveResource(resource);
-                    setPreviousView('ALL_RESOURCES');
-                    setView('RESOURCE_VIEW');
-                  }}
-                  className="bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-blue-300 hover:shadow-md transition-all group"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`w-10 h-10 ${getResourceColor(resource.category)} rounded-lg flex items-center justify-center flex-shrink-0`}>
-                      <Icon name={getResourceIcon(resource.category)} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-stone-800 truncate group-hover:text-blue-600 transition-colors">
-                        {resource.name}
-                      </h3>
-                      <p className="text-xs text-stone-500 mt-0.5">
-                        {resource.subject} {subjectInfo[resource.subject]?.name && `• ${subjectInfo[resource.subject].name}`}
-                      </p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={`px-2 py-0.5 ${getResourceColor(resource.category)} rounded-full text-xs font-medium`}>
-                          {resource.category}
-                        </span>
-                      </div>
-                    </div>
+              {/* Subjects Grid */}
+              {displaySubjects.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className={`w-20 h-20 ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+                    <Icon name="school" className="text-4xl text-stone-400" />
                   </div>
-                </button>
-              ))}
-            </div>
+                  <h3 className={`text-lg font-semibold ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-2`}>No Subjects Found</h3>
+                  <p className={darkMode ? 'text-gray-500' : 'text-stone-400'}>No subjects scheduled for {activeSemester} Semester</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {displaySubjects.map(subject => {
+                    const deckCount = decks.filter(d => d.subject === subject).length;
+                    const resourceCount = (resources[subject] || []).length;
+                    const info = subjectInfo[subject];
+                    const courseName = info?.name || null;
+                    
+                    return (
+                      <button
+                        key={subject}
+                        onClick={() => openSubject(subject)}
+                        className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} p-4 rounded-xl border text-left hover:border-blue-300 hover:shadow-lg hover:scale-[1.02] transition-all group`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0 text-white group-hover:scale-110 transition-transform">
+                            <Icon name="book_2" className="text-xl" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className={`font-bold ${darkMode ? 'text-white' : 'text-stone-800'} text-lg`}>{subject}</h3>
+                            {courseName && (
+                              <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'} mt-0.5 line-clamp-2`}>{courseName}</p>
+                            )}
+                            <div className="flex items-center gap-3 mt-2">
+                              <span className={`inline-flex items-center gap-1 px-2 py-1 ${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-stone-100 text-stone-600'} rounded-lg text-xs`}>
+                                <Icon name="style" className="text-sm" />
+                                {deckCount} {deckCount === 1 ? 'deck' : 'decks'}
+                              </span>
+                              {resourceCount > 0 && (
+                                <span className={`inline-flex items-center gap-1 px-2 py-1 ${darkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600'} rounded-lg text-xs`}>
+                                  <Icon name="folder" className="text-sm" />
+                                  {resourceCount}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <Icon name="chevron_right" className={`${darkMode ? 'text-gray-500 group-hover:text-blue-400' : 'text-stone-400 group-hover:text-blue-500'} transition-colors`} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            /* RESOURCES TAB */
+            <>
+              {/* Search and Filters */}
+              <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} rounded-xl border p-3 sm:p-4 mb-4 space-y-3`}>
+                {/* Search Bar */}
+                <div className="relative">
+                  <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input
+                    type="text"
+                    placeholder="Search resources..."
+                    value={resourceSearchQuery}
+                    onChange={(e) => setResourceSearchQuery(e.target.value)}
+                    className={`w-full pl-10 pr-4 py-2.5 sm:py-3 ${darkMode ? 'border-gray-600 bg-gray-700 text-white' : 'border-stone-200 bg-white text-stone-800'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm`}
+                  />
+                  {resourceSearchQuery && (
+                    <button
+                      onClick={() => setResourceSearchQuery('')}
+                      className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 ${darkMode ? 'hover:bg-gray-600' : 'hover:bg-stone-100'} rounded-full`}
+                    >
+                      <Icon name="close" className="text-stone-400 text-sm" />
+                    </button>
+                  )}
+                </div>
+                
+                {/* Filter Dropdowns - Stack on mobile */}
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                  <select
+                    value={selectedSubjectFilter}
+                    onChange={(e) => setSelectedSubjectFilter(e.target.value)}
+                    className={`flex-1 px-3 py-2 ${darkMode ? 'border-gray-600 bg-gray-700 text-white' : 'border-stone-200 bg-white text-stone-800'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm`}
+                  >
+                    <option value="">All Subjects</option>
+                    {displaySubjects.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  
+                  <select
+                    value={selectedCategoryFilter}
+                    onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+                    className={`flex-1 px-3 py-2 ${darkMode ? 'border-gray-600 bg-gray-700 text-white' : 'border-stone-200 bg-white text-stone-800'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm`}
+                  >
+                    <option value="">All Types</option>
+                    {resourceCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                {/* Active Filters */}
+                {(selectedSubjectFilter || selectedCategoryFilter || resourceSearchQuery) && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {resourceSearchQuery && (
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 ${darkMode ? 'bg-blue-900/30 text-blue-300' : 'bg-blue-100 text-blue-700'} rounded-full text-xs`}>
+                        "{resourceSearchQuery}"
+                        <button onClick={() => setResourceSearchQuery('')}><Icon name="close" className="text-xs" /></button>
+                      </span>
+                    )}
+                    {selectedSubjectFilter && (
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 ${darkMode ? 'bg-green-900/30 text-green-300' : 'bg-green-100 text-green-700'} rounded-full text-xs`}>
+                        {selectedSubjectFilter}
+                        <button onClick={() => setSelectedSubjectFilter('')}><Icon name="close" className="text-xs" /></button>
+                      </span>
+                    )}
+                    {selectedCategoryFilter && (
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 ${darkMode ? 'bg-purple-900/30 text-purple-300' : 'bg-purple-100 text-purple-700'} rounded-full text-xs`}>
+                        {selectedCategoryFilter}
+                        <button onClick={() => setSelectedCategoryFilter('')}><Icon name="close" className="text-xs" /></button>
+                      </span>
+                    )}
+                    <button
+                      onClick={() => { setResourceSearchQuery(''); setSelectedSubjectFilter(''); setSelectedCategoryFilter(''); }}
+                      className={`text-xs ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-stone-500 hover:text-stone-700'} underline`}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Results Count */}
+              <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'} mb-3`}>
+                {filteredResources.length} of {allResourcesList.length} resources
+              </p>
+
+              {/* Resources Grid */}
+              {filteredResources.length === 0 ? (
+                <div className="text-center py-12">
+                  <Icon name="search_off" className={`text-5xl ${darkMode ? 'text-gray-600' : 'text-stone-300'} mb-4`} />
+                  <h3 className={`text-lg font-semibold ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-2`}>No Resources Found</h3>
+                  <p className={darkMode ? 'text-gray-500' : 'text-stone-400'}>{allResourcesList.length === 0 ? 'No resources added yet' : 'Try different filters'}</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {filteredResources.map((resource, idx) => (
+                    <button
+                      key={`${resource.subject}-${resource.name}-${idx}`}
+                      onClick={() => {
+                        setActiveSubject(resource.subject);
+                        setActiveResource(resource);
+                        setPreviousView('ALL_RESOURCES');
+                        setView('RESOURCE_VIEW');
+                      }}
+                      className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} p-3 sm:p-4 rounded-xl border text-left hover:border-blue-300 hover:shadow-md transition-all group`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-10 h-10 ${getResourceColor(resource.category, darkMode)} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                          <Icon name={getResourceIcon(resource.category)} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className={`font-semibold ${darkMode ? 'text-white group-hover:text-blue-400' : 'text-stone-800 group-hover:text-blue-600'} truncate transition-colors text-sm sm:text-base`}>
+                            {resource.name}
+                          </h3>
+                          <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'} mt-0.5 truncate`}>
+                            {resource.subject}
+                          </p>
+                          <span className={`inline-block mt-1.5 px-2 py-0.5 ${getResourceColor(resource.category, darkMode)} rounded-full text-xs font-medium`}>
+                            {resource.category}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </main>
       </div>
@@ -7968,12 +9621,14 @@ const App = () => {
     return (
       <>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <ClassPage
           user={user}
-          onBack={() => setView('HOME')}
+          onBack={goBack}
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
+          darkMode={darkMode}
         />
       </>
     );
@@ -7984,7 +9639,8 @@ const App = () => {
     return (
       <>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <FinancePage onBack={() => setView('HOME')} />
+        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
+        <FinancePage onBack={goBack} darkMode={darkMode} />
       </>
     );
   }
@@ -7994,7 +9650,8 @@ const App = () => {
     return (
       <>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <AttendancePage onBack={() => setView('HOME')} />
+        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
+        <AttendancePage onBack={goBack} darkMode={darkMode} />
       </>
     );
   }
@@ -8004,7 +9661,28 @@ const App = () => {
     return (
       <>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <SchedulePage onBack={() => setView('HOME')} />
+        <LoginModal 
+          isOpen={showLogin} 
+          onClose={() => setShowLogin(false)} 
+          onLogin={setUser}
+          addToast={addToast}
+          updateToast={updateToast}
+          removeToast={removeToast}
+        />
+        <SchedulePage 
+          onBack={goBack}
+          user={user}
+          subjects={displaySubjects}
+          subjectInfo={subjectInfo}
+          addToast={addToast}
+          updateToast={updateToast}
+          removeToast={removeToast}
+          semesterConfig={semesterConfig}
+          setSemesterConfig={setSemesterConfig}
+          academicYear={academicYear}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+        />
       </>
     );
   }
@@ -8060,8 +9738,9 @@ const App = () => {
     };
 
     return (
-      <div className="min-h-screen bg-[#F5F5F4]">
+      <div className={`min-h-screen ${darkMode ? 'bg-stone-900' : 'bg-[#F5F5F4]'}`}>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <LoginModal 
           isOpen={showLogin} 
           onClose={() => setShowLogin(false)} 
@@ -8071,19 +9750,19 @@ const App = () => {
           removeToast={removeToast}
         />
 
-        <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
+        <header className={`${darkMode ? 'bg-stone-800 border-stone-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-10`}>
           <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 py-2 sm:py-3">
             {/* Mobile: Compact two-row layout */}
             <div className="sm:hidden space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <button onClick={resetHome} className="p-1.5 hover:bg-stone-100 rounded-full flex-shrink-0">
-                    <Icon name="arrow_back" className="text-stone-600 text-xl" />
+                  <button onClick={goBack} className={`p-1.5 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-full flex-shrink-0`}>
+                    <Icon name="arrow_back" className={`${darkMode ? 'text-stone-300' : 'text-stone-600'} text-xl`} />
                   </button>
-                  <h1 className="font-bold text-stone-800 text-base truncate">Schedule</h1>
+                  <h1 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'} text-base truncate`}>Schedule</h1>
                 </div>
                 <button
-                  onClick={() => setView('EXAMS')}
+                  onClick={() => navigateTo('EXAMS')}
                   className="p-1.5 bg-stone-800 text-white rounded-lg hover:bg-stone-900 flex-shrink-0"
                 >
                   <Icon name="view_list" className="text-lg" />
@@ -8095,18 +9774,18 @@ const App = () => {
             <div className="hidden sm:block">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <button onClick={resetHome} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
-                    <Icon name="arrow_back" className="text-stone-600" />
+                  <button onClick={goBack} className={`p-2 -ml-2 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-full`}>
+                    <Icon name="arrow_back" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
                   </button>
                   <div>
-                    <h1 className="font-bold text-stone-800 text-lg">Schedule</h1>
-                    <p className="text-xs text-stone-500">See all scheduled activities</p>
+                    <h1 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'} text-lg`}>Schedule</h1>
+                    <p className={`text-xs ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>See all scheduled activities</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setView('EXAMS')}
-                    className="flex items-center gap-2 px-4 py-2 bg-white border border-stone-200 text-stone-700 rounded-xl text-sm font-medium hover:border-stone-400 transition-colors"
+                    onClick={() => navigateTo('EXAMS')}
+                    className={`flex items-center gap-2 px-4 py-2 ${darkMode ? 'bg-stone-700 border-stone-600 text-stone-200 hover:border-stone-500' : 'bg-white border-stone-200 text-stone-700 hover:border-stone-400'} border rounded-xl text-sm font-medium transition-colors`}
                   >
                     <Icon name="calendar_month" className="text-sm" />
                     Calendar
@@ -8346,15 +10025,15 @@ const App = () => {
 
         {calendarDetailDate && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setCalendarDetailDate(null)}>
-            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl" onClick={e => e.stopPropagation()}>
-              <div className="p-4 border-b border-stone-200 flex items-start justify-between gap-3">
+            <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl`} onClick={e => e.stopPropagation()}>
+              <div className={`p-4 border-b ${darkMode ? 'border-gray-700' : 'border-stone-200'} flex items-start justify-between gap-3`}>
                 <div>
-                  <p className="text-xs text-stone-400">Selected date</p>
-                  <h3 className="font-bold text-stone-800">{detailLabel}</h3>
-                  <p className="text-xs text-stone-500">{detailEvents.length} scheduled</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Selected date</p>
+                  <h3 className={`font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{detailLabel}</h3>
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{detailEvents.length} scheduled</p>
                 </div>
-                <button onClick={() => setCalendarDetailDate(null)} className="p-2 hover:bg-stone-100 rounded-full">
-                  <Icon name="close" className="text-stone-500" />
+                <button onClick={() => setCalendarDetailDate(null)} className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-full`}>
+                  <Icon name="close" className={darkMode ? 'text-gray-400' : 'text-stone-500'} />
                 </button>
               </div>
 
@@ -8674,7 +10353,8 @@ const App = () => {
     const completedExams = exams.filter(e => getExamStatus(e) === 'completed');
     
     return (
-      <div className="min-h-screen bg-[#F5F5F4]">
+      <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-[#F5F5F4]'}`}>
+        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <ToastContainer toasts={toasts} removeToast={removeToast} />
         <LoginModal 
           isOpen={showLogin} 
@@ -8686,25 +10366,25 @@ const App = () => {
         />
         
         {/* Header */}
-        <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
+        <header className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-10`}>
           <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-            <button onClick={resetHome} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
-              <Icon name="arrow_back" className="text-stone-600" />
+            <button onClick={goBack} className={`p-2 -ml-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-full`}>
+              <Icon name="arrow_back" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
             </button>
             <div className="flex-1">
-              <h1 className="font-bold text-stone-800 text-lg">Schedule</h1>
-              <p className="text-xs text-stone-500">{exams.length} total exams</p>
+              <h1 className={`font-bold ${darkMode ? 'text-white' : 'text-stone-800'} text-lg`}>Schedule</h1>
+              <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{exams.length} total exams</p>
             </div>
             <button
-              onClick={() => setView('CALENDAR')}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-stone-200 text-stone-700 rounded-xl text-sm font-medium hover:border-stone-400 transition-colors"
+              onClick={() => navigateTo('CALENDAR')}
+              className={`flex items-center gap-2 px-4 py-2 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200 hover:border-gray-500' : 'bg-white border border-stone-200 text-stone-700 hover:border-stone-400'} border rounded-xl text-sm font-medium transition-colors`}
             >
               <Icon name="calendar_month" className="text-sm" />
               Calendar
             </button>
             <button
               onClick={() => { setPrefillExamDate(null); user ? setShowAddExam(true) : setShowLogin(true); }}
-              className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
+              className={`flex items-center gap-2 px-4 py-2 ${darkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-stone-800 hover:bg-stone-900'} text-white rounded-xl text-sm font-medium transition-colors`}
             >
               <Icon name="add" className="text-sm" />
               Add
@@ -8715,12 +10395,12 @@ const App = () => {
         <main className="max-w-5xl mx-auto p-4">
           {exams.length === 0 ? (
             <div className="text-center py-12">
-              <Icon name="event" className="text-5xl text-stone-300 mb-4" />
-              <h3 className="text-lg font-semibold text-stone-600 mb-2">No Exams Scheduled</h3>
-              <p className="text-stone-400 mb-4">Add your first exam to get started</p>
+              <Icon name="event" className={`text-5xl ${darkMode ? 'text-gray-600' : 'text-stone-300'} mb-4`} />
+              <h3 className={`text-lg font-semibold ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-2`}>No Exams Scheduled</h3>
+              <p className={`${darkMode ? 'text-gray-500' : 'text-stone-400'} mb-4`}>Add your first exam to get started</p>
               <button
                 onClick={() => { setPrefillExamDate(null); user ? setShowAddExam(true) : setShowLogin(true); }}
-                className="px-6 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors"
+                className={`px-6 py-3 ${darkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-stone-800 hover:bg-stone-900'} text-white rounded-xl font-medium transition-colors`}
               >
                 Add
               </button>
@@ -8730,7 +10410,7 @@ const App = () => {
               {/* Ongoing Exams */}
               {ongoingExams.length > 0 && (
                 <div>
-                  <h2 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2">
+                  <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-stone-800'} mb-3 flex items-center gap-2`}>
                     <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                     Ongoing Now ({ongoingExams.length})
                   </h2>
@@ -8738,7 +10418,7 @@ const App = () => {
                     {ongoingExams.map(exam => (
                       <div 
                         key={exam.examId} 
-                        className="bg-green-50 border border-green-200 p-4 rounded-xl cursor-pointer hover:shadow-md transition-all"
+                        className={`${darkMode ? 'bg-green-900/30 border-green-700' : 'bg-green-50 border-green-200'} border p-4 rounded-xl cursor-pointer hover:shadow-md transition-all`}
                         onClick={() => setSelectedExam(exam)}
                       >
                         <div className="flex items-start justify-between">
@@ -8748,16 +10428,16 @@ const App = () => {
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="font-bold text-green-800">{exam.courseCode}</span>
+                                <span className={`font-bold ${darkMode ? 'text-green-400' : 'text-green-800'}`}>{exam.courseCode}</span>
                                 <span className="px-2 py-0.5 bg-green-500 text-white text-xs rounded-full font-medium">
                                   {exam.examType}
                                 </span>
                               </div>
-                              {exam.courseName && <p className="text-sm text-green-700">{exam.courseName}</p>}
-                              <p className="text-sm text-green-600 mt-1">
+                              {exam.courseName && <p className={`text-sm ${darkMode ? 'text-green-300' : 'text-green-700'}`}>{exam.courseName}</p>}
+                              <p className={`text-sm ${darkMode ? 'text-green-400' : 'text-green-600'} mt-1`}>
                                 {formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)} • Room: {exam.room}
                               </p>
-                              {exam.proctor && <p className="text-xs text-green-600">Proctor: {exam.proctor}</p>}
+                              {exam.proctor && <p className={`text-xs ${darkMode ? 'text-green-400' : 'text-green-600'}`}>Proctor: {exam.proctor}</p>}
                             </div>
                           </div>
                           <span className="px-3 py-1 bg-green-500 text-white text-sm rounded-full font-semibold animate-pulse">
@@ -8773,7 +10453,7 @@ const App = () => {
               {/* Upcoming Exams */}
               {upcomingExams.length > 0 && (
                 <div>
-                  <h2 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2">
+                  <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-stone-800'} mb-3 flex items-center gap-2`}>
                     <Icon name="schedule" className="text-amber-500" />
                     Upcoming ({upcomingExams.length})
                   </h2>
@@ -8781,49 +10461,49 @@ const App = () => {
                     {upcomingExams.map(exam => (
                       <div 
                         key={exam.examId} 
-                        className="bg-white border border-stone-200 p-4 rounded-xl hover:border-amber-300 hover:shadow-md transition-all cursor-pointer"
+                        className={`${darkMode ? 'bg-gray-800 border-gray-700 hover:border-amber-600' : 'bg-white border-stone-200 hover:border-amber-300'} border p-4 rounded-xl hover:shadow-md transition-all cursor-pointer`}
                         onClick={() => setSelectedExam(exam)}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                            <div className={`w-12 h-12 ${darkMode ? 'bg-amber-900/50' : 'bg-amber-100'} rounded-xl flex items-center justify-center ${darkMode ? 'text-amber-400' : 'text-amber-600'}`}>
                               <Icon name="event" className="text-xl" />
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="font-bold text-stone-800">{exam.courseCode}</span>
-                                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                                <span className={`font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{exam.courseCode}</span>
+                                <span className={`px-2 py-0.5 ${darkMode ? 'bg-amber-900/50 text-amber-400' : 'bg-amber-100 text-amber-700'} text-xs rounded-full font-medium`}>
                                   {exam.examType}
                                 </span>
                               </div>
-                              {exam.courseName && <p className="text-sm text-stone-500">{exam.courseName}</p>}
-                              <p className="text-sm text-stone-600 mt-1">
+                              {exam.courseName && <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{exam.courseName}</p>}
+                              <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-stone-600'} mt-1`}>
                                 <span className="font-medium">{formatExamDate(exam.date)}</span>
                               </p>
-                              <p className="text-sm text-stone-500">
+                              <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>
                                 {formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)} • Room: {exam.room}
                               </p>
-                              {exam.proctor && <p className="text-xs text-stone-400">Proctor: {exam.proctor}</p>}
-                              {exam.notes && <p className="text-xs text-stone-400 italic mt-1 line-clamp-2">"{exam.notes}"</p>}
-                              {exam.createdByName && <p className="text-xs text-stone-400">Added by: {exam.createdByName}</p>}
+                              {exam.proctor && <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Proctor: {exam.proctor}</p>}
+                              {exam.notes && <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'} italic mt-1 line-clamp-2`}>"{exam.notes}"</p>}
+                              {exam.createdByName && <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Added by: {exam.createdByName}</p>}
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-2">
-                            <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                            <span className={`px-2 py-1 ${darkMode ? 'bg-amber-900/50 text-amber-400' : 'bg-amber-100 text-amber-700'} text-xs rounded-full font-medium`}>
                               Upcoming
                             </span>
                             {user && user.idNumber === exam.createdBy && (
                               <div className="flex items-center gap-1">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setExamToEdit(exam); }}
-                                  className="p-1 text-stone-400 hover:text-blue-500"
+                                  className={`p-1 ${darkMode ? 'text-gray-500 hover:text-blue-400' : 'text-stone-400 hover:text-blue-500'}`}
                                   title="Edit exam"
                                 >
                                   <Icon name="edit" className="text-sm" />
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setExamToDelete(exam.examId); }}
-                                  className="p-1 text-stone-400 hover:text-red-500"
+                                  className={`p-1 ${darkMode ? 'text-gray-500 hover:text-red-400' : 'text-stone-400 hover:text-red-500'}`}
                                   title="Delete exam"
                                 >
                                   <Icon name="delete" className="text-sm" />
@@ -8841,37 +10521,37 @@ const App = () => {
               {/* Completed Exams */}
               {completedExams.length > 0 && (
                 <div>
-                  <h2 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2">
-                    <Icon name="check_circle" className="text-stone-400" />
+                  <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-stone-800'} mb-3 flex items-center gap-2`}>
+                    <Icon name="check_circle" className={darkMode ? 'text-gray-500' : 'text-stone-400'} />
                     Completed ({completedExams.length})
                   </h2>
                   <div className="space-y-3">
                     {completedExams.map(exam => (
                       <div 
                         key={exam.examId} 
-                        className="bg-stone-50 border border-stone-200 p-4 rounded-xl opacity-60 cursor-pointer hover:opacity-80 hover:shadow-md transition-all"
+                        className={`${darkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-stone-50 border-stone-200'} border p-4 rounded-xl opacity-60 cursor-pointer hover:opacity-80 hover:shadow-md transition-all`}
                         onClick={() => setSelectedExam(exam)}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-stone-200 rounded-xl flex items-center justify-center text-stone-500">
+                            <div className={`w-12 h-12 ${darkMode ? 'bg-gray-700' : 'bg-stone-200'} rounded-xl flex items-center justify-center ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>
                               <Icon name="check" className="text-xl" />
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="font-bold text-stone-600">{exam.courseCode}</span>
-                                <span className="px-2 py-0.5 bg-stone-200 text-stone-600 text-xs rounded-full font-medium">
+                                <span className={`font-bold ${darkMode ? 'text-gray-400' : 'text-stone-600'}`}>{exam.courseCode}</span>
+                                <span className={`px-2 py-0.5 ${darkMode ? 'bg-gray-700 text-gray-400' : 'bg-stone-200 text-stone-600'} text-xs rounded-full font-medium`}>
                                   {exam.examType}
                                 </span>
                               </div>
-                              {exam.courseName && <p className="text-sm text-stone-500">{exam.courseName}</p>}
-                              <p className="text-sm text-stone-500 mt-1">
+                              {exam.courseName && <p className={`text-sm ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>{exam.courseName}</p>}
+                              <p className={`text-sm ${darkMode ? 'text-gray-500' : 'text-stone-500'} mt-1`}>
                                 {formatExamDate(exam.date)} • {formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)}
                               </p>
-                              <p className="text-xs text-stone-400">Room: {exam.room}</p>
+                              <p className={`text-xs ${darkMode ? 'text-gray-600' : 'text-stone-400'}`}>Room: {exam.room}</p>
                             </div>
                           </div>
-                          <span className="px-2 py-1 bg-stone-200 text-stone-600 text-xs rounded-full font-medium">
+                          <span className={`px-2 py-1 ${darkMode ? 'bg-gray-700 text-gray-400' : 'bg-stone-200 text-stone-600'} text-xs rounded-full font-medium`}>
                             Done
                           </span>
                         </div>
