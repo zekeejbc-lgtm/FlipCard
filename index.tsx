@@ -4682,7 +4682,8 @@ const LoginModal = ({
   onLogin,
   addToast,
   updateToast,
-  removeToast
+  removeToast,
+  darkMode
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
@@ -4690,6 +4691,7 @@ const LoginModal = ({
   addToast: (message: string, type: Toast['type'], progress?: number) => number;
   updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
   removeToast: (id: number) => void;
+  darkMode: boolean;
 }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
@@ -6890,6 +6892,7 @@ const App = () => {
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
+          darkMode={darkMode}
         />
 
         {/* Profile Page */}
@@ -7883,6 +7886,7 @@ const App = () => {
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
+          darkMode={darkMode}
         />
 
         {showAddExam && (
