@@ -10043,8 +10043,8 @@ const App = () => {
 
               <div className="p-4 space-y-2">
                 {detailEvents.length === 0 && (
-                  <div className="text-center text-stone-500 py-8">
-                    <Icon name="event" className="text-3xl text-stone-300 mb-2" />
+                  <div className={`text-center ${darkMode ? 'text-gray-400' : 'text-stone-500'} py-8`}>
+                    <Icon name="event" className={`text-3xl ${darkMode ? 'text-gray-600' : 'text-stone-300'} mb-2`} />
                     <p>No items for this date.</p>
                   </div>
                 )}
@@ -10052,16 +10052,13 @@ const App = () => {
                 {detailEvents.sort((a, b) => {
                   const statusA = getExamStatus(a);
                   const statusB = getExamStatus(b);
-                  
                   // Status priority: upcoming/ongoing first, completed last
                   const statusOrder: Record<string, number> = { 'upcoming': 0, 'ongoing': 0, 'completed': 1 };
                   const statusPriorityA = statusOrder[statusA] ?? 0;
                   const statusPriorityB = statusOrder[statusB] ?? 0;
-                  
                   if (statusPriorityA !== statusPriorityB) {
                     return statusPriorityA - statusPriorityB;
                   }
-                  
                   // Within same status, sort by time (nearest first)
                   const getStartTime = (exam: Exam) => {
                     const dateStr = String(exam.date);
@@ -10076,7 +10073,6 @@ const App = () => {
                     examDate.setHours(hour, min, 0, 0);
                     return examDate.getTime();
                   };
-                  
                   return getStartTime(a) - getStartTime(b);
                 }).map((exam) => {
                   const colors = getExamTypeColor(exam.examType);
@@ -10085,25 +10081,25 @@ const App = () => {
                     <button
                       key={exam.examId}
                       onClick={() => { setSelectedExam(exam); setCalendarDetailDate(null); }}
-                      className="w-full text-left p-3 rounded-xl border border-stone-200 bg-white hover:border-stone-400 hover:shadow-sm transition-all flex items-start gap-3"
+                      className={`w-full text-left p-3 rounded-xl border ${darkMode ? 'border-gray-700 bg-gray-800 hover:border-gray-500' : 'border-stone-200 bg-white hover:border-stone-400'} hover:shadow-sm transition-all flex items-start gap-3`}
                     >
                       <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${colors.bg} ${colors.text}`}>
                         <Icon name="event" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-stone-800 line-clamp-1">{exam.courseCode}</span>
+                          <span className={`font-semibold line-clamp-1 ${darkMode ? 'text-white' : 'text-stone-800'}`}>{exam.courseCode}</span>
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${colors.bg} ${colors.text}`}>
                             {exam.examType}
                           </span>
                         </div>
-                        {exam.courseName && <p className="text-xs text-stone-500 line-clamp-1">{exam.courseName}</p>}
-                        <p className="text-xs text-stone-500 mt-1">{formatExamTime(exam.startTime)}{exam.endTime ? ` - ${formatExamTime(exam.endTime)}` : ''}</p>
-                        {exam.room && <p className="text-[11px] text-stone-400">Room: {exam.room}</p>}
+                        {exam.courseName && <p className={`text-xs line-clamp-1 ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{exam.courseName}</p>}
+                        <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{formatExamTime(exam.startTime)}{exam.endTime ? ` - ${formatExamTime(exam.endTime)}` : ''}</p>
+                        {exam.room && <p className={`text-[11px] ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Room: {exam.room}</p>}
                       </div>
                       <span className={`px-2 py-1 rounded-full text-[11px] font-semibold ${
-                        status === 'ongoing' ? 'bg-green-100 text-green-700' :
-                        status === 'upcoming' ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-600'
+                        status === 'ongoing' ? (darkMode ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700') :
+                        status === 'upcoming' ? (darkMode ? 'bg-amber-900 text-amber-200' : 'bg-amber-100 text-amber-700') : (darkMode ? 'bg-gray-700 text-gray-300' : 'bg-stone-100 text-stone-600')
                       }`}>
                         {status === 'ongoing' ? 'Ongoing' : status === 'upcoming' ? 'Upcoming' : 'Done'}
                       </span>
@@ -10112,10 +10108,10 @@ const App = () => {
                 })}
               </div>
 
-              <div className="p-4 border-t border-stone-200 flex justify-end gap-2">
+              <div className={`p-4 border-t flex justify-end gap-2 ${darkMode ? 'border-gray-700' : 'border-stone-200'}`}>
                 <button
                   onClick={() => setCalendarDetailDate(null)}
-                  className="px-4 py-2 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200"
+                  className={`px-4 py-2 rounded-xl font-medium transition-colors ${darkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'}`}
                 >
                   Close
                 </button>
