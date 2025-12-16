@@ -172,11 +172,13 @@ const FloatingThemeToggle = ({ darkMode, setDarkMode }: { darkMode: boolean; set
       setDarkMode(newMode);
       localStorage.setItem('cumlaude_darkMode', String(newMode));
     }}
-    className={`fixed top-4 right-4 z-[100] w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-110 ${
-      darkMode 
+    className={`fixed z-[100] w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-110
+      sm:top-4 sm:right-4 sm:bottom-auto sm:left-auto
+      bottom-4 left-4 top-auto right-auto
+      ${darkMode 
         ? 'bg-amber-400 text-stone-900 hover:bg-amber-300' 
-        : 'bg-stone-800 text-amber-400 hover:bg-stone-700'
-    }`}
+        : 'bg-stone-800 text-amber-400 hover:bg-stone-700'}
+    `}
     title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
   >
     <Icon name={darkMode ? 'light_mode' : 'dark_mode'} className="text-lg" />
