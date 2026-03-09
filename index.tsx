@@ -1,6 +1,286 @@
-import React, { useState, useEffect, useRef } from 'react';
+
+// (Removed duplicate import)
+import React, { Component, ErrorInfo, ReactNode, useState, useEffect, useRef } from 'react'; // Only keep this line, remove any other duplicate
 import { createRoot } from 'react-dom/client';
 import Dexie from 'dexie';
+import jsQR from 'jsqr';
+import './src/index.css';
+
+// Global Error Boundary for debugging
+  class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: any }> {
+    constructor(props: any) {
+      super(props);
+      this.state = { hasError: false, error: null };
+    }
+    static getDerivedStateFromError(error: any) {
+      return { hasError: true, error };
+    }
+    componentDidCatch(error: any, info: ErrorInfo) {
+      // You can log error to an error reporting service here
+      console.error('ErrorBoundary caught an error:', error, info);
+    }
+    render() {
+      if (this.state.hasError) {
+        return (
+          <div style={{ padding: 32, color: 'red', background: '#fff' }}>
+            <h1>Something went wrong.</h1>
+            <pre>{String(this.state.error)}</pre>
+          </div>
+        );
+      }
+      return this.props.children;
+    }
+  }
+
+  // Global JS error handlers for debugging
+  if (typeof window !== 'undefined') {
+    window.onerror = function (msg, url, line, col, error) {
+      console.error('Global error:', msg, url, line, col, error);
+      alert('JS Error: ' + msg + '\n' + url + ':' + line + ':' + col);
+    };
+    window.onunhandledrejection = function (event) {
+      console.error('Unhandled promise rejection:', event.reason);
+      alert('Unhandled promise rejection: ' + event.reason);
+    };
+  }
+  
+// Resource Request Modal State
+// (should be inside a component, not at the top level)
+
+
+
+
+// --- Resource Request Types ---
+type ResourceRequest = {
+  requestId: string;
+  userId: string;
+  userName: string;
+  subject: string;
+  description: string;
+  status: 'open' | 'fulfilled' | string;
+  fulfilledBy?: string;
+  fulfilledByName?: string;
+  resourceUrl?: string;
+  createdAt?: string;
+  fulfilledAt?: string;
+};
+// --- Resource Request Modal ---
+const ResourceRequestModal = ({ isOpen, onClose, subject, user, onRequestComplete, addToast, updateToast, removeToast, darkMode }: {
+  isOpen: boolean;
+  onClose: () => void;
+  subject: string;
+  user: User | null;
+  onRequestComplete: () => void;
+  addToast: (message: string, type: Toast['type'], progress?: number) => number;
+  updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
+  removeToast: (id: number) => void;
+  darkMode: boolean;
+}) => {
+  const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async () => {
+    if (!description.trim()) {
+      setError('Please enter a description');
+      return;
+    }
+    if (!user) {
+      setError('Please login first');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    const toastId = addToast('Submitting request...', 'loading', 20);
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'createResourceRequest',
+          userId: user.idNumber,
+          userName: user.name,
+          subject,
+          description
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        updateToast(toastId, 'Request submitted!', 'success', 100);
+        setTimeout(() => removeToast(toastId), 2000);
+        setDescription('');
+        onRequestComplete();
+        onClose();
+      } else {
+        updateToast(toastId, `Error: ${result.error || 'Unknown error'}`, 'error');
+        setTimeout(() => removeToast(toastId), 4000);
+      }
+    } catch (err: any) {
+      updateToast(toastId, `Network error: ${err.message || 'Failed to connect'}`, 'error');
+      setTimeout(() => removeToast(toastId), 4000);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto`}>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-stone-800 dark:text-white">Request Resource</h2>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-600" disabled={submitting}>
+            <Icon name="close" />
+          </button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Subject</label>
+            <input type="text" value={subject} readOnly className="w-full p-3 border border-stone-200 rounded-xl bg-stone-50 text-stone-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Description *</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)}
+              placeholder="What resource do you need?" rows={3} disabled={submitting}
+              className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none resize-none" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Requested by</label>
+            <input type="text" value={user ? `${user.name} (${user.idNumber})` : 'Login required'} readOnly 
+              className="w-full p-3 border border-stone-200 rounded-xl bg-stone-50 text-stone-500" />
+          </div>
+          {error && <div className="text-red-500 text-sm">{error}</div>}
+          <button onClick={handleSubmit} disabled={submitting} className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold mt-2">
+            {submitting ? 'Submitting...' : 'Submit Request'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+// --- Resource Request List ---
+const ResourceRequestList = ({ subject, user, onFulfill, onMarkFulfilled, addToast, updateToast, removeToast, darkMode }: {
+  subject: string;
+  user: User | null;
+  onFulfill: (request: ResourceRequest, resourceUrl: string) => void;
+  onMarkFulfilled: (requestId: string) => void;
+  addToast: (message: string, type: Toast['type'], progress?: number) => number;
+  updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
+  removeToast: (id: number) => void;
+  darkMode: boolean;
+}) => {
+  const [requests, setRequests] = useState<ResourceRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [fulfillModal, setFulfillModal] = useState<{ open: boolean; request: ResourceRequest | null }>({ open: false, request: null });
+  const [fulfillUrl, setFulfillUrl] = useState('');
+  const [fulfilling, setFulfilling] = useState(false);
+
+  const fetchRequests = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`${GAS_URL}?action=listResourceRequests&subject=${encodeURIComponent(subject)}&status=open`);
+      const result = await response.json();
+      if (result.success) {
+        setRequests(result.requests || []);
+      } else {
+        setError(result.error || 'Failed to load requests');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchRequests(); }, [subject]);
+
+  const handleFulfill = async () => {
+    if (!fulfillModal.request || !fulfillUrl.trim()) return;
+    setFulfilling(true);
+    const toastId = addToast('Fulfilling request...', 'loading', 30);
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'fulfillResourceRequest',
+          requestId: fulfillModal.request.requestId,
+          fulfilledBy: user?.idNumber,
+          fulfilledByName: user?.name,
+          resourceUrl: fulfillUrl
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        updateToast(toastId, '✓ Request fulfilled!', 'success', 100);
+        setTimeout(() => removeToast(toastId), 2000);
+        setFulfillModal({ open: false, request: null });
+        setFulfillUrl('');
+        fetchRequests();
+      } else {
+        updateToast(toastId, `Error: ${result.error || 'Unknown error'}`, 'error');
+        setTimeout(() => removeToast(toastId), 4000);
+      }
+    } catch (err: any) {
+      updateToast(toastId, `Network error: ${err.message || 'Failed to connect'}`, 'error');
+      setTimeout(() => removeToast(toastId), 4000);
+    } finally {
+      setFulfilling(false);
+    }
+  };
+
+  if (loading) return <div className="text-center text-stone-400 py-4">Loading resource requests...</div>;
+  if (error) return <div className="text-center text-red-500 py-4">{error}</div>;
+  if (requests.length === 0) return <div className="text-center text-stone-400 py-4">No open resource requests.</div>;
+
+  return (
+    <div className="mt-8">
+      <h3 className={`font-semibold mb-3 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-stone-800'}`}> 
+        <Icon name="help" className="text-amber-500" /> Resource Requests
+      </h3>
+      <div className="space-y-3">
+        {requests.map(req => (
+          <div key={req.requestId} className={`p-4 rounded-xl border flex flex-col gap-2 ${darkMode ? 'border-stone-700 bg-stone-900' : 'border-amber-200 bg-amber-50'}`}> 
+            <div className="flex items-center gap-2">
+              <Icon name="person" className="text-stone-400" />
+              <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>{req.userName}</span>
+              <span className="text-xs text-stone-400">({req.userId})</span>
+              <span className="ml-auto text-xs text-stone-400">{req.createdAt ? new Date(req.createdAt).toLocaleString() : ''}</span>
+            </div>
+            <div className={darkMode ? 'text-stone-100' : 'text-stone-700'}>{req.description}</div>
+            <div className="flex gap-2 mt-2">
+              {user && user.idNumber !== req.userId && (
+                <button onClick={() => setFulfillModal({ open: true, request: req })} className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Fulfill</button>
+              )}
+              {user && user.idNumber === req.userId && (
+                <button onClick={() => onMarkFulfilled(req.requestId)} className="px-3 py-1 bg-stone-600 text-white rounded-lg text-sm font-medium hover:bg-stone-700">Mark as Fulfilled</button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Fulfill Modal */}
+      {fulfillModal.open && fulfillModal.request && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl p-6 w-full max-w-md shadow-xl`}>
+            <h2 className={`text-lg font-bold mb-2 ${darkMode ? 'text-white' : 'text-stone-800'}`}>Fulfill Resource Request</h2>
+            <p className={`mb-2 ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>{fulfillModal.request.description}</p>
+            <input type="text" value={fulfillUrl} onChange={e => setFulfillUrl(e.target.value)}
+              placeholder="Paste resource link here" className={`w-full p-3 border rounded-xl mb-3 ${darkMode ? 'border-stone-700 bg-stone-900 text-white' : 'border-stone-200'}`} disabled={fulfilling} />
+            <div className="flex gap-2">
+              <button onClick={handleFulfill} disabled={fulfilling || !fulfillUrl.trim()} className="flex-1 py-2 bg-emerald-600 text-white rounded-xl font-semibold">
+                {fulfilling ? 'Submitting...' : 'Submit'}
+              </button>
+              <button onClick={() => setFulfillModal({ open: false, request: null })} className={`flex-1 py-2 rounded-xl font-semibold ${darkMode ? 'bg-stone-700 text-white' : 'bg-stone-200 text-stone-700'}`}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 // --- Types ---
 
@@ -35,27 +315,36 @@ type CategoryItem = {
 };
 
 type User = {
-  idNumber: string;
-  name: string;
-  record: Record<string, any>;
-  // Extended profile fields
-  username?: string;
-  profilePicture?: string;
+  idNumber: string; // Primary key (Student/Employee ID)
+  username: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  profilePictureURL?: string;
+  profilePictureFileId?: string;
+  digitalSignatureURL?: string;
   birthday?: string;
-  email?: string;
+  email: string;
+  emailVerified: boolean;
   schoolEmail?: string;
+  schoolEmailVerified: boolean;
   school?: string;
   college?: string;
   program?: string;
   major?: string;
   year?: number;
   section?: string;
-  createdAt?: string;
-  lastLogin?: string;
-  isGuest?: boolean;
+  createdDate: string;
+  lastLogin: string;
+  record?: Record<string, any>; // For backward compatibility
   // Class/Organization fields
-  role?: 'student' | 'class-president' | 'class-vice-president' | 'class-secretary' | 'class-treasurer' | 'class-auditor' | 'class-pio' | 'class-sergeant-at-arms' | 'class-muse' | 'class-escort' | 'organization-officer';
-  position?: string; // Custom position title
+  role?: UserRole;
+  position?: ClassPosition | string;
+  // Legacy compatibility
+  name?: string; // Will map to fullName
+  profilePicture?: string; // Will map to profilePictureURL
+  createdAt?: string; // Will map to createdDate
+  sessionToken?: string;
 };
 
 type Toast = {
@@ -134,12 +423,67 @@ type SubjectInfo = {
   name: string;
 };
 
+type UserRole = 'student' | 'admin' | 'superadmin' | 'faculty' | 'guest';
+
+type ClassPosition =
+  | ''
+  | 'Mayor'
+  | 'Vice Mayor'
+  | 'Secretary'
+  | 'Assistant Secretary'
+  | 'Treasurer'
+  | 'Auditor'
+  | 'Business Manager'
+  | 'Internal Public Information Officer'
+  | 'External Public Information Officer'
+  | 'Marshal 1'
+  | 'Marshal 2'
+  | 'Marshal 3';
+
 // --- Constants ---
 
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxnlS12um9vSaZqrC4oS6MZbl0AVAZyop3G9Qd2uAZmtj1VMP6ZiP0APtd-mFYBGpA/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbx7gVOloTlgAZ5NJalR5QRrEo8iRdc-rJWZiaiStu2KMU7hAXvicAJXUm2Jm5iCLZZn/exec';
+const CLASS_SCHEDULE_GAS_URL = 'https://script.google.com/macros/s/AKfycbxJoCpVWKo1cWku1ErvwGRuVhvPaqoT2hL51mJMS_8KyjSfmCCTngZt7nZ9T6Yq7Q8oNw/exec';
 const STORAGE_KEY_USER = 'cumlaude_user';
 const STORAGE_KEY_STATE = 'flashcard_session_state';
 const STORAGE_KEY_CACHE_VERSION = 'cumlaude_cache_version';
+
+async function postToAppsScript(payload: unknown) {
+  return fetch(GAS_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8'
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+async function ensureAppServiceWorker() {
+  const existingRegistration = await navigator.serviceWorker.getRegistration();
+  if (existingRegistration) {
+    return existingRegistration;
+  }
+
+  return navigator.serviceWorker.register('/sw.js');
+}
+
+function toDateInputValue(value?: string) {
+  if (!value) return '';
+  return value.includes('T') ? value.split('T')[0] : value;
+}
+
+function splitFullName(name?: string) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) {
+    return { firstName: '', lastName: '' };
+  }
+
+  const parts = trimmed.split(/\s+/);
+  return {
+    firstName: parts[0] || '',
+    lastName: parts.slice(1).join(' ')
+  };
+}
 
 // --- Database ---
 
@@ -236,7 +580,8 @@ const UploadModal = ({
   onUploadComplete,
   addToast,
   updateToast,
-  removeToast
+  removeToast,
+  darkMode
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
@@ -246,6 +591,7 @@ const UploadModal = ({
   addToast: (message: string, type: Toast['type'], progress?: number) => number;
   updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
   removeToast: (id: number) => void;
+  darkMode: boolean;
 }) => {
   const [mode, setMode] = useState<'upload' | 'link'>('upload');
   const [title, setTitle] = useState('');
@@ -644,21 +990,16 @@ const UploadModal = ({
 };
 
 // Alert Modal Component (single button, info/warning/error display)
-const AlertModal = ({
-  isOpen,
-  onClose,
-  title,
-  message,
-  buttonText = 'OK',
-  type = 'info'
-}: {
+const AlertModal = (props: {
   isOpen: boolean;
   onClose: () => void;
   title: string;
   message: string;
   buttonText?: string;
   type?: 'info' | 'warning' | 'error' | 'success';
+  darkMode: boolean;
 }) => {
+  const { isOpen, onClose, title, message, buttonText = 'OK', type = 'info', darkMode } = props;
   if (!isOpen) return null;
 
   const iconConfig = {
@@ -694,15 +1035,7 @@ const AlertModal = ({
 };
 
 // Confirmation Modal Component
-const ConfirmModal = ({
-  isOpen,
-  onClose,
-  onConfirm,
-  title,
-  message,
-  confirmText = 'Delete',
-  confirmColor = 'red'
-}: {
+const ConfirmModal = (props: {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -710,7 +1043,9 @@ const ConfirmModal = ({
   message: string;
   confirmText?: string;
   confirmColor?: 'red' | 'green' | 'stone';
+  darkMode: boolean;
 }) => {
+  const { isOpen, onClose, onConfirm, title, message, confirmText = 'Delete', confirmColor = 'red', darkMode } = props;
   if (!isOpen) return null;
 
   const colorClasses = {
@@ -761,7 +1096,8 @@ const ExamDetailModal = ({
   getTimeUntilExam,
   formatCountdown,
   formatExamDate,
-  formatExamTime
+  formatExamTime,
+  darkMode
 }: {
   exam: Exam | null;
   onClose: () => void;
@@ -772,6 +1108,7 @@ const ExamDetailModal = ({
   formatCountdown: (exam: Exam) => string;
   formatExamDate: (dateStr: string) => string;
   formatExamTime: (timeStr: string) => string;
+  darkMode: boolean;
 }) => {
   if (!exam) return null;
 
@@ -927,7 +1264,8 @@ const AddExamModal = ({
   onAddExam,
   addToast,
   updateToast,
-  removeToast
+  removeToast,
+  darkMode
 }: { 
   isOpen: boolean; 
   onClose: () => void;
@@ -938,6 +1276,7 @@ const AddExamModal = ({
   addToast: (message: string, type: Toast['type'], progress?: number) => number;
   updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
   removeToast: (id: number) => void;
+  darkMode: boolean;
 }) => {
   const [examType, setExamType] = useState('Midterm');
   const [date, setDate] = useState('');
@@ -1114,6 +1453,276 @@ const SCHOOL_DATA = {
   years: [1, 2, 3, 4, 5, 6]
 };
 
+// QR Scanner Component for Registration (inline, no backend save)
+const QRScanner = ({ 
+  onScan, 
+  onError 
+}: { 
+  onScan: (text: string) => void; 
+  onError: (err: string) => void;
+}) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  
+  const [scanMode, setScanMode] = useState<'instructions' | 'camera' | 'upload' | null>('instructions');
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannedText, setScannedText] = useState('');
+  const [uploadPreview, setUploadPreview] = useState<string | null>(null);
+
+  // jsQR is now imported statically at the top of the file
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      stopCamera();
+    };
+  }, []);
+
+  const stopCamera = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setIsScanning(false);
+  };
+
+  const startCamera = async () => {
+    try {
+      setIsScanning(true);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+    } catch (err) {
+      onError('Unable to access camera. Please check permissions.');
+      setIsScanning(false);
+    }
+  };
+
+  // Scan QR from camera continuously
+  useEffect(() => {
+    if (!isScanning || scanMode !== 'camera') return;
+
+    const detectQR = () => {
+      if (!videoRef.current || !canvasRef.current) {
+        animationFrameRef.current = requestAnimationFrame(detectQR);
+        return;
+      }
+
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+
+      if (video.readyState === video.HAVE_ENOUGH_DATA && ctx) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'dontInvert'
+        });
+
+        if (qrCode && qrCode.data) {
+          setScannedText(qrCode.data);
+          onScan(qrCode.data);
+          stopCamera();
+          return;
+        }
+      }
+
+      animationFrameRef.current = requestAnimationFrame(detectQR);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(detectQR);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [isScanning, scanMode, onScan]);
+
+  const handleImageUpload = (file: File) => {
+    setUploadPreview(null);
+    setScannedText('');
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setUploadPreview(dataUrl);
+
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          onError('Canvas not supported');
+          return;
+        }
+
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'attemptBoth'
+        });
+
+        if (qrCode && qrCode.data) {
+          setScannedText(qrCode.data);
+          onScan(qrCode.data);
+        } else {
+          onError('No QR code found in image. Try another image or use camera.');
+        }
+      };
+      img.onerror = () => onError('Failed to load image');
+      img.src = dataUrl;
+    };
+    reader.onerror = () => onError('Failed to read file');
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="space-y-4">
+      {scanMode === 'instructions' && (
+        <div className="space-y-3">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+            <div className="flex gap-2">
+              <div className="flex-shrink-0 text-blue-600 font-bold">1</div>
+              <div>
+                <p className="text-sm font-medium text-blue-900">Visit USEP Attendance System</p>
+                <a
+                  href="https://usep-qrattendance.site/public/login?page=StudentProfile"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs bg-blue-600 text-white px-2 py-1 rounded mt-1 hover:bg-blue-700"
+                >
+                  <Icon name="open_in_new" className="text-sm" />
+                  Open Attendance System
+                </a>
+              </div>
+            </div>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+            <div className="flex gap-2">
+              <div className="flex-shrink-0 text-amber-600 font-bold">2</div>
+              <p className="text-sm text-amber-900">Screenshot or scan your QR code from your student profile</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setScanMode(null)}
+            className="w-full bg-stone-800 text-white py-2.5 rounded-xl hover:bg-stone-900 font-medium"
+          >
+            Continue to Scanner
+          </button>
+        </div>
+      )}
+
+      {scanMode === null && (
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setScanMode('camera'); startCamera(); }}
+            className="flex-1 bg-stone-800 text-white py-2.5 rounded-xl flex items-center justify-center gap-2 hover:bg-stone-900 font-medium"
+          >
+            <Icon name="photo_camera" /> Camera
+          </button>
+          <button
+            onClick={() => { setScanMode('upload'); fileInputRef.current?.click(); }}
+            className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 font-medium"
+          >
+            <Icon name="upload" /> Upload
+          </button>
+        </div>
+      )}
+
+      {scanMode === 'camera' && (
+        <div className="space-y-3">
+          <div className="relative rounded-xl overflow-hidden bg-stone-900">
+            <video ref={videoRef} autoPlay playsInline muted className="w-full" style={{ aspectRatio: '4/3' }} />
+            {isScanning && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-40 h-40 border-2 border-white/50 rounded-lg relative">
+                  <div className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg" />
+                  <div className="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg" />
+                  <div className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg" />
+                  <div className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-emerald-400 rounded-br-lg" />
+                </div>
+              </div>
+            )}
+          </div>
+          <canvas ref={canvasRef} className="hidden" />
+          {isScanning && !scannedText && (
+            <div className="bg-amber-50 border border-amber-200 p-2 rounded-lg text-sm text-amber-700 flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+              Scanning... Point camera at QR code
+            </div>
+          )}
+          <button
+            onClick={() => { stopCamera(); setScanMode(null); }}
+            className="w-full bg-stone-200 text-stone-700 py-2.5 rounded-xl hover:bg-stone-300 font-medium"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {scanMode === 'upload' && (
+        <div className="space-y-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0])}
+            className="hidden"
+          />
+          {!uploadPreview && (
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-stone-300 rounded-xl p-6 text-center cursor-pointer hover:border-stone-400"
+            >
+              <Icon name="upload" className="text-3xl text-stone-400 mb-1" />
+              <p className="text-sm text-stone-600">Click to select QR code image</p>
+            </div>
+          )}
+          {uploadPreview && (
+            <img src={uploadPreview} alt="QR Preview" className="w-full rounded-xl border border-stone-200" />
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-1 bg-stone-200 text-stone-700 py-2.5 rounded-xl hover:bg-stone-300 font-medium"
+            >
+              Choose Another
+            </button>
+            <button
+              onClick={() => { setScanMode(null); setUploadPreview(null); setScannedText(''); }}
+              className="flex-1 bg-stone-200 text-stone-700 py-2.5 rounded-xl hover:bg-stone-300 font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Password strength checker
 const checkPasswordStrength = (password: string): { strength: 'weak' | 'fair' | 'good' | 'strong'; message: string; color: string } => {
   let score = 0;
@@ -1129,54 +1738,162 @@ const checkPasswordStrength = (password: string): { strength: 'weak' | 'fair' | 
   return { strength: 'strong', message: 'Strong - Excellent password!', color: 'bg-emerald-500' };
 };
 
-// Profile Picture Upload Component
-const ProfilePictureUpload = ({ 
+// Digital Signature Upload Component (with canvas drawing)
+const DigitalSignatureUpload = ({ 
   value, 
-  onChange 
+  onChange,
+  idNumber,
+  simpleMode = false // In simple mode, just returns dataURL without uploading
 }: { 
   value: string; 
-  onChange: (url: string) => void;
+  onChange: (url: string, fileId?: string) => void;
+  idNumber?: string;
+  simpleMode?: boolean;
 }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [hasDrawn, setHasDrawn] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current) return;
+    setIsDrawing(true);
+    setHasDrawn(true);
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    
+    ctx.lineTo(x, y);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    setIsDrawing(false);
+  };
+
+  const clearCanvas = () => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasDrawn(false);
+    onChange('', '');
+  };
+
+  const saveSignature = async () => {
+    if (!canvasRef.current || !hasDrawn) return;
+    
+    const canvas = canvasRef.current;
+    const dataUrl = canvas.toDataURL('image/png');
+    
+    // Simple mode: just return the dataURL
+    if (simpleMode) {
+      onChange(dataUrl);
+      return;
+    }
+    
+    // Upload mode: upload to backend
+    if (!idNumber) {
+      alert('ID Number required for upload');
+      return;
+    }
+    
+    setUploading(true);
+    try {
+      const base64 = dataUrl.split(',')[1];
+      
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'uploadDigitalSignature',
+          idNumber: idNumber,
+          data: base64,
+          fileName: `signature_${Date.now()}.png`,
+          mimeType: 'image/png'
+        })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        onChange(result.url, result.fileId);
+      } else {
+        alert('Failed to upload signature: ' + result.error);
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+    // Simple mode: just return the dataURL
+    if (simpleMode) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        onChange(dataUrl);
+      };
+      reader.readAsDataURL(file);
       return;
     }
     
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
+    // Upload mode
+    if (!idNumber) {
+      alert('ID Number required for upload');
       return;
     }
-
+    
     setUploading(true);
     try {
       const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64 = reader.result as string;
+      reader.onload = async (event) => {
+        const dataUrl = event.target?.result as string;
+        const base64 = dataUrl.split(',')[1];
         
-        // Upload to backend
         const response = await fetch(GAS_URL, {
           method: 'POST',
           body: JSON.stringify({
-            action: 'uploadProfilePicture',
+            action: 'uploadDigitalSignature',
+            idNumber: idNumber,
+            data: base64,
             fileName: file.name,
-            mimeType: file.type,
-            data: base64.split(',')[1]
+            mimeType: file.type
           })
         });
-        
+
         const result = await response.json();
-        if (result.success && result.url) {
-          onChange(result.url);
+        if (result.success) {
+          onChange(result.url, result.fileId);
         } else {
-          // Fallback to base64 storage
-          onChange(base64);
+          alert('Failed to upload signature: ' + result.error);
         }
         setUploading(false);
       };
@@ -1188,6 +1905,641 @@ const ProfilePictureUpload = ({
   };
 
   return (
+    <div className="space-y-3">
+      {value ? (
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-full max-w-sm border-2 border-stone-200 rounded-xl p-2 bg-white">
+            <img src={value} alt="Digital Signature" className="w-full h-auto" />
+          </div>
+          <button
+            type="button"
+            onClick={() => onChange('', '')}
+            className="px-4 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50"
+          >
+            Remove Signature
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="border-2 border-dashed border-stone-300 rounded-xl bg-stone-50 p-4">
+            <canvas
+              ref={canvasRef}
+              width={400}
+              height={150}
+              className="w-full border border-stone-200 bg-white rounded-lg cursor-crosshair touch-none"
+              onMouseDown={startDrawing}
+              onMouseMove={draw}
+              onMouseUp={stopDrawing}
+              onMouseLeave={stopDrawing}
+              onTouchStart={startDrawing}
+              onTouchMove={draw}
+              onTouchEnd={stopDrawing}
+            />
+            <div className="flex gap-2 mt-3">
+              <button
+                type="button"
+                onClick={clearCanvas}
+                className="flex-1 px-3 py-2 text-sm border border-stone-300 rounded-lg hover:bg-stone-100"
+                disabled={!hasDrawn}
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={saveSignature}
+                disabled={!hasDrawn || uploading}
+                className="flex-1 px-3 py-2 text-sm bg-stone-800 text-white rounded-lg hover:bg-stone-900 disabled:opacity-50"
+              >
+                {uploading ? 'Uploading...' : 'Save Signature'}
+              </button>
+            </div>
+          </div>
+          <div className="text-center">
+            <span className="text-sm text-stone-500">or</span>
+          </div>
+          <div className="text-center">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2 text-sm border border-stone-300 rounded-lg hover:bg-stone-50"
+            >
+              Upload Signature Image
+            </button>
+          </div>
+        </>
+      )}
+      <p className="text-xs text-stone-500 text-center">
+        {value ? '✓ Signature saved' : 'Draw your signature or upload an image'}
+      </p>
+    </div>
+  );
+};
+
+// Email OTP Verification Component
+const EmailOTPVerification = ({
+  idNumber,
+  email,
+  emailType,
+  onVerified,
+  onCancel,
+  addToast,
+  updateToast,
+  removeToast
+}: {
+  idNumber: string;
+  email: string;
+  emailType: 'personal' | 'school';
+  onVerified: () => void;
+  onCancel: () => void;
+  addToast: (message: string, type: Toast['type'], progress?: number) => number;
+  updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
+  removeToast: (id: number) => void;
+}) => {
+  const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState('');
+  const [expiryLeft, setExpiryLeft] = useState(0);
+  const [locked, setLocked] = useState(false);
+  const [canResend, setCanResend] = useState(false);
+  const resendSchedule = [30, 60, 300, 43200];
+  const [resendStep, setResendStep] = useState(0);
+  const [resendLeft, setResendLeft] = useState(resendSchedule[0]);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  useEffect(() => {
+    // Send initial OTP
+    sendOTP();
+  }, []);
+
+  useEffect(() => {
+    // Reset state when switching email/type
+    setOtpCode(['', '', '', '', '', '']);
+    setLocked(false);
+    setError('');
+    setCanResend(false);
+    setResendStep(0);
+    setResendLeft(resendSchedule[0]);
+    setExpiryLeft(0);
+  }, [email, emailType]);
+
+  useEffect(() => {
+    if (resendLeft <= 0) {
+      setCanResend(true);
+      return;
+    }
+    const timer = setInterval(() => setResendLeft(prev => prev - 1), 1000);
+    return () => clearInterval(timer);
+  }, [resendLeft]);
+
+  useEffect(() => {
+    if (expiryLeft <= 0) return;
+    const timer = setInterval(() => setExpiryLeft(prev => prev - 1), 1000);
+    return () => clearInterval(timer);
+  }, [expiryLeft]);
+
+  const sendOTP = async () => {
+    setError('');
+    setCanResend(false);
+    setResendLeft(resendSchedule[resendStep]);
+    const toastId = addToast('Sending verification code...', 'loading');
+    
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'sendEmailOTP',
+          idNumber,
+          email,
+          emailType
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        updateToast(toastId, `Code sent to ${email}`, 'success');
+        setTimeout(() => removeToast(toastId), 3000);
+        const cooldownSeconds = result.remainingSeconds || result.cooldownSeconds || resendSchedule[resendStep];
+        setResendLeft(cooldownSeconds);
+        setResendStep(prev => Math.min(prev + 1, resendSchedule.length - 1));
+
+        if (result.expiresAt) {
+          const expiry = new Date(result.expiresAt).getTime();
+          const now = Date.now();
+          const seconds = Math.floor((expiry - now) / 1000);
+          setExpiryLeft(Math.max(0, seconds));
+        }
+        
+        if (result.locked) {
+          setLocked(true);
+          setResendLeft(result.remainingSeconds || cooldownSeconds);
+        }
+      } else {
+        updateToast(toastId, result.error || 'Failed to send code', 'error');
+        setTimeout(() => removeToast(toastId), 3000);
+        setError(result.error || 'Failed to send code');
+        
+        if (result.locked) {
+          setLocked(true);
+          setResendLeft(result.remainingSeconds || resendSchedule[resendStep]);
+        }
+      }
+    } catch (err: any) {
+      updateToast(toastId, 'Network error', 'error');
+      setTimeout(() => removeToast(toastId), 3000);
+      setError('Network error. Please try again.');
+    }
+  };
+
+  const handleInputChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return; // Only digits
+    
+    const newOtp = [...otpCode];
+    newOtp[index] = value.slice(-1); // Take last character only
+    setOtpCode(newOtp);
+    setError('');
+
+    // Auto-focus next input
+    if (value && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+
+    // Auto-verify when all 6 digits entered
+    if (index === 5 && value && newOtp.every(d => d)) {
+      verifyOTP(newOtp.join(''));
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !otpCode[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    const newOtp = pastedData.split('').concat(Array(6 - pastedData.length).fill(''));
+    setOtpCode(newOtp as string[]);
+    
+    if (pastedData.length === 6) {
+      verifyOTP(pastedData);
+    }
+  };
+
+  const verifyOTP = async (code: string) => {
+    setVerifying(true);
+    setError('');
+
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'verifyEmailOTP',
+          idNumber,
+          email,
+          emailType,
+          otpCode: code
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success && result.verified) {
+        const toastId = addToast('Email verified successfully!', 'success');
+        setTimeout(() => removeToast(toastId), 2000);
+        onVerified();
+      } else {
+        setError(result.error || 'Invalid verification code');
+        setOtpCode(['', '', '', '', '', '']);
+        inputRefs.current[0]?.focus();
+        
+        if (result.locked) {
+          setLocked(true);
+          setResendLeft(result.remainingSeconds || resendSchedule[resendStep]);
+        }
+        
+        if (result.attempts) {
+          setError(`${result.error} (${result.remainingAttempts || 0} attempts remaining)`);
+        }
+      }
+    } catch (err: any) {
+      setError('Network error. Please try again.');
+      setOtpCode(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) return `${mins}m ${secs}s`;
+    return `${secs}s`;
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="text-center">
+        <h3 className="text-lg font-semibold text-stone-700 mb-2">Verify {emailType === 'school' ? 'School' : 'Personal'} Email</h3>
+        <p className="text-sm text-stone-600">
+          We sent a 6-digit code to <strong>{email}</strong>
+        </p>
+      </div>
+
+      <div className="flex justify-center gap-2" onPaste={handlePaste}>
+        {otpCode.map((digit, index) => (
+          <input
+            key={index}
+            ref={el => inputRefs.current[index] = el}
+            type="text"
+            inputMode="numeric"
+            maxLength={1}
+            value={digit}
+            onChange={(e) => handleInputChange(index, e.target.value)}
+            onKeyDown={(e) => handleKeyDown(index, e)}
+            disabled={verifying || locked}
+            className="w-12 h-14 text-center text-2xl font-bold border-2 border-stone-300 rounded-xl focus:border-stone-600 focus:ring-2 focus:ring-stone-200 outline-none disabled:bg-stone-100"
+          />
+        ))}
+      </div>
+
+      {error && (
+        <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg text-center">
+          {error}
+        </div>
+      )}
+
+      {locked ? (
+        <div className="text-amber-600 text-sm bg-amber-50 p-3 rounded-lg text-center">
+          <Icon name="lock" className="inline mr-1" />
+          Too many attempts. Try again in {formatTime(resendLeft)}
+        </div>
+      ) : (
+        <div className="text-center text-sm text-stone-500">
+          {canResend ? 'You can resend a new code now.' : `You can resend in ${formatTime(Math.max(resendLeft, 0))}`}
+          {expiryLeft > 0 && <div>Code expires in {formatTime(expiryLeft)}</div>}
+        </div>
+      )}
+
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 py-3 border border-stone-300 text-stone-700 rounded-xl font-semibold hover:bg-stone-50"
+          disabled={verifying}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={sendOTP}
+          disabled={!canResend || verifying || locked}
+          className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 disabled:opacity-50"
+        >
+          {locked ? 'Locked' : verifying ? 'Verifying...' : canResend ? 'Resend Code' : 'Sending...'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// =====================================================
+// IMAGE UPLOAD UTILITIES (CORS-RESILIENT)
+// =====================================================
+
+/**
+ * Validate an image file before upload
+ */
+const validateImageFile = (file: File, maxSizeMB: number = 5): { valid: boolean; error?: string } => {
+  const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
+  
+  if (!allowedTypes.includes(file.type.toLowerCase())) {
+    return { valid: false, error: 'Invalid file type. Allowed: PNG, JPG, WebP, GIF' };
+  }
+  
+  if (file.size > maxSizeMB * 1024 * 1024) {
+    return { valid: false, error: `File size must be less than ${maxSizeMB}MB` };
+  }
+  
+  return { valid: true };
+};
+
+/**
+ * Convert File to base64 (stripped of data URL prefix)
+ */
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      resolve(result.split(',')[1]); // Strip data URL prefix
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+};
+
+/**
+ * Extract Google Drive file ID from various URL formats
+ */
+const extractDriveFileId = (url: string): string | null => {
+  if (!url) return null;
+  
+  // Pattern 1: googleusercontent.com/d/{fileId}
+  const googleUserContentMatch = url.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
+  if (googleUserContentMatch) return googleUserContentMatch[1];
+  
+  // Pattern 2: drive.google.com/thumbnail?id={fileId} or uc?...&id={fileId}
+  const idParamMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idParamMatch) return idParamMatch[1];
+  
+  // Pattern 3: drive.google.com/file/d/{fileId}/
+  const fileDMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (fileDMatch) return fileDMatch[1];
+  
+  return null;
+};
+
+/**
+ * Add cache-busting timestamp to URL
+ */
+const addCacheBuster = (url: string): string => {
+  if (!url) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}t=${Date.now()}`;
+};
+
+// =====================================================
+// RESILIENT DRIVE IMAGE COMPONENT
+// =====================================================
+
+/**
+ * DriveImage - Resilient Google Drive Image Component
+ * Implements automatic fallback logic when primary URLs fail
+ */
+const DriveImage = ({ 
+  src, 
+  alt, 
+  className = '', 
+  style,
+  fallbackIcon,
+  cacheBust = true,
+  onLoad,
+  onError
+}: { 
+  src: string;
+  alt: string;
+  className?: string;
+  style?: React.CSSProperties;
+  fallbackIcon?: React.ReactNode;
+  cacheBust?: boolean;
+  onLoad?: () => void;
+  onError?: () => void;
+}) => {
+  const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  
+  // Generate fallback URLs
+  const fallbackUrls = React.useMemo(() => {
+    if (!src) return [];
+    
+    const fileId = extractDriveFileId(src);
+    
+    if (!fileId) {
+      // If src is base64 or non-Drive URL, use as-is
+      return [src];
+    }
+    
+    // Order: primary googleusercontent -> thumbnail -> direct
+    return [
+      `https://lh3.googleusercontent.com/d/${fileId}`,
+      `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`,
+      `https://drive.google.com/uc?export=view&id=${fileId}`
+    ];
+  }, [src]);
+  
+  // Get current URL with optional cache busting
+  const currentUrl = React.useMemo(() => {
+    const url = fallbackUrls[currentUrlIndex];
+    if (!url) return '';
+    return cacheBust ? addCacheBuster(url) : url;
+  }, [fallbackUrls, currentUrlIndex, cacheBust]);
+  
+  // Reset state when src changes
+  useEffect(() => {
+    setCurrentUrlIndex(0);
+    setIsLoading(true);
+    setHasError(false);
+  }, [src]);
+  
+  const handleLoad = () => {
+    setIsLoading(false);
+    setHasError(false);
+    onLoad?.();
+  };
+  
+  const handleError = () => {
+    const nextIndex = currentUrlIndex + 1;
+    
+    if (nextIndex < fallbackUrls.length) {
+      setCurrentUrlIndex(nextIndex);
+    } else {
+      setIsLoading(false);
+      setHasError(true);
+      onError?.();
+    }
+  };
+  
+  // Show fallback if no src or all fallbacks failed
+  if (!src || hasError) {
+    return (
+      <div className={`flex items-center justify-center bg-stone-100 text-stone-400 ${className}`} style={style}>
+        {fallbackIcon || <Icon name="person" className="text-3xl" />}
+      </div>
+    );
+  }
+  
+  // For blob URLs (local previews), render directly without fallback logic
+  if (src.startsWith('blob:') || src.startsWith('data:')) {
+    return (
+      <img
+        src={src}
+        alt={alt}
+        className={className}
+        style={{ ...style, objectFit: 'cover' }}
+        onLoad={onLoad}
+        onError={onError}
+      />
+    );
+  }
+  
+  return (
+    <div className={`relative overflow-hidden ${className}`} style={style}>
+      {isLoading && (
+        <div className="absolute inset-0 animate-pulse bg-stone-200 rounded-full" />
+      )}
+      <img
+        src={currentUrl}
+        alt={alt}
+        className="w-full h-full"
+        style={{ objectFit: 'cover', opacity: isLoading ? 0 : 1, transition: 'opacity 0.2s', borderRadius: 'inherit' }}
+        onLoad={handleLoad}
+        onError={handleError}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+      />
+    </div>
+  );
+};
+
+// =====================================================
+// PROFILE PICTURE UPLOAD COMPONENT (CORS-RESILIENT)
+// =====================================================
+
+const ProfilePictureUpload = ({ 
+  value, 
+  onChange,
+  onUploadComplete,
+  idNumber,
+  firstName,
+  lastName
+}: { 
+  value: string; 
+  onChange: (url: string) => void;
+  onUploadComplete?: (upload: { url: string; fileId?: string }) => void;
+  idNumber?: string;
+  firstName?: string;
+  lastName?: string;
+}) => {
+  const [uploading, setUploading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Cleanup preview URL on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // PHASE 1: Validation
+    const validation = validateImageFile(file, 5);
+    if (!validation.valid) {
+      setError(validation.error || 'Invalid file');
+      return;
+    }
+    
+    setError(null);
+    
+    // PHASE 1: Instant preview using URL.createObjectURL
+    const preview = URL.createObjectURL(file);
+    setPreviewUrl(preview);
+    
+    setUploading(true);
+    try {
+      // PHASE 1: Convert to Base64 (stripped of prefix)
+      const base64Data = await fileToBase64(file);
+      
+      // PHASE 2: CORS-safe upload with text/plain Content-Type
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        headers: {
+          // CRITICAL: Use text/plain to bypass CORS preflight
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify({
+          action: 'uploadProfilePicture',
+          data: base64Data,
+          fileName: file.name,
+          mimeType: file.type,
+          idNumber: idNumber,
+          firstName: firstName,
+          lastName: lastName
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success && result.url) {
+        // PHASE 3: Use the googleusercontent URL from backend
+        onChange(result.url);
+        onUploadComplete?.({ url: result.url, fileId: result.fileId });
+        // Clean up preview
+        URL.revokeObjectURL(preview);
+        setPreviewUrl(null);
+      } else {
+        setError(result.error || 'Upload failed');
+        // Keep preview as visual feedback but don't set as value
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      setError('Network error. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Display URL: use preview during upload, otherwise use saved value
+  const displayUrl = previewUrl || value;
+
+  return (
     <div className="flex flex-col items-center gap-3">
       <div 
         className="w-24 h-24 rounded-full bg-stone-100 border-2 border-dashed border-stone-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-stone-400 transition-all"
@@ -1195,8 +2547,15 @@ const ProfilePictureUpload = ({
       >
         {uploading ? (
           <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
-        ) : value ? (
-          <img src={value} alt="Profile" className="w-full h-full object-cover" />
+        ) : displayUrl ? (
+          // PHASE 4: Use DriveImage for resilient rendering with fallbacks
+          <DriveImage 
+            src={displayUrl} 
+            alt="Profile" 
+            className="w-full h-full rounded-full"
+            fallbackIcon={<Icon name="add_a_photo" className="text-3xl text-stone-400" />}
+            cacheBust={!previewUrl} // Don't cache-bust local preview URLs
+          />
         ) : (
           <Icon name="add_a_photo" className="text-3xl text-stone-400" />
         )}
@@ -1204,11 +2563,15 @@ const ProfilePictureUpload = ({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
         onChange={handleFileSelect}
         className="hidden"
       />
-      <p className="text-xs text-stone-500">Click to upload profile picture</p>
+      {error ? (
+        <p className="text-xs text-red-500">{error}</p>
+      ) : (
+        <p className="text-xs text-stone-500">Click to upload profile picture</p>
+      )}
     </div>
   );
 };
@@ -1227,11 +2590,18 @@ const RegistrationForm = ({
   updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
   removeToast: (id: number) => void;
 }) => {
+  // No longer need UUID - idNumber is the primary key
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [personalVerified, setPersonalVerified] = useState(false);
+  const [schoolVerified, setSchoolVerified] = useState(false);
+  const [pendingUser, setPendingUser] = useState<User | null>(null);
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpEmailType, setOtpEmailType] = useState<'personal' | 'school'>('personal');
+  const [otpEmail, setOtpEmail] = useState('');
   
   // Validation states
   const [usernameStatus, setUsernameStatus] = useState<{ checking: boolean; available: boolean | null; error?: string }>({ checking: false, available: null });
@@ -1242,7 +2612,9 @@ const RegistrationForm = ({
   // Form fields
   const [formData, setFormData] = useState({
     profilePicture: '',
-    name: '',
+    profilePictureFileId: '',
+    firstName: '',
+    lastName: '',
     idNumber: '',
     birthday: '',
     email: '',
@@ -1253,6 +2625,8 @@ const RegistrationForm = ({
     major: '',
     year: 1,
     section: '',
+    qrCodeText: '',
+    digitalSignature: '',
     username: '',
     password: '',
     confirmPassword: ''
@@ -1383,6 +2757,31 @@ const RegistrationForm = ({
   const updateField = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setError('');
+    if (field === 'email') {
+      setPersonalVerified(false);
+      setSchoolVerified(false);
+    }
+    if (field === 'schoolEmail') {
+      setSchoolVerified(false);
+    }
+  };
+
+  const openOtpForEmail = (type: 'personal' | 'school') => {
+    if (type === 'personal') {
+      if (!formData.email || !validateEmail(formData.email) || emailStatus.available === false) {
+        setError('Please enter an available personal email first');
+        return;
+      }
+      setOtpEmail(formData.email);
+    } else {
+      if (!formData.schoolEmail || !validateEmail(formData.schoolEmail) || schoolEmailStatus.available === false) {
+        setError('Please enter an available school email first');
+        return;
+      }
+      setOtpEmail(formData.schoolEmail);
+    }
+    setOtpEmailType(type);
+    setShowOtpModal(true);
   };
 
   const validateStep = (stepNum: number): boolean => {
@@ -1392,8 +2791,8 @@ const RegistrationForm = ({
           setError('Please upload a profile picture');
           return false;
         }
-        if (!formData.name.trim()) {
-          setError('Please enter your full name');
+        if (!formData.firstName.trim() || !formData.lastName.trim()) {
+          setError('Please enter your first and last name');
           return false;
         }
         if (!formData.idNumber) {
@@ -1434,19 +2833,29 @@ const RegistrationForm = ({
           setError(emailStatus.error || 'This email is already registered');
           return false;
         }
-        if (formData.schoolEmail) {
-          if (!validateEmail(formData.schoolEmail)) {
-            setError('Please enter a valid school email');
-            return false;
-          }
-          if (schoolEmailStatus.checking) {
-            setError('Please wait while we verify your school email');
-            return false;
-          }
-          if (schoolEmailStatus.available === false) {
-            setError(schoolEmailStatus.error || 'This school email is already registered');
-            return false;
-          }
+        if (!personalVerified) {
+          setError('Please verify your personal email to continue');
+          return false;
+        }
+        if (!formData.schoolEmail) {
+          setError('Please enter your school email');
+          return false;
+        }
+        if (!validateEmail(formData.schoolEmail)) {
+          setError('Please enter a valid school email');
+          return false;
+        }
+        if (schoolEmailStatus.checking) {
+          setError('Please wait while we verify your school email');
+          return false;
+        }
+        if (schoolEmailStatus.available === false) {
+          setError(schoolEmailStatus.error || 'This school email is already registered');
+          return false;
+        }
+        if (!schoolVerified) {
+          setError('Please verify your school email');
+          return false;
         }
         return true;
       case 3:
@@ -1460,6 +2869,18 @@ const RegistrationForm = ({
         }
         return true;
       case 4:
+        if (!formData.qrCodeText) {
+          setError('Please scan your QR code from USEP Attendance System');
+          return false;
+        }
+        return true;
+      case 5:
+        if (!formData.digitalSignature) {
+          setError('Please provide your digital signature');
+          return false;
+        }
+        return true;
+      case 6:
         if (!formData.username || formData.username.length < 4) {
           setError('Username must be at least 4 characters');
           return false;
@@ -1502,7 +2923,7 @@ const RegistrationForm = ({
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(4)) return;
+    if (!validateStep(6)) return;
 
     setLoading(true);
     const toastId = addToast('Creating your account...', 'loading');
@@ -1512,18 +2933,51 @@ const RegistrationForm = ({
         method: 'POST',
         body: JSON.stringify({
           action: 'registerUser',
-          ...formData
+          idNumber: formData.idNumber,  // Primary key
+          username: formData.username,
+          password: formData.password,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          schoolEmail: formData.schoolEmail,
+          birthday: formData.birthday,
+          school: formData.school,
+          college: formData.college,
+          program: formData.program,
+          major: formData.major,
+          year: formData.year,
+          section: formData.section,
+          qrCodeValue: formData.qrCodeText,
+          digitalSignatureURL: formData.digitalSignature,
+          profilePictureURL: formData.profilePicture,
+          profilePictureFileId: formData.profilePictureFileId,
+          emailVerified: personalVerified,
+          schoolEmailVerified: schoolVerified
         })
       });
 
       const result = await response.json();
 
       if (result.success) {
-        const user: User = result.user;
-        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
-        updateToast(toastId, 'Account created successfully! Welcome to CumLaude!', 'success');
-        setTimeout(() => removeToast(toastId), 3000);
-        onRegister(user);
+        // Map fullName to name for backward compatibility
+        const user: User = {
+          ...result.user,
+          name: result.user.fullName || `${result.user.firstName} ${result.user.lastName}`,
+          profilePicture: result.user.profilePictureURL
+        };
+        if (personalVerified && (!user.schoolEmail || schoolVerified)) {
+          localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+          updateToast(toastId, 'Account created successfully!', 'success');
+          setTimeout(() => removeToast(toastId), 3000);
+          onRegister(user);
+        } else {
+          setPendingUser(user);
+          setOtpEmailType('personal');
+          setOtpEmail(user.email);
+          setShowOtpModal(true);
+          updateToast(toastId, 'Account created. Please verify your email.', 'success');
+          setTimeout(() => removeToast(toastId), 3000);
+        }
       } else {
         setError(result.error || 'Registration failed. Please try again.');
         updateToast(toastId, result.error || 'Registration failed', 'error');
@@ -1548,7 +3002,15 @@ const RegistrationForm = ({
             <div className="flex flex-col items-center">
               <ProfilePictureUpload 
                 value={formData.profilePicture} 
-                onChange={(url) => updateField('profilePicture', url)} 
+                onChange={(url) => updateField('profilePicture', url)}
+                onUploadComplete={({ fileId }) => {
+                  if (fileId) {
+                    updateField('profilePictureFileId' as any, fileId);
+                  }
+                }}
+                idNumber={formData.idNumber}
+                firstName={formData.firstName}
+                lastName={formData.lastName}
               />
               {!formData.profilePicture && (
                 <p className="text-xs text-amber-600 mt-1">* Profile picture is required</p>
@@ -1558,23 +3020,44 @@ const RegistrationForm = ({
               )}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-stone-600 mb-1">Full Name *</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => updateField('name', e.target.value)}
-                  placeholder="Juan Dela Cruz"
-                  className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
-                    formData.name.trim() ? 'border-emerald-500' : 'border-stone-200'
-                  }`}
-                />
-                {formData.name.trim() && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <Icon name="check_circle" className="text-emerald-500" />
-                  </div>
-                )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">First Name *</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={formData.firstName}
+                    onChange={(e) => updateField('firstName', e.target.value)}
+                    placeholder="Juan"
+                    className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                      formData.firstName.trim() ? 'border-emerald-500' : 'border-stone-200'
+                    }`}
+                  />
+                  {formData.firstName.trim() && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <Icon name="check_circle" className="text-emerald-500" />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">Last Name *</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={formData.lastName}
+                    onChange={(e) => updateField('lastName', e.target.value)}
+                    placeholder="Dela Cruz"
+                    className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
+                      formData.lastName.trim() ? 'border-emerald-500' : 'border-stone-200'
+                    }`}
+                  />
+                  {formData.lastName.trim() && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <Icon name="check_circle" className="text-emerald-500" />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1674,16 +3157,28 @@ const RegistrationForm = ({
                  emailStatus.error ? `✗ ${emailStatus.error}` :
                  'Enter your personal email address'}
               </p>
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => openOtpForEmail('personal')}
+                  disabled={personalVerified || emailStatus.checking || emailStatus.available === false || !formData.email || !validateEmail(formData.email)}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold ${personalVerified ? 'bg-emerald-600 text-white' : 'bg-stone-800 text-white hover:bg-stone-900 disabled:opacity-50'}`}
+                >
+                  {personalVerified ? 'Personal Email Verified' : 'Verify Personal Email'}
+                </button>
+                {!personalVerified && <span className="text-xs text-stone-500">Required before school email</span>}
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-stone-600 mb-1">School Email (Optional)</label>
+              <label className="block text-sm font-medium text-stone-600 mb-1">School Email *</label>
               <div className="relative">
                 <input
                   type="email"
                   value={formData.schoolEmail}
                   onChange={(e) => updateField('schoolEmail', e.target.value)}
                   placeholder="juan@usep.edu.ph"
+                  disabled={!personalVerified}
                   className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
                     formData.schoolEmail && schoolEmailStatus.available === true && schoolEmailStatus.valid === true ? 'border-emerald-500' : 
                     formData.schoolEmail && (schoolEmailStatus.available === false || schoolEmailStatus.valid === false) ? 'border-red-500' : 
@@ -1702,7 +3197,10 @@ const RegistrationForm = ({
                   </div>
                 )}
               </div>
-              {formData.schoolEmail && (
+              {!personalVerified && (
+                <p className="text-xs mt-1 text-amber-600">Verify personal email first before adding school email.</p>
+              )}
+              {personalVerified && formData.schoolEmail && (
                 <p className={`text-xs mt-1 ${
                   schoolEmailStatus.available === true && schoolEmailStatus.valid === true ? 'text-emerald-500' :
                   schoolEmailStatus.available === false || schoolEmailStatus.valid === false ? 'text-red-500' :
@@ -1713,6 +3211,19 @@ const RegistrationForm = ({
                    schoolEmailStatus.error ? `✗ ${schoolEmailStatus.error}` :
                    'Enter your school email address'}
                 </p>
+              )}
+              {personalVerified && formData.schoolEmail && (
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => openOtpForEmail('school')}
+                    disabled={schoolVerified || schoolEmailStatus.checking || schoolEmailStatus.available === false}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold ${schoolVerified ? 'bg-emerald-600 text-white' : 'bg-stone-800 text-white hover:bg-stone-900 disabled:opacity-50'}`}
+                  >
+                    {schoolVerified ? 'School Email Verified' : 'Verify School Email'}
+                  </button>
+                  {!schoolVerified && <span className="text-xs text-stone-500">Optional but recommended</span>}
+                </div>
               )}
             </div>
           </div>
@@ -1795,6 +3306,68 @@ const RegistrationForm = ({
         );
 
       case 4:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-stone-700 mb-4">QR Code Verification</h3>
+            <p className="text-sm text-stone-500 mb-4">
+              Scan or upload your QR code from the USEP Attendance System to link your account.
+            </p>
+            
+            <QRScanner
+              onScan={(text) => {
+                updateField('qrCodeText', text);
+              }}
+              onError={(err) => setError(err)}
+            />
+            
+            {formData.qrCodeText && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                <div className="flex items-center gap-2 text-emerald-700">
+                  <Icon name="check_circle" className="text-xl" />
+                  <span className="font-medium">QR Code Scanned Successfully</span>
+                </div>
+                <p className="text-xs text-emerald-600 mt-1 break-all">
+                  {formData.qrCodeText.substring(0, 50)}{formData.qrCodeText.length > 50 ? '...' : ''}
+                </p>
+              </div>
+            )}
+            
+            {!formData.qrCodeText && (
+              <p className="text-xs text-amber-600">* QR code verification is required to continue</p>
+            )}
+          </div>
+        );
+
+      case 5:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-stone-700 mb-4">Digital Signature</h3>
+            <p className="text-sm text-stone-500 mb-4">
+              Draw or upload your digital signature for official documents.
+            </p>
+            
+            <DigitalSignatureUpload
+              value={formData.digitalSignature}
+              onChange={(url) => updateField('digitalSignature', url)}
+              simpleMode={true}
+            />
+            
+            {formData.digitalSignature && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                <div className="flex items-center gap-2 text-emerald-700">
+                  <Icon name="check_circle" className="text-xl" />
+                  <span className="font-medium">Signature Captured</span>
+                </div>
+              </div>
+            )}
+            
+            {!formData.digitalSignature && (
+              <p className="text-xs text-amber-600">* Digital signature is required to continue</p>
+            )}
+          </div>
+        );
+
+      case 6:
         return (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-stone-700 mb-4">Account Credentials</h3>
@@ -1914,43 +3487,48 @@ const RegistrationForm = ({
   };
 
   return (
-    <div className="space-y-4">
-      {/* Progress indicator */}
-      <div className="flex items-center justify-center gap-2 mb-6">
-        {[1, 2, 3, 4].map(s => (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Fixed Header - Progress indicator */}
+      <div className="flex-shrink-0 flex items-center justify-center gap-1 pb-4 border-b border-stone-200">
+        {[1, 2, 3, 4, 5, 6].map(s => (
           <div key={s} className="flex items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
               s < step ? 'bg-emerald-500 text-white' : 
               s === step ? 'bg-stone-800 text-white' : 
               'bg-stone-200 text-stone-500'
             }`}>
-              {s < step ? <Icon name="check" className="text-base" /> : s}
+              {s < step ? <Icon name="check" className="text-sm" /> : s}
             </div>
-            {s < 4 && <div className={`w-8 h-0.5 ${s < step ? 'bg-emerald-500' : 'bg-stone-200'}`} />}
+            {s < 6 && <div className={`w-4 h-0.5 ${s < step ? 'bg-emerald-500' : 'bg-stone-200'}`} />}
           </div>
         ))}
       </div>
 
-      {renderStep()}
+      {/* Scrollable Content Area */}
+      <div className="flex-1 min-h-0 overflow-y-auto py-4 px-0.5 space-y-4">
+        {renderStep()}
 
-      {error && (
-        <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg flex items-center gap-2">
-          <Icon name="error" className="text-lg" />
-          {error}
-        </div>
-      )}
+        {error && (
+          <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg flex items-center gap-2">
+            <Icon name="error" className="text-lg" />
+            {error}
+          </div>
+        )}
+      </div>
 
-      <div className="flex gap-3 pt-2">
+      {/* Fixed Footer - Buttons */}
+      <div className="flex-shrink-0 flex gap-3 pt-4 mt-4 border-t border-stone-200">
         <button
           onClick={step === 1 ? onBack : () => setStep(prev => prev - 1)}
           className="flex-1 py-3 border border-stone-300 text-stone-700 rounded-xl font-semibold hover:bg-stone-50 transition-all"
         >
           {step === 1 ? 'Back to Login' : 'Previous'}
         </button>
-        {step < 4 ? (
+        {step < 6 ? (
           <button
             onClick={handleNext}
-            className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-all"
+            disabled={step === 2 && (!personalVerified || (formData.schoolEmail && !schoolVerified))}
+            className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-all disabled:opacity-50"
           >
             Next
           </button>
@@ -1964,6 +3542,52 @@ const RegistrationForm = ({
           </button>
         )}
       </div>
+
+      {showOtpModal && (
+        <div className="fixed top-0 left-0 right-0 bottom-0 w-screen h-screen bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <EmailOTPVerification
+              idNumber={pendingUser?.idNumber || formData.idNumber}
+              email={otpEmail}
+              emailType={otpEmailType}
+              addToast={addToast}
+              updateToast={updateToast}
+              removeToast={removeToast}
+              onCancel={() => {
+                setShowOtpModal(false);
+                setPendingUser(null);
+              }}
+              onVerified={() => {
+                if (otpEmailType === 'personal') setPersonalVerified(true);
+                if (otpEmailType === 'school') setSchoolVerified(true);
+                if (!pendingUser) {
+                  // Pre-registration verification path
+                  setShowOtpModal(false);
+                  return;
+                }
+                const updatedUser: User = {
+                  ...pendingUser,
+                  emailVerified: otpEmailType === 'personal' ? true : pendingUser.emailVerified,
+                  schoolEmailVerified: otpEmailType === 'school' ? true : pendingUser.schoolEmailVerified
+                };
+
+                if (otpEmailType === 'personal' && pendingUser.schoolEmail) {
+                  setPendingUser(updatedUser);
+                  setOtpEmailType('school');
+                  setOtpEmail(pendingUser.schoolEmail);
+                  setShowOtpModal(true);
+                  return;
+                }
+
+                localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
+                onRegister(updatedUser);
+                setShowOtpModal(false);
+                setPendingUser(null);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1974,26 +3598,54 @@ const ProfilePage = ({
   onClose,
   onLogout,
   onUpdate,
+  addToast,
+  updateToast,
+  removeToast,
   darkMode = false
 }: {
   user: User;
   onClose: () => void;
   onLogout: () => void;
   onUpdate: (user: User) => void;
+  addToast: (message: string, type: Toast['type'], progress?: number) => number;
+  updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
+  removeToast: (id: number) => void;
   darkMode?: boolean;
 }) => {
   const [editing, setEditing] = useState(false);
-  const [editData, setEditData] = useState({ ...user, newUsername: '', newPassword: '', confirmPassword: '' });
+  const [editData, setEditData] = useState({
+    ...user,
+    birthday: toDateInputValue(user.birthday),
+    newUsername: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
   const [loading, setLoading] = useState(false);
   const [editError, setEditError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otpEmailType, setOtpEmailType] = useState<'personal' | 'school'>('personal');
+  const [pendingProfileUser, setPendingProfileUser] = useState<User | null>(null);
   const [usernameStatus, setUsernameStatus] = useState<{ checking: boolean; available: boolean | null; error?: string }>({ checking: false, available: null });
   const [emailStatus, setEmailStatus] = useState<{ checking: boolean; available: boolean | null; error?: string }>({ checking: false, available: null });
   const [schoolEmailStatus, setSchoolEmailStatus] = useState<{ checking: boolean; available: boolean | null; error?: string }>({ checking: false, available: null });
 
   // Validate email format
   const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const personalEmailChanged = !!editData.email && editData.email !== user.email;
+  const schoolEmailChanged = !!editData.schoolEmail && editData.schoolEmail !== user.schoolEmail;
+
+  const getVerificationBadge = (verified?: boolean) => verified ? {
+    label: 'Verified',
+    className: darkMode ? 'bg-emerald-900/40 text-emerald-300' : 'bg-emerald-100 text-emerald-700',
+    icon: 'verified'
+  } : {
+    label: 'Unverified',
+    className: darkMode ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-100 text-amber-700',
+    icon: 'error'
+  };
 
   // Check username availability
   useEffect(() => {
@@ -2116,12 +3768,15 @@ const ProfilePage = ({
 
     setLoading(true);
     try {
+      const { firstName, lastName } = splitFullName(editData.name);
+
       const updatePayload: any = {
-        action: 'updateProfile',
+        action: 'updateUserProfile',
         idNumber: user.idNumber,
-        name: editData.name,
-        profilePicture: editData.profilePicture,
-        birthday: editData.birthday,
+        firstName,
+        lastName,
+        profilePictureFileId: editData.profilePictureFileId,
+        birthday: toDateInputValue(editData.birthday),
         email: editData.email,
         schoolEmail: editData.schoolEmail,
       };
@@ -2141,19 +3796,37 @@ const ProfilePage = ({
 
       const result = await response.json();
       if (result.success) {
+        const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
         const updatedUser = { 
           ...user, 
-          name: editData.name,
+          firstName,
+          lastName,
+          fullName,
+          name: fullName,
+          profilePictureURL: editData.profilePicture,
           profilePicture: editData.profilePicture,
-          birthday: editData.birthday,
+          profilePictureFileId: editData.profilePictureFileId,
+          birthday: toDateInputValue(editData.birthday),
           email: editData.email,
           schoolEmail: editData.schoolEmail,
+          emailVerified: result.emailVerified ?? (personalEmailChanged ? false : user.emailVerified),
+          schoolEmailVerified: result.schoolEmailVerified ?? (schoolEmailChanged ? false : user.schoolEmailVerified),
           username: editData.newUsername && editData.newUsername !== user.username ? editData.newUsername : user.username
         };
         localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
         onUpdate(updatedUser);
         setEditing(false);
-        setEditData({ ...updatedUser, newUsername: '', newPassword: '', confirmPassword: '' });
+        setEditData({ ...updatedUser, birthday: toDateInputValue(updatedUser.birthday), newUsername: '', newPassword: '', confirmPassword: '' });
+
+        if (personalEmailChanged || schoolEmailChanged) {
+          setPendingProfileUser(updatedUser);
+          setOtpEmailType(personalEmailChanged ? 'personal' : 'school');
+          setOtpEmail(personalEmailChanged ? (editData.email || '') : (editData.schoolEmail || ''));
+          setShowOtpModal(true);
+        } else {
+          const toastId = addToast('Profile updated successfully', 'success');
+          setTimeout(() => removeToast(toastId), 3000);
+        }
       } else {
         setEditError(result.error || 'Failed to update profile');
       }
@@ -2222,7 +3895,11 @@ const ProfilePage = ({
             <div className="flex justify-center">
               <ProfilePictureUpload 
                 value={editData.profilePicture || ''} 
-                onChange={(url) => setEditData(prev => ({ ...prev, profilePicture: url }))} 
+                onChange={(url) => setEditData(prev => ({ ...prev, profilePicture: url, profilePictureURL: url }))}
+                onUploadComplete={({ fileId }) => setEditData(prev => ({ ...prev, profilePictureFileId: fileId || prev.profilePictureFileId }))}
+                idNumber={user?.idNumber}
+                firstName={splitFullName(editData.name).firstName}
+                lastName={splitFullName(editData.name).lastName}
               />
             </div>
 
@@ -2244,12 +3921,12 @@ const ProfilePage = ({
               {/* Birthday */}
               <div>
                 <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1`}>Birthday</label>
-                <input
-                  type="date"
-                  value={editData.birthday || ''}
-                  onChange={(e) => setEditData(prev => ({ ...prev, birthday: e.target.value }))}
-                  className={`w-full p-3 border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-stone-200'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none`}
-                />
+                  <input
+                    type="date"
+                    value={toDateInputValue(editData.birthday)}
+                    onChange={(e) => setEditData(prev => ({ ...prev, birthday: e.target.value }))}
+                    className={`w-full p-3 border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-stone-200'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none`}
+                  />
               </div>
 
               {/* Personal Email */}
@@ -2278,6 +3955,15 @@ const ProfilePage = ({
                     </div>
                   )}
                 </div>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>
+                    {personalEmailChanged ? 'Changing this email will require verification.' : 'Current verification status shown below.'}
+                  </p>
+                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getVerificationBadge(personalEmailChanged ? false : user.emailVerified).className}`}>
+                    <Icon name={getVerificationBadge(personalEmailChanged ? false : user.emailVerified).icon} className="text-sm" />
+                    {getVerificationBadge(personalEmailChanged ? false : user.emailVerified).label}
+                  </span>
+                </div>
               </div>
 
               {/* School Email */}
@@ -2305,6 +3991,15 @@ const ProfilePage = ({
                       ) : null}
                     </div>
                   )}
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>
+                    {schoolEmailChanged ? 'Changing this email will require verification.' : 'Current verification status shown below.'}
+                  </p>
+                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getVerificationBadge(schoolEmailChanged ? false : user.schoolEmailVerified).className}`}>
+                    <Icon name={getVerificationBadge(schoolEmailChanged ? false : user.schoolEmailVerified).icon} className="text-sm" />
+                    {getVerificationBadge(schoolEmailChanged ? false : user.schoolEmailVerified).label}
+                  </span>
                 </div>
               </div>
             </div>
@@ -2415,7 +4110,17 @@ const ProfilePage = ({
             
             <div className="flex gap-3 pt-2">
               <button
-                onClick={() => { setEditing(false); setEditData({ ...user, newUsername: '', newPassword: '', confirmPassword: '' }); setEditError(''); }}
+                onClick={() => {
+                  setEditing(false);
+                  setEditData({
+                    ...user,
+                    birthday: toDateInputValue(user.birthday),
+                    newUsername: '',
+                    newPassword: '',
+                    confirmPassword: ''
+                  });
+                  setEditError('');
+                }}
                 className={`flex-1 py-3 border ${darkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-stone-300 text-stone-700 hover:bg-stone-50'} rounded-xl font-semibold transition-all`}
               >
                 Cancel
@@ -2446,7 +4151,12 @@ const ProfilePage = ({
               <div className="flex flex-col items-center">
                 <div className={`w-24 h-24 rounded-full ${darkMode ? 'bg-gray-600' : 'bg-stone-200'} overflow-hidden border-4 ${darkMode ? 'border-gray-800' : 'border-white'} shadow-lg mb-3`}>
                   {user.profilePicture ? (
-                    <img src={user.profilePicture} alt={user.name} className="w-full h-full object-cover" />
+                    <DriveImage 
+                      src={user.profilePicture} 
+                      alt={user.name} 
+                      className="w-full h-full rounded-full"
+                      fallbackIcon={<Icon name="person" className={`text-4xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />}
+                    />
                   ) : (
                     <div className={`w-full h-full flex items-center justify-center ${darkMode ? 'bg-gray-600' : 'bg-stone-300'}`}>
                       <Icon name="person" className={`text-4xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />
@@ -2488,6 +4198,12 @@ const ProfilePage = ({
                 <div className="flex-1 min-w-0">
                   <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>Email</p>
                   <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-800'} truncate`}>{user.email || '-'}</p>
+                  <div className="mt-1">
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getVerificationBadge(user.emailVerified).className}`}>
+                      <Icon name={getVerificationBadge(user.emailVerified).icon} className="text-sm" />
+                      {getVerificationBadge(user.emailVerified).label}
+                    </span>
+                  </div>
                 </div>
                 <Icon name="edit" className={`text-sm ${darkMode ? 'text-gray-600' : 'text-stone-300'}`} />
               </div>
@@ -2499,6 +4215,12 @@ const ProfilePage = ({
                 <div className="flex-1 min-w-0">
                   <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>School Email</p>
                   <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-800'} truncate`}>{user.schoolEmail || '-'}</p>
+                  <div className="mt-1">
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getVerificationBadge(user.schoolEmailVerified).className}`}>
+                      <Icon name={getVerificationBadge(user.schoolEmailVerified).icon} className="text-sm" />
+                      {getVerificationBadge(user.schoolEmailVerified).label}
+                    </span>
+                  </div>
                 </div>
                 <Icon name="edit" className={`text-sm ${darkMode ? 'text-gray-600' : 'text-stone-300'}`} />
               </div>
@@ -2558,6 +4280,45 @@ const ProfilePage = ({
               </button>
             </div>
           </>
+        )}
+
+        {showOtpModal && (
+          <div className="fixed top-0 left-0 right-0 bottom-0 w-screen h-screen bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+            <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl p-6 w-full max-w-md shadow-2xl`}>
+              <EmailOTPVerification
+                idNumber={user.idNumber}
+                email={otpEmail}
+                emailType={otpEmailType}
+                addToast={addToast}
+                updateToast={updateToast}
+                removeToast={removeToast}
+                onCancel={() => {
+                  setShowOtpModal(false);
+                  setPendingProfileUser(null);
+                }}
+                onVerified={() => {
+                  const baseUser = pendingProfileUser || user;
+                  const updatedUser: User = {
+                    ...baseUser,
+                    emailVerified: otpEmailType === 'personal' ? true : baseUser.emailVerified,
+                    schoolEmailVerified: otpEmailType === 'school' ? true : baseUser.schoolEmailVerified
+                  };
+
+                  if (otpEmailType === 'personal' && schoolEmailChanged) {
+                    setPendingProfileUser(updatedUser);
+                    setOtpEmailType('school');
+                    setOtpEmail(updatedUser.schoolEmail || '');
+                    return;
+                  }
+
+                  localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
+                  onUpdate(updatedUser);
+                  setShowOtpModal(false);
+                  setPendingProfileUser(null);
+                }}
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -2635,8 +4396,7 @@ const ClassPage = ({
   const [editingRole, setEditingRole] = useState<{ classmate: Classmate; role: string; position: string } | null>(null);
   const [savingRole, setSavingRole] = useState(false);
   
-  const ADMIN_USER_ID = '2025-00046';
-  const isAdmin = user.idNumber === ADMIN_USER_ID;
+  const isAdmin = user.role === 'admin' || user.role === 'superadmin';
 
   useEffect(() => {
     loadClassmates();
@@ -2685,6 +4445,7 @@ const ClassPage = ({
         body: JSON.stringify({
           action: 'updateUserRole',
           adminIdNumber: user.idNumber,
+          sessionToken: user.sessionToken,
           targetIdNumber: editingRole.classmate.idNumber,
           role: editingRole.role,
           position: editingRole.position
@@ -2900,7 +4661,12 @@ const ClassPage = ({
                 <div className="relative">
                   <div className={`w-16 h-16 mx-auto rounded-full ${darkMode ? 'bg-gray-700' : 'bg-stone-200'} overflow-hidden mb-3`}>
                     {classmate.profilePicture ? (
-                      <img src={classmate.profilePicture} alt={classmate.name} className="w-full h-full object-cover" />
+                      <DriveImage 
+                        src={classmate.profilePicture} 
+                        alt={classmate.name} 
+                        className="w-full h-full rounded-full"
+                        fallbackIcon={<Icon name="person" className={`text-2xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />}
+                      />
                     ) : (
                       <div className={`w-full h-full flex items-center justify-center ${darkMode ? 'bg-gray-600' : 'bg-stone-300'}`}>
                         <Icon name="person" className={`text-2xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />
@@ -2951,7 +4717,12 @@ const ClassPage = ({
                 <div className="relative flex-shrink-0">
                   <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-stone-200'} overflow-hidden`}>
                     {classmate.profilePicture ? (
-                      <img src={classmate.profilePicture} alt={classmate.name} className="w-full h-full object-cover" />
+                      <DriveImage 
+                        src={classmate.profilePicture} 
+                        alt={classmate.name} 
+                        className="w-full h-full rounded-full"
+                        fallbackIcon={<Icon name="person" className={`text-lg sm:text-xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />}
+                      />
                     ) : (
                       <div className={`w-full h-full flex items-center justify-center ${darkMode ? 'bg-gray-600' : 'bg-stone-300'}`}>
                         <Icon name="person" className={`text-lg sm:text-xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />
@@ -3014,7 +4785,12 @@ const ClassPage = ({
               <div className="relative inline-block">
                 <div className={`w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-full ${darkMode ? 'bg-gray-700' : 'bg-stone-200'} overflow-hidden mb-3 border-4 ${darkMode ? 'border-gray-800' : 'border-white'} shadow-lg`}>
                   {selectedClassmate.profilePicture ? (
-                    <img src={selectedClassmate.profilePicture} alt={selectedClassmate.name} className="w-full h-full object-cover" />
+                    <DriveImage 
+                      src={selectedClassmate.profilePicture} 
+                      alt={selectedClassmate.name} 
+                      className="w-full h-full rounded-full"
+                      fallbackIcon={<Icon name="person" className={`text-3xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />}
+                    />
                   ) : (
                     <div className={`w-full h-full flex items-center justify-center ${darkMode ? 'bg-gray-600' : 'bg-stone-300'}`}>
                       <Icon name="person" className={`text-3xl sm:text-4xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />
@@ -3126,7 +4902,12 @@ const ClassPage = ({
               <div className={`flex items-center gap-3 mb-4 sm:mb-6 p-2.5 sm:p-3 ${darkMode ? 'bg-gray-700' : 'bg-stone-50'} rounded-xl`}>
                 <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full ${darkMode ? 'bg-gray-600' : 'bg-stone-200'} overflow-hidden flex-shrink-0`}>
                   {editingRole.classmate.profilePicture ? (
-                    <img src={editingRole.classmate.profilePicture} alt="" className="w-full h-full object-cover" />
+                    <DriveImage 
+                      src={editingRole.classmate.profilePicture} 
+                      alt="" 
+                      className="w-full h-full rounded-full"
+                      fallbackIcon={<Icon name="person" className={`text-lg sm:text-xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />}
+                    />
                   ) : (
                     <div className={`w-full h-full flex items-center justify-center ${darkMode ? 'bg-gray-600' : 'bg-stone-300'}`}>
                       <Icon name="person" className={`text-lg sm:text-xl ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} />
@@ -3293,8 +5074,6 @@ const AttendancePage = ({ onBack, darkMode }: { onBack: () => void; darkMode: bo
 const SchedulePage = ({ 
   onBack,
   user,
-  subjects,
-  subjectInfo,
   addToast,
   updateToast,
   removeToast,
@@ -3306,8 +5085,6 @@ const SchedulePage = ({
 }: { 
   onBack: () => void;
   user: User | null;
-  subjects: string[];
-  subjectInfo: Record<string, SubjectInfo>;
   addToast: (message: string, type: Toast['type'], progress?: number) => number;
   updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
   removeToast: (id: number) => void;
@@ -3330,6 +5107,9 @@ const SchedulePage = ({
   const [isCreatingNewCourse, setIsCreatingNewCourse] = useState(false);
   const [newCourseCode, setNewCourseCode] = useState('');
   const [newCourseName, setNewCourseName] = useState('');
+  const [scheduleSubjects, setScheduleSubjects] = useState<string[]>([]);
+  const [scheduleSubjectInfo, setScheduleSubjectInfo] = useState<Record<string, SubjectInfo>>({});
+  const [courseCatalog, setCourseCatalog] = useState<Subject[]>([]);
   const [editingSemesterConfig, setEditingSemesterConfig] = useState<{
     firstStart: string;
     firstEnd: string;
@@ -3346,13 +5126,26 @@ const SchedulePage = ({
 
   // Admin ID for super admin access
   const ADMIN_USER_ID = '2025-00046';
-  const isAdmin = user?.idNumber === ADMIN_USER_ID;
+  const normalizedPosition = (user?.position || '').trim().toLowerCase();
+  const isAdmin = user?.idNumber === ADMIN_USER_ID || user?.role === 'admin' || user?.role === 'superadmin';
   
-  // Check if user can manage schedules (Mayor, Vice Mayor, Secretary, PIOs, Admin)
-  const canManage = user && (isAdmin || ['class-president', 'class-vice-president', 'class-secretary', 'internal-pio', 'external-pio'].includes(user.role || ''));
+  // Check if user can manage schedules based on Directory role + position values.
+  const canManage = user && (
+    isAdmin ||
+    [
+      'mayor',
+      'vice mayor',
+      'secretary',
+      'internal public information officer',
+      'external public information officer'
+    ].includes(normalizedPosition)
+  );
   
   // PIOs can only add non-semestral schedules (Admin can do everything)
-  const canManageSemestral = user && (isAdmin || ['class-president', 'class-vice-president', 'class-secretary'].includes(user.role || ''));
+  const canManageSemestral = user && (
+    isAdmin ||
+    ['mayor', 'vice mayor', 'secretary'].includes(normalizedPosition)
+  );
 
   // Initialize semester config editing state from props
   useEffect(() => {
@@ -3375,7 +5168,7 @@ const SchedulePage = ({
     
     const toastId = addToast('Saving semester configuration...', 'loading');
     try {
-      const response = await fetch(GAS_URL, {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
         method: 'POST',
         body: JSON.stringify({
           action: 'updateSemesterConfig',
@@ -3426,7 +5219,7 @@ const SchedulePage = ({
   const fetchSchedules = async () => {
     setLoading(true);
     try {
-      const response = await fetch(GAS_URL, {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
         method: 'POST',
         body: JSON.stringify({ action: 'getClassSchedules', semester: selectedSemester || undefined })
       });
@@ -3443,8 +5236,79 @@ const SchedulePage = ({
     }
   };
 
+  const fetchScheduleSubjects = async (semester: '1st' | '2nd' | '' = selectedSemester) => {
+    try {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'getSubjectsBySemester',
+          semester: semester || undefined
+        })
+      });
+      const result = await response.json();
+
+      if (!result.success || !Array.isArray(result.subjects)) {
+        setScheduleSubjects([]);
+        setScheduleSubjectInfo({});
+        return;
+      }
+
+      const subjects = result.subjects
+        .map((subject: any) => typeof subject === 'string' ? subject : subject?.code)
+        .filter(Boolean);
+
+      const info = result.subjects.reduce((acc: Record<string, SubjectInfo>, subject: any) => {
+        if (typeof subject === 'string') {
+          acc[subject] = { code: subject, name: '' };
+          return acc;
+        }
+
+        if (subject?.code) {
+          acc[subject.code] = {
+            code: subject.code,
+            name: subject.name || ''
+          };
+        }
+
+        return acc;
+      }, {});
+
+      setScheduleSubjects(subjects);
+      setScheduleSubjectInfo(info);
+    } catch (error) {
+      console.error('Failed to fetch schedule subjects:', error);
+      setScheduleSubjects([]);
+      setScheduleSubjectInfo({});
+    }
+  };
+
+  const fetchCourseCatalog = async () => {
+    try {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'getCourses'
+        })
+      });
+      const result = await response.json();
+      if (result.success && Array.isArray(result.courses)) {
+        setCourseCatalog(result.courses.map((course: any) => ({
+          code: String(course.code || '').trim(),
+          name: String(course.name || '').trim()
+        })));
+      } else {
+        setCourseCatalog([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch course catalog:', error);
+      setCourseCatalog([]);
+    }
+  };
+
   useEffect(() => {
     fetchSchedules();
+    fetchScheduleSubjects();
+    fetchCourseCatalog();
   }, [selectedSemester]);
 
   // Add schedule handler
@@ -3453,7 +5317,7 @@ const SchedulePage = ({
     
     const toastId = addToast('Adding schedule...', 'loading');
     try {
-      const response = await fetch(GAS_URL, {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
         method: 'POST',
         body: JSON.stringify({
           action: 'addClassSchedule',
@@ -3466,7 +5330,7 @@ const SchedulePage = ({
       if (result.success) {
         updateToast(toastId, 'Schedule added successfully!', 'success');
         setTimeout(() => removeToast(toastId), 3000);
-        await fetchSchedules();
+        await Promise.all([fetchSchedules(), fetchScheduleSubjects(), fetchCourseCatalog()]);
         return true;
       } else {
         updateToast(toastId, result.error || 'Failed to add schedule', 'error');
@@ -3486,7 +5350,7 @@ const SchedulePage = ({
     
     const toastId = addToast('Updating schedule...', 'loading');
     try {
-      const response = await fetch(GAS_URL, {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
         method: 'POST',
         body: JSON.stringify({
           action: 'updateClassSchedule',
@@ -3499,7 +5363,7 @@ const SchedulePage = ({
       if (result.success) {
         updateToast(toastId, 'Schedule updated successfully!', 'success');
         setTimeout(() => removeToast(toastId), 3000);
-        await fetchSchedules();
+        await Promise.all([fetchSchedules(), fetchScheduleSubjects(), fetchCourseCatalog()]);
         return true;
       } else {
         updateToast(toastId, result.error || 'Failed to update schedule', 'error');
@@ -3519,7 +5383,7 @@ const SchedulePage = ({
     
     const toastId = addToast('Deleting schedule...', 'loading');
     try {
-      const response = await fetch(GAS_URL, {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
         method: 'POST',
         body: JSON.stringify({
           action: 'deleteClassSchedule',
@@ -3531,7 +5395,7 @@ const SchedulePage = ({
       if (result.success) {
         updateToast(toastId, 'Schedule deleted', 'success');
         setTimeout(() => removeToast(toastId), 3000);
-        await fetchSchedules();
+        await Promise.all([fetchSchedules(), fetchScheduleSubjects(), fetchCourseCatalog()]);
       } else {
         updateToast(toastId, result.error || 'Failed to delete', 'error');
         setTimeout(() => removeToast(toastId), 3000);
@@ -3541,6 +5405,35 @@ const SchedulePage = ({
       setTimeout(() => removeToast(toastId), 3000);
     }
     setScheduleToDelete(null);
+  };
+
+  const handleDeleteCourse = async (courseCode: string) => {
+    if (!user) return;
+
+    const toastId = addToast('Removing course...', 'loading');
+    try {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'deleteCourse',
+          courseCode,
+          userId: user.idNumber
+        })
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        updateToast(toastId, 'Course removed', 'success');
+        setTimeout(() => removeToast(toastId), 3000);
+        await Promise.all([fetchScheduleSubjects(), fetchCourseCatalog()]);
+      } else {
+        updateToast(toastId, result.error || 'Failed to remove course', 'error');
+        setTimeout(() => removeToast(toastId), 4000);
+      }
+    } catch (error) {
+      updateToast(toastId, 'Network error', 'error');
+      setTimeout(() => removeToast(toastId), 3000);
+    }
   };
 
   // Helper functions
@@ -4246,6 +6139,51 @@ const SchedulePage = ({
                   </p>
                 </div>
 
+                {canManage && (
+                  <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-700' : 'bg-stone-50 border-stone-200'}`}>
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div>
+                        <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Course Catalog</h3>
+                        <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>
+                          Courses are now saved in the backend `CourseCatalog` sheet.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={fetchCourseCatalog}
+                        className={`px-3 py-1.5 text-xs rounded-lg ${darkMode ? 'bg-gray-800 text-gray-200 hover:bg-gray-700' : 'bg-white text-stone-700 hover:bg-stone-100'} border ${darkMode ? 'border-gray-700' : 'border-stone-200'}`}
+                      >
+                        Refresh
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-52 overflow-y-auto">
+                      {courseCatalog.length === 0 ? (
+                        <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>No saved courses yet.</p>
+                      ) : (
+                        courseCatalog.map(course => (
+                          <div
+                            key={course.code}
+                            className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 ${darkMode ? 'bg-gray-800' : 'bg-white border border-stone-200'}`}
+                          >
+                            <div className="min-w-0">
+                              <p className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{course.code}</p>
+                              <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{course.name || course.code}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCourse(course.code)}
+                              className="px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Actions */}
                 <div className="flex gap-3">
                   <button
@@ -4290,7 +6228,7 @@ const SchedulePage = ({
                   type: formData.get('type') as string,
                   semester: formData.get('semester') as string,
                   courseCode: formData.get('courseCode') as string,
-                  courseName: formData.get('courseName') as string || subjectInfo[formData.get('courseCode') as string]?.name || '',
+                  courseName: formData.get('courseName') as string || scheduleSubjectInfo[formData.get('courseCode') as string]?.name || '',
                   teacher: formData.get('teacher') as string,
                   classroom: formData.get('classroom') as string,
                   dayOfWeek: formData.get('dayOfWeek') as string,
@@ -4373,8 +6311,8 @@ const SchedulePage = ({
                       >
                         <option value="">Select a course</option>
                         <option value="__CREATE_NEW__" className="text-purple-600 font-medium">➕ Create New Course...</option>
-                        {subjects.map(s => (
-                          <option key={s} value={s}>{s} {subjectInfo[s]?.name ? `- ${subjectInfo[s].name}` : ''}</option>
+                        {scheduleSubjects.map(s => (
+                          <option key={s} value={s}>{s} {scheduleSubjectInfo[s]?.name ? `- ${scheduleSubjectInfo[s].name}` : ''}</option>
                         ))}
                       </select>
                     </>
@@ -4416,16 +6354,27 @@ const SchedulePage = ({
                   <label className="block text-sm font-medium text-stone-700 mb-1">
                     Course Title {isCreatingNewCourse && <span className="text-red-500">*</span>}
                   </label>
-                  <input 
-                    type="text" 
-                    name="courseName" 
-                    required={isCreatingNewCourse}
-                    value={isCreatingNewCourse ? newCourseName : undefined}
-                    defaultValue={!isCreatingNewCourse ? (editingSchedule?.courseName || '') : undefined}
-                    onChange={isCreatingNewCourse ? (e) => setNewCourseName(e.target.value) : undefined}
-                    placeholder={isCreatingNewCourse ? "e.g., Introduction to Mathematics" : "Auto-filled from course code"}
-                    className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
+                  {isCreatingNewCourse ? (
+                    <input 
+                      key="new-course-name"
+                      type="text" 
+                      name="courseName" 
+                      required
+                      value={newCourseName}
+                      onChange={(e) => setNewCourseName(e.target.value)}
+                      placeholder="e.g., Introduction to Mathematics"
+                      className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  ) : (
+                    <input 
+                      key="existing-course-name"
+                      type="text" 
+                      name="courseName" 
+                      defaultValue={editingSchedule?.courseName || ''}
+                      placeholder="Auto-filled from course code"
+                      className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  )}
                 </div>
 
                 {/* Teacher */}
@@ -4671,6 +6620,7 @@ const SchedulePage = ({
           message="Are you sure you want to delete this schedule? This action cannot be undone."
           onConfirm={() => handleDeleteSchedule(scheduleToDelete)}
           onClose={() => setScheduleToDelete(null)}
+          darkMode={darkMode}
         />
       )}
     </div>
@@ -4727,7 +6677,12 @@ const LoginModal = ({
       const result = await response.json();
       
       if (result.success) {
-        const user: User = result.user;
+        // Map fullName to name for backward compatibility
+        const user: User = {
+          ...result.user,
+          name: result.user.fullName || `${result.user.firstName} ${result.user.lastName}`,
+          profilePicture: result.user.profilePictureURL
+        };
         localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
         onLogin(user);
         updateToast(toastId, `Welcome back, ${user.name}!`, 'success');
@@ -4750,18 +6705,19 @@ const LoginModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl p-6 w-full max-w-md shadow-xl my-4 max-h-[90vh] overflow-y-auto modal-content`}>
-        {mode === 'register' ? (
-          <RegistrationForm 
-            onRegister={(user) => {
-              onLogin(user);
-              onClose();
-            }}
-            onBack={() => setMode('login')}
-            addToast={addToast}
-            updateToast={updateToast}
-            removeToast={removeToast}
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-md shadow-xl my-4 max-h-[90vh] flex flex-col modal-content`}>
+        <div className="flex-1 min-h-0 flex flex-col p-6">
+          {mode === 'register' ? (
+            <RegistrationForm 
+              onRegister={(user) => {
+                onLogin(user);
+                onClose();
+              }}
+              onBack={() => setMode('login')}
+              addToast={addToast}
+              updateToast={updateToast}
+              removeToast={removeToast}
           />
         ) : (
           <>
@@ -4852,6 +6808,7 @@ const LoginModal = ({
             </div>
           </>
         )}
+        </div>
       </div>
     </div>
   );
@@ -4989,6 +6946,7 @@ const App = () => {
   const [user, setUser] = useState<User | null>(null);
   const [showLogin, setShowLogin] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [showRequestResource, setShowRequestResource] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
 
   // PWA Install State
@@ -5004,6 +6962,8 @@ const App = () => {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastIdRef = useRef(0);
 
+  // ... (The rest of your App code follows normally from here)
+
   const addToast = (message: string, type: Toast['type'], progress?: number): number => {
     const id = ++toastIdRef.current;
     setToasts(prev => [...prev, { id, message, type, progress }]);
@@ -5016,6 +6976,10 @@ const App = () => {
 
   const removeToast = (id: number) => {
     setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  const refreshResourceRequests = () => {
+    // Placeholder hook for future list refreshes after a request is created.
   };
 
   // Data State
@@ -5171,18 +7135,20 @@ const App = () => {
           // Refresh user profile from backend if online (to get updated section, role, etc.)
           if (navigator.onLine) {
             try {
-              const response = await fetch(GAS_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  action: 'getUserProfile',
-                  idNumber: parsedUser.idNumber
-                })
+              const response = await postToAppsScript({
+                action: 'getUserProfile',
+                idNumber: parsedUser.idNumber
               });
               const data = await response.json();
               if (data.success && data.user) {
                 // Merge with existing user data to preserve any local-only fields
-                const refreshedUser = { ...parsedUser, ...data.user };
+                // Map fullName to name for backward compatibility
+                const refreshedUser = {
+                  ...parsedUser,
+                  ...data.user,
+                  name: data.user.fullName || `${data.user.firstName} ${data.user.lastName}`,
+                  profilePicture: data.user.profilePictureURL
+                };
                 setUser(refreshedUser);
                 localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(refreshedUser));
                 console.log('User profile refreshed from backend');
@@ -5280,10 +7246,10 @@ const App = () => {
       
       setLoading(false);
 
-      // Sync with backend - pass userId directly since state may not be updated yet
-      if (navigator.onLine) {
-        syncData(true, parsedUser?.idNumber);
-      }
+      // Note: Flashcard sync is disabled during migration to 1SF Directory
+      // The 1SF Directory API only supports authentication endpoints
+      // Flashcard functionality will be re-enabled when backend is ready
+      console.log('App initialized - 1SF Directory mode (flashcard sync disabled)');
     };
 
     initApp();
@@ -5298,6 +7264,128 @@ const App = () => {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  const applyBackendSubjects = (subjectsPayload: any[]) => {
+    const subjects = subjectsPayload
+      .map((subject: any) => typeof subject === 'string' ? subject : subject?.code)
+      .filter(Boolean);
+
+    const info = subjectsPayload.reduce((acc: Record<string, SubjectInfo>, subject: any) => {
+      if (typeof subject === 'string') {
+        acc[subject] = { code: subject, name: '' };
+        return acc;
+      }
+
+      if (subject?.code) {
+        acc[subject.code] = {
+          code: subject.code,
+          name: subject.name || ''
+        };
+      }
+
+      return acc;
+    }, {});
+
+    setApiSubjects(subjects);
+    setSubjectInfo(info);
+    localStorage.setItem('cumlaude_subjects', JSON.stringify(subjects));
+    localStorage.setItem('cumlaude_subjectInfo', JSON.stringify(info));
+  };
+
+  const fetchAllBackendSubjects = async () => {
+    try {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'getSubjectsBySemester'
+        })
+      });
+      const data = await response.json();
+
+      if (data.success && Array.isArray(data.subjects)) {
+        applyBackendSubjects(data.subjects);
+      } else {
+        setApiSubjects([]);
+        setSubjectInfo({});
+        localStorage.setItem('cumlaude_subjects', JSON.stringify([]));
+        localStorage.setItem('cumlaude_subjectInfo', JSON.stringify({}));
+      }
+    } catch (error) {
+      console.warn('Failed to load backend subjects:', error);
+    }
+  };
+
+  const fetchBackendSemesterSubjects = async (semester: '1st' | '2nd') => {
+    try {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'getSubjectsBySemester',
+          semester
+        })
+      });
+      const data = await response.json();
+
+      if (data.success && Array.isArray(data.subjects)) {
+        const subjectCodes = data.subjects.map((s: any) => typeof s === 'string' ? s : s.code);
+        setSemesterSubjects(subjectCodes);
+        localStorage.setItem('cumlaude_semesterSubjects', JSON.stringify(subjectCodes));
+      } else {
+        setSemesterSubjects([]);
+        localStorage.setItem('cumlaude_semesterSubjects', JSON.stringify([]));
+      }
+    } catch (error) {
+      console.warn('Failed to load backend semester subjects:', error);
+    }
+  };
+
+  const fetchScheduleContext = async () => {
+    try {
+      const [currentSemesterResponse, semesterConfigResponse] = await Promise.all([
+        fetch(CLASS_SCHEDULE_GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'getCurrentSemester' })
+        }),
+        fetch(CLASS_SCHEDULE_GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'getSemesterConfig' })
+        })
+      ]);
+
+      const [currentSemesterData, semesterConfigData] = await Promise.all([
+        currentSemesterResponse.json(),
+        semesterConfigResponse.json()
+      ]);
+
+      if (currentSemesterData.success && currentSemesterData.currentSemester) {
+        setCurrentSemester(currentSemesterData.currentSemester);
+        localStorage.setItem('cumlaude_currentSemester', currentSemesterData.currentSemester);
+      }
+
+      if (currentSemesterData.success && currentSemesterData.academicYear !== undefined) {
+        setAcademicYear(currentSemesterData.academicYear || '');
+        localStorage.setItem('cumlaude_academicYear', currentSemesterData.academicYear || '');
+      }
+
+      if (semesterConfigData.success && Array.isArray(semesterConfigData.semesters)) {
+        setSemesterConfig(semesterConfigData.semesters);
+        localStorage.setItem('cumlaude_semesterConfig', JSON.stringify(semesterConfigData.semesters));
+      }
+    } catch (error) {
+      console.warn('Failed to load schedule context:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOnline) return;
+    fetchScheduleContext();
+    fetchAllBackendSubjects();
+  }, [isOnline]);
+
+  useEffect(() => {
+    if (!isOnline) return;
+    fetchBackendSemesterSubjects(selectedSemesterView || currentSemester);
+  }, [selectedSemesterView, currentSemester, isOnline]);
 
   // --- PWA Install Prompt & Cache Management ---
   
@@ -5546,6 +7634,18 @@ const App = () => {
   };
 
   const syncData = async (showToast = true, userIdOverride?: string) => {
+    // DISABLED: Flashcard sync is disabled during migration to 1SF Directory
+    // The 1SF Directory API only supports authentication endpoints (login, register, OTP)
+    // This function will be re-implemented when flashcard backend is ready
+    console.log('syncData called but disabled - 1SF Directory mode');
+    
+    if (showToast) {
+      const toastId = addToast('1SF Directory mode - flashcard sync disabled', 'info');
+      setTimeout(() => removeToast(toastId), 3000);
+    }
+    return;
+    
+    /* ORIGINAL SYNC CODE - DISABLED
     let toastId: number | null = null;
     
     if (showToast) {
@@ -5559,7 +7659,9 @@ const App = () => {
       // Use override if provided (for initial load when state isn't set yet)
       const userId = userIdOverride || user?.idNumber;
       const userIdParam = userId ? `&userId=${encodeURIComponent(userId)}` : '';
-      const response = await fetch(`${GAS_URL}?action=getAll${userIdParam}`, {
+      const requestUrl = `${GAS_URL}?action=getAll${userIdParam}`;
+      
+      const response = await fetch(requestUrl, {
         redirect: 'follow'
       });
       
@@ -5568,7 +7670,7 @@ const App = () => {
       const data = await response.json();
 
       if (data.error) {
-        console.error('Sync error:', data.error);
+        console.error('Sync error:', data.error, '| Request URL:', requestUrl);
         if (toastId) {
           updateToast(toastId, `Sync error: ${data.error}`, 'error');
           setTimeout(() => removeToast(toastId!), 4000);
@@ -5661,7 +7763,7 @@ const App = () => {
       
       // Fetch semester-specific subjects based on class schedules
       try {
-        const semesterResponse = await fetch(GAS_URL, {
+        const semesterResponse = await fetch(CLASS_SCHEDULE_GAS_URL, {
           method: 'POST',
           body: JSON.stringify({
             action: 'getSubjectsBySemester',
@@ -5676,6 +7778,8 @@ const App = () => {
           );
           setSemesterSubjects(subjectCodes);
           localStorage.setItem('cumlaude_semesterSubjects', JSON.stringify(subjectCodes));
+        } else if (semesterData.error) {
+          console.warn('Semester subjects fetch returned error:', semesterData.error);
         }
       } catch (semErr) {
         console.warn('Failed to load semester subjects:', semErr);
@@ -5705,6 +7809,7 @@ const App = () => {
         setTimeout(() => removeToast(toastId!), 4000);
       }
     }
+    */
   };
 
   // --- Analytics Functions ---
@@ -5774,50 +7879,14 @@ const App = () => {
   const handleSemesterSwitch = async (semester: '1st' | '2nd') => {
     setSelectedSemesterView(semester);
     localStorage.setItem('cumlaude_selectedSemesterView', semester);
-    
-    // Fetch subjects for the selected semester
-    try {
-      const response = await fetch(GAS_URL, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'getSubjectsBySemester',
-          semester
-        })
-      });
-      const data = await response.json();
-      if (data.success && data.subjects) {
-        const subjectCodes = data.subjects.map((s: any) => typeof s === 'string' ? s : s.code);
-        setSemesterSubjects(subjectCodes);
-        localStorage.setItem('cumlaude_semesterSubjects', JSON.stringify(subjectCodes));
-      }
-    } catch (err) {
-      console.warn('Failed to load semester subjects:', err);
-    }
+    await fetchBackendSemesterSubjects(semester);
   };
   
   // Reset to current semester (auto-detect)
   const handleResetToCurrentSemester = async () => {
     setSelectedSemesterView(null);
     localStorage.removeItem('cumlaude_selectedSemesterView');
-    
-    // Fetch subjects for current semester
-    try {
-      const response = await fetch(GAS_URL, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'getSubjectsBySemester',
-          semester: currentSemester
-        })
-      });
-      const data = await response.json();
-      if (data.success && data.subjects) {
-        const subjectCodes = data.subjects.map((s: any) => typeof s === 'string' ? s : s.code);
-        setSemesterSubjects(subjectCodes);
-        localStorage.setItem('cumlaude_semesterSubjects', JSON.stringify(subjectCodes));
-      }
-    } catch (err) {
-      console.warn('Failed to load semester subjects:', err);
-    }
+    await fetchBackendSemesterSubjects(currentSemester);
   };
 
   const handleLogout = () => {
@@ -6416,7 +8485,7 @@ const App = () => {
       console.log('⚙️ Ensuring service worker is ready...');
       let registration;
       try {
-        registration = await navigator.serviceWorker.register('/sw.js');
+        registration = await ensureAppServiceWorker();
         console.log('✅ Service worker registered:', registration.scope);
         // Wait for the service worker to be active
         await navigator.serviceWorker.ready;
@@ -6517,7 +8586,7 @@ const App = () => {
   useEffect(() => {
     // Pre-register service worker on app load for faster push notification setup
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
+      ensureAppServiceWorker()
         .then(reg => console.log('✅ Service worker pre-registered:', reg.scope))
         .catch(err => console.warn('⚠️ Service worker pre-registration failed:', err));
     }
@@ -6801,24 +8870,11 @@ const App = () => {
     setScores({});
   };
 
-  // Get subjects from decks (using the subject property from D1)
-  const deckSubjects = [...new Set(decks.map(d => d.subject).filter(Boolean))] as string[];
-  
-  // Default subjects if no decks loaded yet
-  const defaultSubjects = ['FL111', 'FL112', 'EDUC112', 'EDUC111', 'GE111', 'GE112', 'PE111', 'NSTP111'];
-  
   // Get the active semester (manual override or auto-detected)
   const activeSemester = selectedSemesterView || currentSemester;
   
-  // Priority: semester subjects from ClassSchedule > apiSubjects from Category sheet > deckSubjects from D1 > defaults
-  // When semesterSubjects is populated, it filters subjects based on class schedules for the current semester
-  const baseSubjects = apiSubjects.length > 0 ? apiSubjects : (deckSubjects.length > 0 ? deckSubjects : defaultSubjects);
-  
-  // If we have semester subjects from schedules, filter the base subjects to only show those in current semester
-  // If no schedules exist yet, show all subjects
-  const displaySubjects = semesterSubjects.length > 0 
-    ? baseSubjects.filter(s => semesterSubjects.includes(s))
-    : baseSubjects;
+  // Subjects are sourced only from the class schedule backend.
+  const displaySubjects = semesterSubjects;
 
   // --- Views ---
 
@@ -6887,9 +8943,9 @@ const App = () => {
           </div>
         )}
         
-        <LoginModal 
-          isOpen={showLogin} 
-          onClose={() => setShowLogin(false)} 
+        <LoginModal
+          isOpen={showLogin}
+          onClose={() => setShowLogin(false)}
           onLogin={(u) => { setUser(u); }}
           addToast={addToast}
           updateToast={updateToast}
@@ -6907,6 +8963,9 @@ const App = () => {
               setShowProfile(false);
             }}
             onUpdate={(updatedUser) => setUser(updatedUser)}
+            addToast={addToast}
+            updateToast={updateToast}
+            removeToast={removeToast}
             darkMode={darkMode}
           />
         )}
@@ -7230,12 +9289,17 @@ const App = () => {
                   title="View Profile"
                 >
                   {user.profilePicture ? (
-                    <img src={user.profilePicture} alt={user.name} className="w-6 h-6 rounded-full object-cover" />
+                    <DriveImage 
+                      src={user.profilePicture} 
+                      alt={user.name || 'User'} 
+                      className="w-6 h-6 rounded-full"
+                      fallbackIcon={<Icon name="person" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />}
+                    />
                   ) : (
                     <Icon name="person" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
                   )}
                   <span className={`text-sm font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>
-                    {user.name.split(' ')[0]}
+                    {(user.name || user.fullName || user.firstName || 'User').split(' ')[0]}
                   </span>
                 </button>
               ) : (
@@ -7258,7 +9322,12 @@ const App = () => {
                   title="View Profile"
                 >
                   {user.profilePicture ? (
-                    <img src={user.profilePicture} alt={user.name} className="w-full h-full object-cover" />
+                    <DriveImage 
+                      src={user.profilePicture} 
+                      alt={user.name} 
+                      className="w-full h-full rounded-full"
+                      fallbackIcon={<Icon name="person" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />}
+                    />
                   ) : (
                     <Icon name="person" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
                   )}
@@ -7298,7 +9367,12 @@ const App = () => {
                   <div className="flex items-center gap-3">
                     <div className={`w-12 h-12 rounded-full ${darkMode ? 'bg-stone-700' : 'bg-stone-200'} overflow-hidden`}>
                       {user.profilePicture ? (
-                        <img src={user.profilePicture} alt={user.name} className="w-full h-full object-cover" />
+                        <DriveImage 
+                          src={user.profilePicture} 
+                          alt={user.name} 
+                          className="w-full h-full rounded-full"
+                          fallbackIcon={<Icon name="person" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />}
+                        />
                       ) : (
                         <div className={`w-full h-full flex items-center justify-center ${darkMode ? 'bg-stone-600' : 'bg-stone-300'}`}>
                           <Icon name="person" className={`text-xl ${darkMode ? 'text-stone-400' : 'text-stone-500'}`} />
@@ -7740,6 +9814,7 @@ const App = () => {
             await handleAdminClearAllCache();
           }}
           onClose={() => setShowAdminCacheConfirm(false)}
+          darkMode={darkMode}
         />
 
         {/* Generic Alert Modal */}
@@ -7749,6 +9824,7 @@ const App = () => {
           message={alertModal.message}
           type={alertModal.type}
           onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+          darkMode={darkMode}
         />
 
         {/* Exam Detail Modal */}
@@ -7762,6 +9838,7 @@ const App = () => {
           formatCountdown={formatCountdown}
           formatExamDate={formatExamDate}
           formatExamTime={formatExamTime}
+          darkMode={darkMode}
         />
       </div>
     );
@@ -8002,6 +10079,7 @@ const App = () => {
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
+          darkMode={darkMode}
         />
         <AddExamModal
           isOpen={showAddExam}
@@ -8013,6 +10091,7 @@ const App = () => {
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
+          darkMode={darkMode}
         />
         
         {/* Header */}
@@ -8028,13 +10107,22 @@ const App = () => {
               )}
             </div>
             {activeTab === 'Resources' && (
-              <button
-                onClick={() => user ? setShowUpload(true) : setShowLogin(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
-              >
-                <Icon name="cloud_upload" className="text-sm" />
-                Upload
-              </button>
+              <>
+                <button
+                  onClick={() => user ? setShowUpload(true) : setShowLogin(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
+                >
+                  <Icon name="cloud_upload" className="text-sm" />
+                  Upload
+                </button>
+                <button
+                  onClick={() => user ? setShowRequestResource(true) : setShowLogin(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 transition-colors ml-2"
+                >
+                  <Icon name="help" className="text-sm" />
+                  Request Resource
+                </button>
+              </>
             )}
             {activeTab === 'Exams' && (
               <button
@@ -8065,6 +10153,7 @@ const App = () => {
           </div>
         </header>
 
+
         <main className="max-w-5xl mx-auto p-4">
           {activeTab === 'Flashcards' ? (
             <div className="space-y-4">
@@ -8084,7 +10173,6 @@ const App = () => {
                     : 0;
                   const progressPercent = totalCards > 0 ? Math.round((answeredCount / totalCards) * 100) : 0;
                   const isLoading = deckLoading === deck.name;
-                  
                   return (
                     <button
                       key={deck.name}
@@ -8103,7 +10191,6 @@ const App = () => {
                         <div className="flex-1 min-w-0">
                           <h3 className="font-semibold text-stone-800">{deck.name}</h3>
                           <p className="text-sm text-stone-400">{deck.cards.length} cards</p>
-                          
                           {/* Progress indicator */}
                           {answeredCount > 0 ? (
                             <div className="mt-2">
@@ -8119,7 +10206,7 @@ const App = () => {
                               </div>
                             </div>
                           ) : (
-                            <p className="text-xs text-stone-400 mt-1 italic">No progress yet • Tap to study</p>
+                            <p className="text-xs text-stone-400 mt-1 italic">No progress yet. Tap to study.</p>
                           )}
                         </div>
                         <Icon name="chevron_right" className="text-stone-300 flex-shrink-0" />
@@ -8130,232 +10217,25 @@ const App = () => {
               )}
             </div>
           ) : activeTab === 'Resources' ? (
-            <div className="space-y-6">
-              {/* Lesson PPT */}
-              {lessonPPTResources.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
-                    <Icon name="slideshow" className="text-orange-500" /> Lesson PPT
-                  </h3>
-                  <div className="space-y-2">
-                    {lessonPPTResources.map((r, i) => renderResourceCard(r, i, 'slideshow', 'bg-orange-100', 'text-orange-500', 'border-orange-300'))}
-                  </div>
-                </div>
-              )}
-
-              {/* Lesson PDF */}
-              {lessonPDFResources.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
-                    <Icon name="picture_as_pdf" className="text-red-500" /> Lesson PDF
-                  </h3>
-                  <div className="space-y-2">
-                    {lessonPDFResources.map((r, i) => renderResourceCard(r, i, 'picture_as_pdf', 'bg-red-100', 'text-red-500', 'border-red-300'))}
-                  </div>
-                </div>
-              )}
-
-              {/* Reviewers */}
-              {reviewerResources.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
-                    <Icon name="quiz" className="text-purple-500" /> Reviewers
-                  </h3>
-                  <div className="space-y-2">
-                    {reviewerResources.map((r, i) => renderResourceCard(r, i, 'quiz', 'bg-purple-100', 'text-purple-500', 'border-purple-300'))}
-                  </div>
-                </div>
-              )}
-
-              {/* Videos */}
-              {videoResources.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
-                    <Icon name="play_circle" className="text-blue-500" /> Videos
-                  </h3>
-                  <div className="space-y-2">
-                    {videoResources.map((r, i) => renderResourceCard(r, i, 'play_circle', 'bg-blue-100', 'text-blue-500', 'border-blue-300'))}
-                  </div>
-                </div>
-              )}
-
-              {/* Images (legacy) */}
-              {imageResources.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
-                    <Icon name="image" className="text-teal-500" /> Images
-                  </h3>
-                  <div className="space-y-2">
-                    {imageResources.map((r, i) => renderResourceCard(r, i, 'image', 'bg-teal-100', 'text-teal-500', 'border-teal-300'))}
-                  </div>
-                </div>
-              )}
-
-              {/* Other Files (legacy) */}
-              {fileResources.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
-                    <Icon name="folder" className="text-emerald-500" /> Other Files
-                  </h3>
-                  <div className="space-y-2">
-                    {fileResources.map((r, i) => renderResourceCard(r, i, 'description', 'bg-emerald-100', 'text-emerald-500', 'border-emerald-300'))}
-                  </div>
-                </div>
-              )}
-
-              {subjectResources.length === 0 && (
-                <div className="text-center py-12">
-                  <Icon name="cloud_upload" className="text-4xl text-stone-300 mb-3" />
-                  <p className="text-stone-400 mb-4">No resources available for this subject</p>
-                  <button
-                    onClick={() => user ? setShowUpload(true) : setShowLogin(true)}
-                    className="px-6 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors"
-                  >
-                    Upload First Resource
-                  </button>
-                </div>
-              )}
-            </div>
+            <>
+              <ResourceRequestModal
+                isOpen={showRequestResource}
+                onClose={() => setShowRequestResource(false)}
+                subject={activeSubject || ''}
+                user={user}
+                onRequestComplete={refreshResourceRequests}
+                addToast={addToast}
+                updateToast={updateToast}
+                removeToast={removeToast}
+                darkMode={darkMode}
+              />
+              <div className="space-y-6">
+                {/* ...existing code for resources... */}
+              </div>
+            </>
           ) : activeTab === 'Exams' ? (
             <div className="space-y-4">
-              {/* Upcoming Exams */}
-              {(() => {
-                const subjectExams = getSubjectExams(activeSubject);
-                const upcomingExams = subjectExams.filter(e => getExamStatus(e) === 'upcoming');
-                const ongoingExams = subjectExams.filter(e => getExamStatus(e) === 'ongoing');
-                const completedExams = subjectExams.filter(e => getExamStatus(e) === 'completed');
-                
-                if (subjectExams.length === 0) {
-                  return (
-                    <div className="text-center py-12">
-                      <Icon name="event" className="text-4xl text-stone-300 mb-3" />
-                      <p className="text-stone-400 mb-4">No exams scheduled for this subject</p>
-                      <button
-                        onClick={() => user ? setShowAddExam(true) : setShowLogin(true)}
-                        className="px-6 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors"
-                      >
-                        Add First Exam
-                      </button>
-                    </div>
-                  );
-                }
-                
-                return (
-                  <>
-                    {/* Ongoing Exams */}
-                    {ongoingExams.length > 0 && (
-                      <div>
-                        <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
-                          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                          Ongoing Now
-                        </h3>
-                        <div className="space-y-2">
-                          {ongoingExams.map(exam => (
-                            <div 
-                              key={exam.examId} 
-                              className="bg-green-50 border border-green-200 p-4 rounded-xl cursor-pointer hover:shadow-md transition-all"
-                              onClick={() => setSelectedExam(exam)}
-                            >
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <p className="font-semibold text-green-800">{exam.examType}</p>
-                                  <p className="text-sm text-green-700">{formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)}</p>
-                                  <p className="text-xs text-green-600 mt-1">Room: {exam.room} • Proctor: {exam.proctor}</p>
-                                </div>
-                                <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-medium">
-                                  In Progress
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Upcoming Exams */}
-                    {upcomingExams.length > 0 && (
-                      <div>
-                        <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
-                          <Icon name="schedule" className="text-amber-500" /> Upcoming
-                        </h3>
-                        <div className="space-y-2">
-                          {upcomingExams.map(exam => (
-                            <div 
-                              key={exam.examId} 
-                              className="bg-white border border-stone-200 p-4 rounded-xl hover:border-amber-300 hover:shadow-md transition-all cursor-pointer"
-                              onClick={() => setSelectedExam(exam)}
-                            >
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <p className="font-semibold text-stone-800">{exam.examType}</p>
-                                  <p className="text-sm text-stone-600">{formatExamDate(exam.date)}</p>
-                                  <p className="text-sm text-stone-500">{formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)}</p>
-                                  <p className="text-xs text-stone-400 mt-1">Room: {exam.room} • Proctor: {exam.proctor}</p>
-                                  {exam.notes && <p className="text-xs text-stone-400 mt-1 italic line-clamp-2">Note: {exam.notes}</p>}
-                                  {exam.createdByName && <p className="text-xs text-stone-400 mt-1">Added by: {exam.createdByName}</p>}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
-                                    Upcoming
-                                  </span>
-                                  {user && user.idNumber === exam.createdBy && (
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setExamToEdit(exam); }}
-                                        className="p-1 text-stone-400 hover:text-blue-500"
-                                        title="Edit exam"
-                                      >
-                                        <Icon name="edit" className="text-sm" />
-                                      </button>
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setExamToDelete(exam.examId); }}
-                                        className="p-1 text-stone-400 hover:text-red-500"
-                                        title="Delete exam"
-                                      >
-                                        <Icon name="delete" className="text-sm" />
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Completed Exams */}
-                    {completedExams.length > 0 && (
-                      <div>
-                        <h3 className="font-semibold text-stone-800 mb-3 flex items-center gap-2">
-                          <Icon name="check_circle" className="text-stone-400" /> Completed
-                        </h3>
-                        <div className="space-y-2">
-                          {completedExams.map(exam => (
-                            <div 
-                              key={exam.examId} 
-                              className="bg-stone-50 border border-stone-200 p-4 rounded-xl opacity-70 cursor-pointer hover:opacity-90 hover:shadow-md transition-all"
-                              onClick={() => setSelectedExam(exam)}
-                            >
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <p className="font-semibold text-stone-600">{exam.examType}</p>
-                                  <p className="text-sm text-stone-500">{formatExamDate(exam.date)}</p>
-                                  <p className="text-sm text-stone-400">{formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)}</p>
-                                  <p className="text-xs text-stone-400 mt-1">Room: {exam.room}</p>
-                                </div>
-                                <span className="px-2 py-1 bg-stone-200 text-stone-600 text-xs rounded-full font-medium">
-                                  Done
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
+              {/* ...existing code for exams... */}
             </div>
           ) : null}
         </main>
@@ -8371,6 +10251,21 @@ const App = () => {
             }
           }}
           onClose={() => setExamToDelete(null)}
+          darkMode={darkMode}
+        />
+
+        {/* Delete Confirmation Modal */}
+        <ConfirmModal
+          isOpen={!!examToDelete}
+          title="Delete Exam"
+          message="Are you sure you want to delete this exam? This action cannot be undone."
+          onConfirm={async () => {
+            if (examToDelete) {
+              await deleteExamFromBackend(examToDelete);
+            }
+          }}
+          onClose={() => setExamToDelete(null)}
+          darkMode={darkMode}
         />
 
         {/* Edit Exam Modal */}
@@ -8484,6 +10379,7 @@ const App = () => {
             }
           }}
           onClose={() => setResourceToDelete(null)}
+          darkMode={darkMode}
         />
 
         {/* Admin Cache Clear Confirmation Modal */}
@@ -8498,16 +10394,9 @@ const App = () => {
             await handleAdminClearAllCache();
           }}
           onClose={() => setShowAdminCacheConfirm(false)}
+          darkMode={darkMode}
         />
 
-        {/* Generic Alert Modal */}
-        <AlertModal
-          isOpen={alertModal.isOpen}
-          title={alertModal.title}
-          message={alertModal.message}
-          type={alertModal.type}
-          onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
-        />
 
         {/* Exam Detail Modal */}
         <ExamDetailModal
@@ -8520,6 +10409,7 @@ const App = () => {
           formatCountdown={formatCountdown}
           formatExamDate={formatExamDate}
           formatExamTime={formatExamTime}
+          darkMode={darkMode}
         />
       </div>
     );
@@ -8713,6 +10603,7 @@ const App = () => {
             setShowClearProgressConfirm(false);
           }}
           onClose={() => setShowClearProgressConfirm(false)}
+          darkMode={darkMode}
         />
       </div>
     );
@@ -8943,6 +10834,7 @@ const App = () => {
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
+          darkMode={darkMode}
         />
         
         {/* Header */}
@@ -9319,6 +11211,7 @@ const App = () => {
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
+          darkMode={darkMode}
         />
         
         {/* Header */}
@@ -9674,12 +11567,11 @@ const App = () => {
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
+          darkMode={darkMode}
         />
         <SchedulePage 
           onBack={goBack}
           user={user}
-          subjects={displaySubjects}
-          subjectInfo={subjectInfo}
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
@@ -9754,6 +11646,7 @@ const App = () => {
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
+          darkMode={darkMode}
         />
 
         <header className={`${darkMode ? 'bg-stone-800 border-stone-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-10`}>
@@ -10365,6 +12258,7 @@ const App = () => {
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
+          darkMode={darkMode}
         />
         
         {/* Header */}
@@ -10577,6 +12471,7 @@ const App = () => {
             }
           }}
           onClose={() => setExamToDelete(null)}
+          darkMode={darkMode}
         />
 
         {/* Edit Exam Modal */}
@@ -10791,6 +12686,7 @@ const App = () => {
           formatCountdown={formatCountdown}
           formatExamDate={formatExamDate}
           formatExamTime={formatExamTime}
+          darkMode={darkMode}
         />
       </div>
     );
@@ -10799,7 +12695,25 @@ const App = () => {
   return null;
 };
 
-const root = createRoot(document.getElementById('root')!);
-root.render(<App />);
+declare global {
+  interface Window {
+    __cumlaudeRoot?: ReturnType<typeof createRoot>;
+  }
+}
+
+const rootElement = document.getElementById('root');
+
+if (!rootElement) {
+  throw new Error('Root container not found');
+}
+
+const root = window.__cumlaudeRoot ?? createRoot(rootElement);
+window.__cumlaudeRoot = root;
+
+root.render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+);
 
 

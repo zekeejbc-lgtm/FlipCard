@@ -1,4 +1,5 @@
 /**
+ * THIS BACKEND IS ONLY A REFERENCE SO DONT EDIT THIS, THIS IS NOT THE PRODUCTION BACKEND RATHER AN OLD ONE AND WE ARE MIGRATING IT TO OUR NEW BACKEND CODE
  * CumLaude! Google Apps Script Backend
  * 
  * SHEETS STRUCTURE:
@@ -58,6 +59,8 @@ function doGet(e) {
         return jsonResponse(getSubjects());
       case 'setupSheets':
         return jsonResponse(setupSheets());
+      case 'listResourceRequests':
+        return ContentService.createTextOutput(JSON.stringify(listResourceRequests(e.parameter))).setMimeType(ContentService.MimeType.JSON);
       default:
         return jsonResponse(getAllData(e.parameter.userId));
     }
@@ -138,6 +141,28 @@ function doPost(e) {
         return jsonResponse(savePushSubscription(data));
       case 'sendPushNotification':
         return jsonResponse(sendPushNotification(data));
+      case 'addClassSchedule':
+        return jsonResponse(addClassSchedule(data));
+      case 'updateClassSchedule':
+        return jsonResponse(updateClassSchedule(data));
+      case 'deleteClassSchedule':
+        return jsonResponse(deleteClassSchedule(data.scheduleId, data.userId));
+      case 'getClassSchedules':
+        return jsonResponse(getClassSchedules(data.semester, data.type));
+      case 'setupClassScheduleSheet':
+        return jsonResponse(setupClassScheduleSheet());
+      case 'getSemesterConfig':
+        return jsonResponse(getSemesterConfig());
+      case 'updateSemesterConfig':
+        return jsonResponse(updateSemesterConfig(data));
+      case 'getCurrentSemester':
+        return jsonResponse(getCurrentSemester());
+      case 'getSubjectsBySemester':
+        return jsonResponse(getSubjectsBySemester(data.semester));
+      case 'createResourceRequest':
+        return ContentService.createTextOutput(JSON.stringify(createResourceRequest(data))).setMimeType(ContentService.MimeType.JSON);
+      case 'fulfillResourceRequest':
+        return ContentService.createTextOutput(JSON.stringify(fulfillResourceRequest(data))).setMimeType(ContentService.MimeType.JSON);
       default:
         return jsonResponse({ error: 'Unknown action' });
     }
@@ -316,6 +341,72 @@ function setupSheets() {
     }
   }
   
+  // 11. Setup ClassSchedule sheet for class schedules
+  let classScheduleSheet = ss.getSheetByName('ClassSchedule');
+  if (!classScheduleSheet) {
+    classScheduleSheet = ss.insertSheet('ClassSchedule');
+    classScheduleSheet.appendRow([
+      'ScheduleID',      // A - Unique identifier
+      'Type',            // B - semestral, makeup, activity, special
+      'Semester',        // C - 1st or 2nd
+      'CourseCode',      // D - e.g., FL111
+      'CourseName',      // E - Course title
+      'Teacher',         // F - Instructor name
+      'Classroom',       // G - Room/Location
+      'DayOfWeek',       // H - For semestral (Monday, Tuesday, etc.)
+      'StartTime',       // I - e.g., 08:00
+      'EndTime',         // J - e.g., 10:00
+      'SpecificDate',    // K - For special schedules
+      'Details',         // L - Additional notes
+      'IsActive',        // M - true/false
+      'CreatedBy',       // N - User ID
+      'CreatedByName',   // O - User name
+      'CreatedAt',       // P - ISO timestamp
+      'UpdatedAt'        // Q - ISO timestamp
+    ]);
+    classScheduleSheet.setFrozenRows(1);
+    results.push('Created ClassSchedule sheet');
+  } else {
+    results.push('ClassSchedule sheet already exists');
+  }
+  
+  // 12. Setup SemesterConfig sheet for semester date ranges
+  let semesterConfigSheet = ss.getSheetByName('SemesterConfig');
+  if (!semesterConfigSheet) {
+    semesterConfigSheet = ss.insertSheet('SemesterConfig');
+    semesterConfigSheet.appendRow(['Semester', 'StartDate', 'EndDate', 'AcademicYear', 'IsActive']);
+    // Add default semester dates
+    semesterConfigSheet.appendRow(['1st', '2025-08-01', '2025-12-20', '2025-2026', true]);
+    semesterConfigSheet.appendRow(['2nd', '2026-01-06', '2026-05-31', '2025-2026', true]);
+    semesterConfigSheet.setFrozenRows(1);
+    results.push('Created SemesterConfig sheet with default dates');
+  } else {
+    results.push('SemesterConfig sheet already exists');
+  }
+  
+  // 13. Setup ResourceRequests sheet for resource request feature
+  let resourceRequestsSheet = ss.getSheetByName('ResourceRequests');
+  if (!resourceRequestsSheet) {
+    resourceRequestsSheet = ss.insertSheet('ResourceRequests');
+    resourceRequestsSheet.appendRow([
+      'RequestID',      // A - Unique identifier
+      'UserID',         // B - Who requested
+      'UserName',       // C - Name of requester
+      'Subject',        // D - e.g., FL111
+      'Description',    // E - What is needed
+      'Status',         // F - open, fulfilled, closed
+      'FulfilledBy',    // G - User ID of fulfiller
+      'FulfilledByName',// H - Name of fulfiller
+      'ResourceURL',    // I - Link to resource (if fulfilled)
+      'CreatedAt',      // J - Timestamp
+      'FulfilledAt'     // K - Timestamp
+    ]);
+    resourceRequestsSheet.setFrozenRows(1);
+    results.push('Created ResourceRequests sheet');
+  } else {
+    results.push('ResourceRequests sheet already exists');
+  }
+
   return { 
     success: true, 
     message: 'Setup complete', 
@@ -332,6 +423,8 @@ function getAllData(userId) {
   const subjects = getSubjects();
   const cacheVersionResult = getCacheVersion();
   const announcementResult = getActiveAnnouncement(userId);
+  const currentSemesterResult = getCurrentSemester();
+  const semesterConfigResult = getSemesterConfig();
   
   // Build subjectInfo map for quick lookup
   const subjectInfo = {};
@@ -347,7 +440,10 @@ function getAllData(userId) {
     subjectInfo: subjectInfo, // Map of code -> {code, name}
     exams: examsResult.success ? examsResult.exams : [],
     cacheVersion: cacheVersionResult.version || 1,
-    activeAnnouncement: announcementResult.success ? announcementResult.announcement : null
+    activeAnnouncement: announcementResult.success ? announcementResult.announcement : null,
+    currentSemester: currentSemesterResult.success ? currentSemesterResult.currentSemester : '1st',
+    academicYear: currentSemesterResult.success ? currentSemesterResult.academicYear : '',
+    semesterConfig: semesterConfigResult.success ? semesterConfigResult.semesters : []
   };
 }
 
@@ -2212,6 +2308,11 @@ function updateExam(data) {
       return { error: 'Missing examId' };
     }
     
+    // Validate permission
+    if (!canManageSchedules(userId)) {
+      return { error: 'Unauthorized. Only Mayor, Vice Mayor, or Secretary can manage schedules.' };
+    }
+    
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const examSheet = ss.getSheetByName('ExamSchedule');
     
@@ -2721,6 +2822,578 @@ function sendPushNotification(data) {
   }
 }
 
+// ==================== SEMESTER CONFIGURATION FUNCTIONS ====================
+
+/**
+ * Get semester configuration
+ * Returns the start/end dates for each semester
+ */
+function getSemesterConfig() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('SemesterConfig');
+    
+    if (!sheet) {
+      // Create default config
+      sheet = ss.insertSheet('SemesterConfig');
+      sheet.appendRow(['Semester', 'StartDate', 'EndDate', 'AcademicYear', 'IsActive']);
+      sheet.appendRow(['1st', '2025-08-01', '2025-12-20', '2025-2026', true]);
+      sheet.appendRow(['2nd', '2026-01-06', '2026-05-31', '2025-2026', true]);
+      sheet.setFrozenRows(1);
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    const semesters = [];
+    
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (row[0]) {
+        semesters.push({
+          semester: String(row[0]).trim(),
+          startDate: row[1] instanceof Date ? row[1].toISOString().split('T')[0] : String(row[1]),
+          endDate: row[2] instanceof Date ? row[2].toISOString().split('T')[0] : String(row[2]),
+          academicYear: String(row[3] || '').trim(),
+          isActive: row[4] === true || row[4] === 'TRUE' || String(row[4]).toLowerCase() === 'true'
+        });
+      }
+    }
+    
+    return { success: true, semesters };
+  } catch (error) {
+    return { error: 'Failed to get semester config: ' + error.message };
+  }
+}
+
+/**
+ * Update semester configuration (admin only)
+ */
+function updateSemesterConfig(data) {
+  try {
+    const { userId, semesters } = data;
+    const ADMIN_USER_ID = '2025-00046';
+    
+    // Check permission
+    if (!canManageSchedules(userId) && String(userId) !== ADMIN_USER_ID) {
+      return { error: 'Unauthorized. Only officers can update semester config.' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('SemesterConfig');
+    
+    if (!sheet) {
+      sheet = ss.insertSheet('SemesterConfig');
+      sheet.appendRow(['Semester', 'StartDate', 'EndDate', 'AcademicYear', 'IsActive']);
+      sheet.setFrozenRows(1);
+    }
+    
+    // Clear existing data (except header)
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      sheet.getRange(2, 1, lastRow - 1, 5).clearContent();
+    }
+    
+    // Add new semester data
+    semesters.forEach((sem, idx) => {
+      sheet.getRange(idx + 2, 1, 1, 5).setValues([[
+        sem.semester,
+        sem.startDate,
+        sem.endDate,
+        sem.academicYear || '',
+        sem.isActive !== false
+      ]]);
+    });
+    
+    return { success: true, message: 'Semester config updated' };
+  } catch (error) {
+    return { error: 'Failed to update semester config: ' + error.message };
+  }
+}
+
+/**
+ * Get current semester based on today's date
+ * Returns the active semester whose date range includes today
+ */
+function getCurrentSemester() {
+  try {
+    const configResult = getSemesterConfig();
+    if (!configResult.success) {
+      return { success: true, currentSemester: '1st', academicYear: '' }; // Default
+    }
+    
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    
+    for (const sem of configResult.semesters) {
+      if (!sem.isActive) continue;
+      
+      const startDate = sem.startDate;
+      const endDate = sem.endDate;
+      
+      if (todayStr >= startDate && todayStr <= endDate) {
+        return {
+          success: true,
+          currentSemester: sem.semester,
+          academicYear: sem.academicYear,
+          startDate: sem.startDate,
+          endDate: sem.endDate
+        };
+      }
+    }
+    
+    // If no active semester found, return the most recent or upcoming
+    const sortedSemesters = configResult.semesters
+      .filter(s => s.isActive)
+      .sort((a, b) => b.startDate.localeCompare(a.startDate));
+    
+    if (sortedSemesters.length > 0) {
+      // Find the closest semester (either current or upcoming)
+      for (const sem of sortedSemesters) {
+        if (sem.startDate <= todayStr) {
+          return {
+            success: true,
+            currentSemester: sem.semester,
+            academicYear: sem.academicYear,
+            startDate: sem.startDate,
+            endDate: sem.endDate
+          };
+        }
+      }
+      // Return the next upcoming semester
+      const upcoming = configResult.semesters
+        .filter(s => s.isActive && s.startDate > todayStr)
+        .sort((a, b) => a.startDate.localeCompare(b.startDate));
+      if (upcoming.length > 0) {
+        return {
+          success: true,
+          currentSemester: upcoming[0].semester,
+          academicYear: upcoming[0].academicYear,
+          startDate: upcoming[0].startDate,
+          endDate: upcoming[0].endDate
+        };
+      }
+    }
+    
+    return { success: true, currentSemester: '1st', academicYear: '' }; // Default fallback
+  } catch (error) {
+    return { success: true, currentSemester: '1st', academicYear: '' }; // Default on error
+  }
+}
+
+/**
+ * Get subjects filtered by semester
+ * Only returns subjects that have schedules in the specified semester
+ */
+function getSubjectsBySemester(semester) {
+  try {
+    const allSubjects = getSubjects();
+    
+    if (!semester) {
+      return { success: true, subjects: allSubjects };
+    }
+    
+    // Get class schedules for this semester
+    const schedulesResult = getClassSchedules(semester);
+    if (!schedulesResult.success) {
+      return { success: true, subjects: allSubjects };
+    }
+    
+    // Extract unique course codes from schedules
+    const scheduledCodes = new Set();
+    schedulesResult.schedules.forEach(s => {
+      if (s.courseCode) {
+        scheduledCodes.add(s.courseCode.toUpperCase());
+      }
+    });
+    
+    // If no schedules exist yet, return all subjects
+    if (scheduledCodes.size === 0) {
+      return { success: true, subjects: allSubjects, noSchedules: true };
+    }
+    
+    // Filter subjects to only those with schedules
+    const filteredSubjects = allSubjects.filter(s => 
+      scheduledCodes.has(s.code.toUpperCase())
+    );
+    
+    return { 
+      success: true, 
+      subjects: filteredSubjects,
+      allSubjects: allSubjects // Include all for reference
+    };
+  } catch (error) {
+    return { error: 'Failed to get subjects by semester: ' + error.message };
+  }
+}
+
+// ==================== CLASS SCHEDULE FUNCTIONS ====================
+
+/**
+ * Setup ClassSchedule sheet
+ * Headers: ScheduleID, Type, Semester, CourseCode, CourseName, Teacher, Classroom, DayOfWeek, StartTime, EndTime, Details, CreatedBy, CreatedByName, CreatedAt, UpdatedAt
+ */
+function setupClassScheduleSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('ClassSchedule');
+  
+  if (!sheet) {
+    sheet = ss.insertSheet('ClassSchedule');
+    sheet.appendRow([
+      'ScheduleID',      // A - Unique identifier
+      'Type',            // B - semestral, makeup, activity, special, etc.
+      'Semester',        // C - 1st or 2nd (for semestral type)
+      'CourseCode',      // D - e.g., FL111
+      'CourseName',      // E - e.g., Introduksyon sa Pag-aaral ng Wika
+      'Teacher',         // F - Instructor name
+      'Classroom',       // G - Room/Location
+      'DayOfWeek',       // H - Monday, Tuesday, etc. (for semestral) or specific date for special
+      'StartTime',       // I - e.g., 08:00
+      'EndTime',         // J - e.g., 10:00
+      'SpecificDate',    // K - For makeup/activity/special (ISO date string)
+      'Details',         // L - Additional notes
+      'IsActive',        // M - true/false
+      'CreatedBy',       // N - User ID
+      'CreatedByName',   // O - User name
+      'CreatedAt',       // P - ISO timestamp
+      'UpdatedAt'        // Q - ISO timestamp
+    ]);
+    sheet.setFrozenRows(1);
+    return { success: true, message: 'ClassSchedule sheet created' };
+  }
+  
+  return { success: true, message: 'ClassSchedule sheet already exists' };
+}
+
+/**
+ * Check if user has permission to manage schedules
+ * Allowed roles: class-president (Mayor), class-vice-president (Vice Mayor), class-secretary (Secretary), admin
+ */
+function canManageSchedules(userId) {
+  const ADMIN_USER_ID = '2025-00046';
+  
+  if (String(userId) === ADMIN_USER_ID) {
+    return true;
+  }
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const userSheet = ss.getSheetByName('UserAccounts');
+  
+  if (!userSheet) {
+    return false;
+  }
+  
+  const data = userSheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(userId)) {
+      const role = data[i][17] || 'student'; // Column R is role
+      const allowedRoles = ['class-president', 'class-vice-president', 'class-secretary'];
+      return allowedRoles.includes(role);
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Add a new class schedule
+ * @param {Object} data - Schedule data
+ */
+function addClassSchedule(data) {
+  try {
+    const { type, semester, courseCode, courseName, teacher, classroom, dayOfWeek, startTime, endTime, specificDate, details, userId, userName } = data;
+    
+    // Validate permission
+    if (!canManageSchedules(userId)) {
+      return { error: 'Unauthorized. Only Mayor, Vice Mayor, or Secretary can manage schedules.' };
+    }
+    
+    // Validate required fields
+    if (!type || !courseCode || !startTime || !endTime) {
+      return { error: 'Missing required fields (type, courseCode, startTime, endTime)' };
+    }
+    
+    // For semestral type, dayOfWeek and semester are required
+    if (type === 'semestral' && (!dayOfWeek || !semester)) {
+      return { error: 'Semestral schedules require dayOfWeek and semester' };
+    }
+    
+    // For non-semestral types, specificDate is required
+    if (type !== 'semestral' && !specificDate) {
+      return { error: 'Special schedules require a specific date' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('ClassSchedule');
+    
+    if (!sheet) {
+      setupClassScheduleSheet();
+      sheet = ss.getSheetByName('ClassSchedule');
+    }
+    
+    const scheduleId = 'SCHED-' + Date.now();
+    const now = new Date().toISOString();
+    
+    sheet.appendRow([
+      scheduleId,
+      type,
+      semester || '',
+      courseCode,
+      courseName || '',
+      teacher || '',
+      classroom || '',
+      dayOfWeek || '',
+      startTime,
+      endTime,
+      specificDate || '',
+      details || '',
+      true, // IsActive
+      userId,
+      userName || '',
+      now,
+      now
+    ]);
+    
+    return {
+      success: true,
+      schedule: {
+        scheduleId,
+        type,
+        semester: semester || '',
+        courseCode,
+        courseName: courseName || '',
+        teacher: teacher || '',
+        classroom: classroom || '',
+        dayOfWeek: dayOfWeek || '',
+        startTime,
+        endTime,
+        specificDate: specificDate || '',
+        details: details || '',
+        isActive: true,
+        createdBy: userId,
+        createdByName: userName || '',
+        createdAt: now,
+        updatedAt: now
+      }
+    };
+  } catch (error) {
+    return { error: 'Failed to add schedule: ' + error.message };
+  }
+}
+
+/**
+ * Update an existing class schedule
+ * @param {Object} data - Schedule data with scheduleId
+ */
+function updateClassSchedule(data) {
+  try {
+    const { scheduleId, userId } = data;
+    
+    if (!scheduleId) {
+      return { error: 'Missing scheduleId' };
+    }
+    
+    // Validate permission
+    if (!canManageSchedules(userId)) {
+      return { error: 'Unauthorized. Only Mayor, Vice Mayor, or Secretary can manage schedules.' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('ClassSchedule');
+    
+    if (!sheet) {
+      return { error: 'ClassSchedule sheet not found' };
+    }
+    
+    const sheetData = sheet.getDataRange().getValues();
+    
+    for (let i = 1; i < sheetData.length; i++) {
+      if (sheetData[i][0] === scheduleId) {
+        const now = new Date().toISOString();
+        
+        // Update fields if provided
+        if (data.type !== undefined) sheet.getRange(i + 1, 2).setValue(data.type);
+        if (data.semester !== undefined) sheet.getRange(i + 1, 3).setValue(data.semester);
+        if (data.courseCode !== undefined) sheet.getRange(i + 1, 4).setValue(data.courseCode);
+        if (data.courseName !== undefined) sheet.getRange(i + 1, 5).setValue(data.courseName);
+        if (data.teacher !== undefined) sheet.getRange(i + 1, 6).setValue(data.teacher);
+        if (data.classroom !== undefined) sheet.getRange(i + 1, 7).setValue(data.classroom);
+        if (data.dayOfWeek !== undefined) sheet.getRange(i + 1, 8).setValue(data.dayOfWeek);
+        if (data.startTime !== undefined) sheet.getRange(i + 1, 9).setValue(data.startTime);
+        if (data.endTime !== undefined) sheet.getRange(i + 1, 10).setValue(data.endTime);
+        if (data.specificDate !== undefined) sheet.getRange(i + 1, 11).setValue(data.specificDate);
+        if (data.details !== undefined) sheet.getRange(i + 1, 12).setValue(data.details);
+        if (data.isActive !== undefined) sheet.getRange(i + 1, 13).setValue(data.isActive);
+        
+        // Always update the updatedAt timestamp
+        sheet.getRange(i + 1, 17).setValue(now);
+        
+        return { success: true, message: 'Schedule updated' };
+      }
+    }
+    
+    return { error: 'Schedule not found' };
+  } catch (error) {
+    return { error: 'Failed to update schedule: ' + error.message };
+  }
+}
+
+/**
+ * Delete a class schedule
+ * @param {string} scheduleId - Schedule ID to delete
+ * @param {string} userId - User requesting deletion
+ */
+function deleteClassSchedule(scheduleId, userId) {
+  try {
+    if (!scheduleId) {
+      return { error: 'Missing scheduleId' };
+    }
+    
+    // Validate permission
+    if (!canManageSchedules(userId)) {
+      return { error: 'Unauthorized. Only Mayor, Vice Mayor, or Secretary can manage schedules.' };
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('ClassSchedule');
+    
+    if (!sheet) {
+      return { error: 'ClassSchedule sheet not found' };
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === scheduleId) {
+        sheet.deleteRow(i + 1);
+        return { success: true, message: 'Schedule deleted' };
+      }
+    }
+    
+    return { error: 'Schedule not found' };
+  } catch (error) {
+    return { error: 'Failed to delete schedule: ' + error.message };
+  }
+}
+
+/**
+ * Get all class schedules
+ * @param {string} semester - Optional filter by semester (1st or 2nd)
+ * @param {string} type - Optional filter by type
+ */
+function getClassSchedules(semester, type) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('ClassSchedule');
+    
+    if (!sheet) {
+      return { success: true, schedules: [] };
+    }
+    
+    const dataRange = sheet.getDataRange();
+    const data = dataRange.getValues();
+    const displayData = dataRange.getDisplayValues(); // Get values as displayed in sheet
+    
+    if (data.length <= 1) {
+      return { success: true, schedules: [] };
+    }
+    
+    const schedules = [];
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const currentDayOfWeek = dayNames[now.getDay()];
+    
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const displayRow = displayData[i];
+      
+      const scheduleType = String(row[1]).trim();
+      const scheduleSemester = String(row[2]).trim();
+      
+      // Apply filters
+      if (semester && scheduleSemester !== semester) continue;
+      if (type && scheduleType !== type) continue;
+      
+      // Check if schedule is active
+      const isActive = row[12] === true || row[12] === 'TRUE' || String(row[12]).toLowerCase() === 'true';
+      if (!isActive) continue;
+      
+      // Parse times for display
+      const startTimeDisplay = String(displayRow[8] || '').trim();
+      const endTimeDisplay = String(displayRow[9] || '').trim();
+      
+      // Determine status for non-semestral schedules
+      let status = 'scheduled';
+      const specificDate = row[10];
+      
+      if (scheduleType !== 'semestral' && specificDate) {
+        const scheduleDate = specificDate instanceof Date 
+          ? specificDate.toISOString().split('T')[0]
+          : String(specificDate);
+        
+        if (scheduleDate < today) {
+          status = 'completed';
+        } else if (scheduleDate === today) {
+          status = 'today';
+        } else {
+          status = 'upcoming';
+        }
+      } else if (scheduleType === 'semestral') {
+        // For semestral, check if it's today's class
+        const scheduleDayOfWeek = String(row[7]).trim();
+        if (scheduleDayOfWeek === currentDayOfWeek) {
+          status = 'today';
+        }
+      }
+      
+      schedules.push({
+        scheduleId: row[0],
+        type: scheduleType,
+        semester: scheduleSemester,
+        courseCode: String(row[3]).trim(),
+        courseName: String(row[4]).trim(),
+        teacher: String(row[5]).trim(),
+        classroom: String(row[6]).trim(),
+        dayOfWeek: String(row[7]).trim(),
+        startTime: startTimeDisplay || '00:00',
+        endTime: endTimeDisplay || '',
+        specificDate: specificDate instanceof Date ? specificDate.toISOString().split('T')[0] : String(specificDate || ''),
+        details: String(row[11]).trim(),
+        isActive: isActive,
+        createdBy: String(row[13]).trim(),
+        createdByName: String(row[14]).trim(),
+        createdAt: row[15],
+        updatedAt: row[16],
+        status: status
+      });
+    }
+    
+    // Sort schedules: semestral first by day/time, then special by date/time
+    schedules.sort((a, b) => {
+      // Semestral schedules first
+      if (a.type === 'semestral' && b.type !== 'semestral') return -1;
+      if (a.type !== 'semestral' && b.type === 'semestral') return 1;
+      
+      if (a.type === 'semestral' && b.type === 'semestral') {
+        // Sort by day of week, then by time
+        const dayOrder = { 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 7 };
+        const dayDiff = (dayOrder[a.dayOfWeek] || 8) - (dayOrder[b.dayOfWeek] || 8);
+        if (dayDiff !== 0) return dayDiff;
+        return a.startTime.localeCompare(b.startTime);
+      } else {
+        // Sort by date, then by time
+        const dateDiff = (a.specificDate || '').localeCompare(b.specificDate || '');
+        if (dateDiff !== 0) return dateDiff;
+        return a.startTime.localeCompare(b.startTime);
+      }
+    });
+    
+    return { success: true, schedules };
+  } catch (error) {
+    return { error: 'Failed to get schedules: ' + error.message };
+  }
+}
+
 /**
  * SCHEDULED TRIGGER: Check for upcoming exams and send notifications
  * Run this function on a time-based trigger (e.g., every hour)
@@ -2971,4 +3644,72 @@ function processPushQueue() {
   } catch (error) {
     Logger.log('Error processing queue: ' + error.message);
   }
+}
+
+/**
+ * Create a new resource request
+ * @param {Object} data - { userId, userName, subject, description }
+ */
+function createResourceRequest(data) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('ResourceRequests');
+  if (!sheet) return { error: 'ResourceRequests sheet not found' };
+  const now = new Date().toISOString();
+  const lastRow = sheet.getLastRow();
+  const requestId = 'REQ-' + (lastRow || 1) + '-' + Math.floor(Math.random() * 10000);
+  sheet.appendRow([
+    requestId,
+    data.userId,
+    data.userName,
+    data.subject,
+    data.description,
+    'open',
+    '', '', '',
+    now,
+    ''
+  ]);
+  return { success: true, requestId };
+}
+
+/**
+ * List all resource requests (optionally filter by status or subject)
+ * @param {Object} data - { status, subject }
+ */
+function listResourceRequests(data) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('ResourceRequests');
+  if (!sheet) return { error: 'ResourceRequests sheet not found' };
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0];
+  const requests = rows.slice(1).map(row => {
+    const req = {};
+    headers.forEach((h, i) => req[h] = row[i]);
+    return req;
+  });
+  let filtered = requests;
+  if (data && data.status) filtered = filtered.filter(r => r.Status === data.status);
+  if (data && data.subject) filtered = filtered.filter(r => r.Subject === data.subject);
+  return { success: true, requests: filtered };
+}
+
+/**
+ * Fulfill a resource request
+ * @param {Object} data - { requestId, fulfilledBy, fulfilledByName, resourceUrl }
+ */
+function fulfillResourceRequest(data) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('ResourceRequests');
+  if (!sheet) return { error: 'ResourceRequests sheet not found' };
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === data.requestId) {
+      sheet.getRange(i+1, 6).setValue('fulfilled'); // Status
+      sheet.getRange(i+1, 7).setValue(data.fulfilledBy); // FulfilledBy
+      sheet.getRange(i+1, 8).setValue(data.fulfilledByName); // FulfilledByName
+      sheet.getRange(i+1, 9).setValue(data.resourceUrl); // ResourceURL
+      sheet.getRange(i+1, 11).setValue(new Date().toISOString()); // FulfilledAt
+      return { success: true };
+    }
+  }
+  return { error: 'Request not found' };
 }
