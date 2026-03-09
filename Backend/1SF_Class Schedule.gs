@@ -271,6 +271,9 @@ function doPost(e) {
       // ==================== CRUD Operations ====================
       case 'addClassSchedule':
         return jsonResponse(addClassSchedule(data));
+
+      case 'batchAddSchedules':
+        return jsonResponse(batchAddSchedules(data));
       
       case 'updateClassSchedule':
         return jsonResponse(updateClassSchedule(data));

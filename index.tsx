@@ -4,6 +4,8 @@ import React, { Component, ErrorInfo, ReactNode, useState, useEffect, useRef } f
 import { createRoot } from 'react-dom/client';
 import Dexie from 'dexie';
 import jsQR from 'jsqr';
+import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { useUrlState } from './src/hooks/useUrlState';
 import './src/index.css';
 
 // Global Error Boundary for debugging
@@ -229,7 +231,30 @@ const ResourceRequestList = ({ subject, user, onFulfill, onMarkFulfilled, addToa
     }
   };
 
-  if (loading) return <div className="text-center text-stone-400 py-4">Loading resource requests...</div>;
+  if (loading) {
+    return (
+      <div className="mt-8 space-y-3">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-5 w-5 rounded-full" darkMode={darkMode} />
+          <Skeleton className="h-5 w-40" darkMode={darkMode} />
+        </div>
+        {Array.from({ length: 2 }).map((_, index) => (
+          <div
+            key={index}
+            className={`p-4 rounded-xl border flex flex-col gap-3 ${darkMode ? 'border-stone-700 bg-stone-900' : 'border-amber-200 bg-amber-50'}`}
+          >
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-4 w-28" darkMode={darkMode} />
+              <Skeleton className="h-3 w-20" darkMode={darkMode} />
+            </div>
+            <Skeleton className="h-4 w-full" darkMode={darkMode} />
+            <Skeleton className="h-4 w-5/6" darkMode={darkMode} />
+            <Skeleton className="h-8 w-24 rounded-lg" darkMode={darkMode} />
+          </div>
+        ))}
+      </div>
+    );
+  }
   if (error) return <div className="text-center text-red-500 py-4">{error}</div>;
   if (requests.length === 0) return <div className="text-center text-stone-400 py-4">No open resource requests.</div>;
 
@@ -356,6 +381,156 @@ type Toast = {
 
 type AppView = 'HOME' | 'SUBJECT' | 'DECK_OVERVIEW' | 'PLAY' | 'SUMMARY' | 'RESOURCE_VIEW' | 'ANALYTICS' | 'EXAMS' | 'ALL_RESOURCES' | 'CALENDAR' | 'CLASS' | 'FINANCE' | 'ATTENDANCE' | 'SCHEDULE';
 
+const ALLOWED_ROUTE_ROLES = ['visitor', 'member', 'admin'] as const;
+type RouteRole = (typeof ALLOWED_ROUTE_ROLES)[number];
+
+type RouteOverlay = 'login' | 'profile' | 'upload' | 'request-resource';
+
+type PageConfig = {
+  view: AppView;
+  overlay?: RouteOverlay;
+};
+
+const PAGE_REGISTRY: Record<string, PageConfig> = {
+  home: { view: 'HOME' },
+  subject: { view: 'SUBJECT' },
+  deck: { view: 'DECK_OVERVIEW' },
+  play: { view: 'PLAY' },
+  summary: { view: 'SUMMARY' },
+  resource: { view: 'RESOURCE_VIEW' },
+  analytics: { view: 'ANALYTICS' },
+  exams: { view: 'EXAMS' },
+  resources: { view: 'ALL_RESOURCES' },
+  calendar: { view: 'CALENDAR' },
+  class: { view: 'CLASS' },
+  finance: { view: 'FINANCE' },
+  attendance: { view: 'ATTENDANCE' },
+  schedule: { view: 'SCHEDULE' },
+  login: { view: 'HOME', overlay: 'login' },
+  profile: { view: 'HOME', overlay: 'profile' },
+  upload: { view: 'SUBJECT', overlay: 'upload' },
+  'request-resource': { view: 'SUBJECT', overlay: 'request-resource' }
+};
+
+const VIEW_TO_PAGE: Record<AppView, string> = {
+  HOME: 'home',
+  SUBJECT: 'subject',
+  DECK_OVERVIEW: 'deck',
+  PLAY: 'play',
+  SUMMARY: 'summary',
+  RESOURCE_VIEW: 'resource',
+  ANALYTICS: 'analytics',
+  EXAMS: 'exams',
+  ALL_RESOURCES: 'resources',
+  CALENDAR: 'calendar',
+  CLASS: 'class',
+  FINANCE: 'finance',
+  ATTENDANCE: 'attendance',
+  SCHEDULE: 'schedule'
+};
+
+const AUTH_REQUIRED_PAGES = new Set<string>([
+  'subject',
+  'deck',
+  'play',
+  'summary',
+  'resource',
+  'analytics',
+  'exams',
+  'resources',
+  'calendar',
+  'class',
+  'finance',
+  'attendance',
+  'schedule',
+  'profile',
+  'upload',
+  'request-resource'
+]);
+
+function deriveRouteRoleForUser(user: User | null): RouteRole {
+  if (!user) return 'visitor';
+  if (user.role === 'admin' || user.role === 'superadmin') return 'admin';
+  return 'member';
+}
+
+function normalizePageKey(page: string | null | undefined) {
+  return (page || 'home').trim().toLowerCase();
+}
+
+function getPageConfig(page: string | null | undefined): PageConfig {
+  return PAGE_REGISTRY[normalizePageKey(page)] || PAGE_REGISTRY.home;
+}
+
+function getInitialUrlParam(key: string) {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get(key);
+}
+
+function buildPageScopedParams(args: {
+  page: string;
+  isAuthPhase: boolean;
+  routeRole: RouteRole;
+  user: User | null;
+  activeSubject: string | null;
+  activeTab: 'Classroom' | 'Schedule' | 'Resources' | 'Exams';
+  activeDeck: Deck | null;
+  activeResource: Resource | null;
+}) {
+  const {
+    page,
+    isAuthPhase,
+    routeRole,
+    user,
+    activeSubject,
+    activeTab,
+    activeDeck,
+    activeResource
+  } = args;
+
+  const params: Record<string, string | null> = {
+    studentId: isAuthPhase ? null : user?.idNumber || null,
+    role: user?.role || routeRole
+  };
+
+  if (isAuthPhase) {
+    return params;
+  }
+
+  switch (page) {
+    case 'subject':
+      params.subject = activeSubject || null;
+      params.course = activeSubject || null;
+      params.tab = activeTab.toLowerCase();
+      break;
+    case 'deck':
+    case 'play':
+    case 'summary':
+    case 'analytics':
+      params.subject = activeSubject || null;
+      params.course = activeSubject || null;
+      params.tab = activeTab.toLowerCase();
+      params.deck = activeDeck?.name || null;
+      break;
+    case 'resource':
+      params.subject = activeSubject || null;
+      params.course = activeSubject || null;
+      params.tab = 'resources';
+      params.resource = activeResource?.name || null;
+      break;
+    case 'upload':
+    case 'request-resource':
+      params.subject = activeSubject || null;
+      params.course = activeSubject || null;
+      params.tab = 'resources';
+      break;
+    default:
+      break;
+  }
+
+  return params;
+}
+
 type DeckProgress = {
   deckName: string;
   cardStatuses: Record<string, 'correct' | 'incorrect' | 'unanswered'>;
@@ -415,7 +590,16 @@ type ClassSchedule = {
   createdByName: string;
   createdAt: string;
   updatedAt: string;
+  startTime12h?: string;
+  endTime12h?: string;
   status: 'today' | 'upcoming' | 'completed' | 'scheduled';
+};
+
+type AdditionalSemestralMeeting = {
+  id: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
 };
 
 type SubjectInfo = {
@@ -447,6 +631,104 @@ const CLASS_SCHEDULE_GAS_URL = 'https://script.google.com/macros/s/AKfycbxJoCpVW
 const STORAGE_KEY_USER = 'cumlaude_user';
 const STORAGE_KEY_STATE = 'flashcard_session_state';
 const STORAGE_KEY_CACHE_VERSION = 'cumlaude_cache_version';
+const SECURE_SESSION_KEY = 'cumlaude_secure_session_key';
+const SECURE_SESSION_PREFIX = 'cumlaude_secure_';
+
+type SecureSessionEnvelope = {
+  v: 1;
+  iv: string;
+  data: string;
+};
+
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = '';
+  bytes.forEach(byte => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+function base64ToBytes(value: string) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function getSecureSessionCryptoKey() {
+  if (typeof window === 'undefined' || !window.crypto?.subtle) return null;
+
+  let encodedKey = sessionStorage.getItem(SECURE_SESSION_KEY);
+  if (!encodedKey) {
+    const rawKey = crypto.getRandomValues(new Uint8Array(32));
+    encodedKey = bytesToBase64(rawKey);
+    sessionStorage.setItem(SECURE_SESSION_KEY, encodedKey);
+  }
+
+  return crypto.subtle.importKey(
+    'raw',
+    base64ToBytes(encodedKey),
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function setSecureSessionItem(key: string, value: unknown) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const cryptoKey = await getSecureSessionCryptoKey();
+    if (!cryptoKey) {
+      sessionStorage.setItem(`${SECURE_SESSION_PREFIX}${key}`, JSON.stringify(value));
+      return;
+    }
+
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const payload = new TextEncoder().encode(JSON.stringify(value));
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, payload);
+    const envelope: SecureSessionEnvelope = {
+      v: 1,
+      iv: bytesToBase64(iv),
+      data: bytesToBase64(new Uint8Array(encrypted))
+    };
+
+    sessionStorage.setItem(`${SECURE_SESSION_PREFIX}${key}`, JSON.stringify(envelope));
+  } catch (error) {
+    console.warn('Failed to write secure session cache:', error);
+  }
+}
+
+async function getSecureSessionItem<T>(key: string): Promise<T | null> {
+  if (typeof window === 'undefined') return null;
+
+  const raw = sessionStorage.getItem(`${SECURE_SESSION_PREFIX}${key}`);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed?.iv || !parsed?.data) {
+      return parsed as T;
+    }
+
+    const cryptoKey = await getSecureSessionCryptoKey();
+    if (!cryptoKey) return null;
+
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: base64ToBytes(parsed.iv) },
+      cryptoKey,
+      base64ToBytes(parsed.data)
+    );
+
+    return JSON.parse(new TextDecoder().decode(decrypted)) as T;
+  } catch (error) {
+    console.warn('Failed to read secure session cache:', error);
+    sessionStorage.removeItem(`${SECURE_SESSION_PREFIX}${key}`);
+    return null;
+  }
+}
 
 async function postToAppsScript(payload: unknown) {
   return fetch(GAS_URL, {
@@ -508,24 +790,44 @@ const Icon = ({ name, className = "" }: { name: string; className?: string }) =>
   <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
 );
 
-// Floating Theme Toggle Component - Used across all views
-const FloatingThemeToggle = ({ darkMode, setDarkMode }: { darkMode: boolean; setDarkMode: (mode: boolean) => void }) => (
+const Skeleton = ({ className = '', darkMode = false }: { className?: string; darkMode?: boolean }) => (
+  <div
+    className={`rounded-lg skeleton-shimmer ${darkMode ? 'brightness-75' : ''} ${className}`}
+  />
+);
+
+const ThemeToggleButton = ({
+  darkMode,
+  setDarkMode,
+  className = '',
+  compact = false
+}: {
+  darkMode: boolean;
+  setDarkMode: (mode: boolean) => void;
+  className?: string;
+  compact?: boolean;
+}) => (
   <button
     onClick={() => {
       const newMode = !darkMode;
       setDarkMode(newMode);
       localStorage.setItem('cumlaude_darkMode', String(newMode));
     }}
-    className={`fixed z-[100] w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-110
-      sm:top-4 sm:right-4 sm:bottom-auto sm:left-auto
-      bottom-4 left-4 top-auto right-auto
-      ${darkMode 
-        ? 'bg-amber-400 text-stone-900 hover:bg-amber-300' 
-        : 'bg-stone-800 text-amber-400 hover:bg-stone-700'}
-    `}
+    className={`inline-flex items-center justify-center gap-2 rounded-xl transition-all duration-200 ${className} ${
+      compact
+        ? darkMode
+          ? 'h-10 px-3 bg-white/10 text-amber-200 hover:bg-white/20'
+          : 'h-10 px-3 bg-black/10 text-amber-100 hover:bg-black/20'
+        : darkMode
+          ? 'px-4 py-3 bg-gray-700 text-white hover:bg-gray-600'
+          : 'px-4 py-3 bg-stone-100 text-stone-800 hover:bg-stone-200'
+    }`}
     title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
   >
     <Icon name={darkMode ? 'light_mode' : 'dark_mode'} className="text-lg" />
+    <span className={compact ? 'text-sm font-medium' : 'text-sm font-semibold'}>
+      {darkMode ? 'Light Mode' : 'Dark Mode'}
+    </span>
   </button>
 );
 
@@ -3601,7 +3903,8 @@ const ProfilePage = ({
   addToast,
   updateToast,
   removeToast,
-  darkMode = false
+  darkMode = false,
+  setDarkMode
 }: {
   user: User;
   onClose: () => void;
@@ -3611,6 +3914,7 @@ const ProfilePage = ({
   updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
   removeToast: (id: number) => void;
   darkMode?: boolean;
+  setDarkMode: (mode: boolean) => void;
 }) => {
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({
@@ -4004,6 +4308,18 @@ const ProfilePage = ({
               </div>
             </div>
 
+            <div className={`rounded-xl border p-4 ${darkMode ? 'bg-gray-700/60 border-gray-600' : 'bg-stone-50 border-stone-200'}`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Appearance</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'} mt-1`}>
+                    Switch between light and dark mode.
+                  </p>
+                </div>
+                <ThemeToggleButton darkMode={darkMode} setDarkMode={setDarkMode} />
+              </div>
+            </div>
+
             {/* Credentials Section */}
             <div className="space-y-4">
               <h3 className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-stone-500'} uppercase tracking-wider`}>Change Credentials (Optional)</h3>
@@ -4271,6 +4587,17 @@ const ProfilePage = ({
 
             {/* Actions */}
             <div className={`p-4 border-t ${darkMode ? 'border-gray-700' : 'border-stone-100'} space-y-3`}>
+              <div className={`rounded-xl border p-4 ${darkMode ? 'bg-gray-700/60 border-gray-600' : 'bg-stone-50 border-stone-200'}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Appearance</p>
+                    <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'} mt-1`}>
+                      Theme preference for this device.
+                    </p>
+                  </div>
+                  <ThemeToggleButton darkMode={darkMode} setDarkMode={setDarkMode} />
+                </div>
+              </div>
               <button
                 onClick={onLogout}
                 className={`w-full py-3 ${darkMode ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50' : 'bg-red-50 text-red-600 hover:bg-red-100'} rounded-xl font-semibold transition-all flex items-center justify-center gap-2`}
@@ -4633,9 +4960,19 @@ const ClassPage = ({
             <p className={darkMode ? 'text-gray-400' : 'text-stone-500'}>You need to have a section assigned to view your classmates.</p>
           </div>
         ) : loading ? (
-          <div className="text-center py-16">
-            <div className={`w-8 h-8 border-2 ${darkMode ? 'border-gray-600 border-t-gray-300' : 'border-stone-300 border-t-stone-800'} rounded-full animate-spin mx-auto mb-4`} />
-            <p className={darkMode ? 'text-gray-400' : 'text-stone-500'}>Loading classmates...</p>
+          <div className="py-8 space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              {Array.from({ length: 8 }).map((_, index) => (
+                <div
+                  key={index}
+                  className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} rounded-2xl border p-4`}
+                >
+                  <Skeleton className="w-16 h-16 rounded-2xl mx-auto" darkMode={darkMode} />
+                  <Skeleton className="h-4 w-20 mx-auto mt-4" darkMode={darkMode} />
+                  <Skeleton className="h-3 w-24 mx-auto mt-2" darkMode={darkMode} />
+                </div>
+              ))}
+            </div>
           </div>
         ) : sortedClassmates.length === 0 ? (
           <div className="text-center py-16">
@@ -5107,6 +5444,10 @@ const SchedulePage = ({
   const [isCreatingNewCourse, setIsCreatingNewCourse] = useState(false);
   const [newCourseCode, setNewCourseCode] = useState('');
   const [newCourseName, setNewCourseName] = useState('');
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [scheduleFormType, setScheduleFormType] = useState<string>('activity');
+  const [includeAdditionalMeetings, setIncludeAdditionalMeetings] = useState(false);
+  const [additionalMeetings, setAdditionalMeetings] = useState<AdditionalSemestralMeeting[]>([]);
   const [scheduleSubjects, setScheduleSubjects] = useState<string[]>([]);
   const [scheduleSubjectInfo, setScheduleSubjectInfo] = useState<Record<string, SubjectInfo>>({});
   const [courseCatalog, setCourseCatalog] = useState<Subject[]>([]);
@@ -5147,6 +5488,24 @@ const SchedulePage = ({
     ['mayor', 'vice mayor', 'secretary'].includes(normalizedPosition)
   );
 
+  const resetScheduleModalState = () => {
+    setShowAddModal(false);
+    setEditingSchedule(null);
+    setIsCreatingNewCourse(false);
+    setNewCourseCode('');
+    setNewCourseName('');
+    setScheduleFormType(canManageSemestral ? 'semestral' : 'activity');
+    setIncludeAdditionalMeetings(false);
+    setAdditionalMeetings([]);
+  };
+
+  const createAdditionalMeeting = (): AdditionalSemestralMeeting => ({
+    id: `meeting-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    dayOfWeek: '',
+    startTime: '',
+    endTime: ''
+  });
+
   // Initialize semester config editing state from props
   useEffect(() => {
     if (semesterConfig.length > 0) {
@@ -5161,6 +5520,23 @@ const SchedulePage = ({
       });
     }
   }, [semesterConfig, academicYear]);
+
+  useEffect(() => {
+    if (editingSchedule) {
+      setScheduleFormType(editingSchedule.type || 'semestral');
+      setIncludeAdditionalMeetings(false);
+      setAdditionalMeetings([]);
+      setIsCreatingNewCourse(false);
+      return;
+    }
+
+    if (showAddModal) {
+      setScheduleFormType(canManageSemestral ? 'semestral' : 'activity');
+      setIncludeAdditionalMeetings(false);
+      setAdditionalMeetings([]);
+      setIsCreatingNewCourse(false);
+    }
+  }, [editingSchedule, showAddModal, canManageSemestral]);
 
   // Save semester configuration
   const handleSaveSemesterConfig = async () => {
@@ -5204,6 +5580,11 @@ const SchedulePage = ({
           }
         ];
         setSemesterConfig(newConfig);
+        void setSecureSessionItem('semesterConfig', newConfig);
+        void setSecureSessionItem('academicYear', editingSemesterConfig.academicYear);
+        if (result.currentSemester) {
+          void setSecureSessionItem('currentSemester', result.currentSemester);
+        }
         setShowSemesterConfig(false);
       } else {
         updateToast(toastId, result.error || 'Failed to save', 'error');
@@ -5218,6 +5599,13 @@ const SchedulePage = ({
   // Fetch schedules from backend
   const fetchSchedules = async () => {
     setLoading(true);
+    const cacheKey = `schedulePage_schedules_${selectedSemester || 'all'}`;
+
+    const cachedSchedules = await getSecureSessionItem<ClassSchedule[]>(cacheKey);
+    if (cachedSchedules) {
+      setSchedules(cachedSchedules);
+    }
+
     try {
       const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
         method: 'POST',
@@ -5226,6 +5614,7 @@ const SchedulePage = ({
       const result = await response.json();
       if (result.success) {
         setSchedules(result.schedules || []);
+        void setSecureSessionItem(cacheKey, result.schedules || []);
       } else {
         console.error('Failed to fetch schedules:', result.error);
       }
@@ -5237,6 +5626,21 @@ const SchedulePage = ({
   };
 
   const fetchScheduleSubjects = async (semester: '1st' | '2nd' | '' = selectedSemester) => {
+    const cacheKey = `schedulePage_subjects_${semester || 'all'}`;
+    const cacheInfoKey = `schedulePage_subjectInfo_${semester || 'all'}`;
+
+    const [cachedSubjects, cachedInfo] = await Promise.all([
+      getSecureSessionItem<string[]>(cacheKey),
+      getSecureSessionItem<Record<string, SubjectInfo>>(cacheInfoKey)
+    ]);
+
+    if (cachedSubjects) {
+      setScheduleSubjects(cachedSubjects);
+    }
+    if (cachedInfo) {
+      setScheduleSubjectInfo(cachedInfo);
+    }
+
     try {
       const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
         method: 'POST',
@@ -5250,6 +5654,8 @@ const SchedulePage = ({
       if (!result.success || !Array.isArray(result.subjects)) {
         setScheduleSubjects([]);
         setScheduleSubjectInfo({});
+        void setSecureSessionItem(cacheKey, []);
+        void setSecureSessionItem(cacheInfoKey, {});
         return;
       }
 
@@ -5275,6 +5681,8 @@ const SchedulePage = ({
 
       setScheduleSubjects(subjects);
       setScheduleSubjectInfo(info);
+      void setSecureSessionItem(cacheKey, subjects);
+      void setSecureSessionItem(cacheInfoKey, info);
     } catch (error) {
       console.error('Failed to fetch schedule subjects:', error);
       setScheduleSubjects([]);
@@ -5283,6 +5691,12 @@ const SchedulePage = ({
   };
 
   const fetchCourseCatalog = async () => {
+    const cacheKey = 'schedulePage_courseCatalog';
+    const cachedCourseCatalog = await getSecureSessionItem<Subject[]>(cacheKey);
+    if (cachedCourseCatalog) {
+      setCourseCatalog(cachedCourseCatalog);
+    }
+
     try {
       const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
         method: 'POST',
@@ -5292,12 +5706,15 @@ const SchedulePage = ({
       });
       const result = await response.json();
       if (result.success && Array.isArray(result.courses)) {
-        setCourseCatalog(result.courses.map((course: any) => ({
+        const nextCourseCatalog = result.courses.map((course: any) => ({
           code: String(course.code || '').trim(),
           name: String(course.name || '').trim()
-        })));
+        }));
+        setCourseCatalog(nextCourseCatalog);
+        void setSecureSessionItem(cacheKey, nextCourseCatalog);
       } else {
         setCourseCatalog([]);
+        void setSecureSessionItem(cacheKey, []);
       }
     } catch (error) {
       console.error('Failed to fetch course catalog:', error);
@@ -5310,6 +5727,11 @@ const SchedulePage = ({
     fetchScheduleSubjects();
     fetchCourseCatalog();
   }, [selectedSemester]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Add schedule handler
   const handleAddSchedule = async (scheduleData: Partial<ClassSchedule>) => {
@@ -5337,6 +5759,42 @@ const SchedulePage = ({
         setTimeout(() => removeToast(toastId), 3000);
         return false;
       }
+    } catch (error) {
+      updateToast(toastId, 'Network error', 'error');
+      setTimeout(() => removeToast(toastId), 3000);
+      return false;
+    }
+  };
+
+  const handleAddSchedules = async (scheduleDataList: Partial<ClassSchedule>[]) => {
+    if (!user || scheduleDataList.length === 0) return false;
+    if (scheduleDataList.length === 1) {
+      return handleAddSchedule(scheduleDataList[0]);
+    }
+
+    const toastId = addToast(`Adding ${scheduleDataList.length} schedules...`, 'loading');
+    try {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'batchAddSchedules',
+          schedules: scheduleDataList,
+          userId: user.idNumber,
+          userName: user.name
+        })
+      });
+      const result = await response.json();
+      if (result.success && !result.failed) {
+        updateToast(toastId, `${result.added || scheduleDataList.length} schedules added successfully!`, 'success');
+        setTimeout(() => removeToast(toastId), 3000);
+        await Promise.all([fetchSchedules(), fetchScheduleSubjects(), fetchCourseCatalog()]);
+        return true;
+      }
+
+      const failureMessage = result.errors?.[0]?.error || result.error || 'Failed to add schedules';
+      updateToast(toastId, failureMessage, 'error');
+      setTimeout(() => removeToast(toastId), 4000);
+      return false;
     } catch (error) {
       updateToast(toastId, 'Network error', 'error');
       setTimeout(() => removeToast(toastId), 3000);
@@ -5480,16 +5938,331 @@ const SchedulePage = ({
     }
   };
 
+  const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const dayShortMap: Record<string, string> = {
+    Monday: 'Mon',
+    Tuesday: 'Tue',
+    Wednesday: 'Wed',
+    Thursday: 'Thu',
+    Friday: 'Fri',
+    Saturday: 'Sat',
+    Sunday: 'Sun'
+  };
+
+  const parseScheduleTime = (timeStr: string) => {
+    const [hour, minute] = String(timeStr || '00:00').split(':').map(Number);
+    return {
+      hour: Number.isFinite(hour) ? hour : 0,
+      minute: Number.isFinite(minute) ? minute : 0
+    };
+  };
+
+  const formatCountdown = (targetTime: Date, mode: 'untilStart' | 'untilEnd') => {
+    const diffMs = targetTime.getTime() - currentTime.getTime();
+    if (diffMs <= 0) {
+      return mode === 'untilStart' ? 'Starting now' : 'Ending now';
+    }
+
+    const totalSeconds = Math.floor(diffMs / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const parts = [
+      days > 0 ? `${days}d` : '',
+      hours > 0 || days > 0 ? `${hours}h` : '',
+      minutes > 0 || hours > 0 || days > 0 ? `${minutes}m` : '',
+      `${seconds}s`
+    ].filter(Boolean);
+
+    return `${mode === 'untilStart' ? 'Starts in' : 'Ends in'} ${parts.join(' ')}`;
+  };
+
+  const buildScheduleOccurrence = (schedule: ClassSchedule) => {
+    if (schedule.type === 'semestral') {
+      const targetDayIndex = dayOrder.indexOf(schedule.dayOfWeek);
+      if (targetDayIndex === -1) return null;
+
+      const now = currentTime;
+      const currentDayIndex = (now.getDay() + 6) % 7;
+      const { hour: startHour, minute: startMinute } = parseScheduleTime(schedule.startTime);
+      const { hour: endHour, minute: endMinute } = parseScheduleTime(schedule.endTime || schedule.startTime);
+      const start = new Date(now);
+      const dayOffset = targetDayIndex - currentDayIndex;
+      start.setDate(now.getDate() + dayOffset);
+      start.setHours(startHour, startMinute, 0, 0);
+
+      if (start.getTime() < now.getTime() && !(targetDayIndex === currentDayIndex && currentTime < new Date(start.getFullYear(), start.getMonth(), start.getDate(), endHour, endMinute, 0, 0))) {
+        start.setDate(start.getDate() + 7);
+      }
+
+      const end = new Date(start);
+      end.setHours(endHour, endMinute, 0, 0);
+      if (end.getTime() <= start.getTime()) {
+        end.setDate(end.getDate() + 1);
+      }
+
+      return { schedule, start, end };
+    }
+
+    if (!schedule.specificDate) return null;
+    const [year, month, day] = schedule.specificDate.split('-').map(Number);
+    if (!year || !month || !day) return null;
+    const { hour: startHour, minute: startMinute } = parseScheduleTime(schedule.startTime);
+    const { hour: endHour, minute: endMinute } = parseScheduleTime(schedule.endTime || schedule.startTime);
+    const start = new Date(year, month - 1, day, startHour, startMinute, 0, 0);
+    const end = new Date(year, month - 1, day, endHour, endMinute, 0, 0);
+    if (end.getTime() <= start.getTime()) {
+      end.setDate(end.getDate() + 1);
+    }
+    if (end.getTime() < currentTime.getTime()) {
+      return null;
+    }
+
+    return { schedule, start, end };
+  };
+
+  const upcomingScheduleOccurrence = schedules
+    .map(buildScheduleOccurrence)
+    .filter((item): item is NonNullable<ReturnType<typeof buildScheduleOccurrence>> => Boolean(item))
+    .sort((a, b) => a.start.getTime() - b.start.getTime())
+    .find(item => item.end.getTime() >= currentTime.getTime()) || null;
+
+  const currentScheduleOccurrence = upcomingScheduleOccurrence &&
+    upcomingScheduleOccurrence.start.getTime() <= currentTime.getTime() &&
+    upcomingScheduleOccurrence.end.getTime() >= currentTime.getTime()
+      ? upcomingScheduleOccurrence
+      : null;
+
+  const featuredScheduleOccurrence = currentScheduleOccurrence || upcomingScheduleOccurrence;
+
+  const renderCurrentSchedulePanel = (mode: 'list' | 'table') => {
+    if (!featuredScheduleOccurrence) return null;
+
+    const { schedule, start, end } = featuredScheduleOccurrence;
+    const isOngoing = currentScheduleOccurrence?.schedule.scheduleId === schedule.scheduleId;
+    const countdown = formatCountdown(isOngoing ? end : start, isOngoing ? 'untilEnd' : 'untilStart');
+    const containerClassName = mode === 'table'
+      ? 'mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4'
+      : 'rounded-2xl border border-emerald-200 bg-emerald-50 p-4';
+
+    return (
+      <div className={containerClassName}>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${isOngoing ? 'text-emerald-700' : 'text-amber-700'}`}>
+              {isOngoing ? 'Current Scheduled Class' : 'Next Scheduled Class'}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-bold text-stone-800">{schedule.courseCode}</h2>
+              <span className={`px-2 py-1 text-xs rounded-full font-semibold capitalize ${getScheduleTypeColor(schedule.type)}`}>
+                {schedule.type}
+              </span>
+            </div>
+            {schedule.courseName && <p className="text-sm text-stone-600 mt-1">{schedule.courseName}</p>}
+          </div>
+          <div className={`rounded-2xl px-4 py-3 text-sm font-semibold ${isOngoing ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'}`}>
+            {countdown}
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-stone-700">
+          <span className="flex items-center gap-1">
+            <Icon name="schedule" className="text-base" />
+            {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
+          </span>
+          <span className="flex items-center gap-1">
+            <Icon name="event" className="text-base" />
+            {schedule.type === 'semestral'
+              ? schedule.dayOfWeek
+              : start.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+          </span>
+          {schedule.classroom && (
+            <span className="flex items-center gap-1">
+              <Icon name="room" className="text-base" />
+              {schedule.classroom}
+            </span>
+          )}
+          {schedule.teacher && (
+            <span className="flex items-center gap-1">
+              <Icon name="person" className="text-base" />
+              {schedule.teacher}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Separate semestral and special schedules
   const semestralSchedules = schedules.filter(s => s.type === 'semestral');
   const specialSchedules = schedules.filter(s => s.type !== 'semestral');
 
   // Group semestral schedules by day
-  const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const schedulesByDay: Record<string, ClassSchedule[]> = {};
   dayOrder.forEach(day => {
     schedulesByDay[day] = semestralSchedules.filter(s => s.dayOfWeek === day).sort((a, b) => a.startTime.localeCompare(b.startTime));
   });
+
+  const groupedSemestralSchedules = Array.from(
+    semestralSchedules.reduce((map, schedule) => {
+      const groupKey = [
+        schedule.semester || '',
+        schedule.courseCode || '',
+        schedule.courseName || '',
+        schedule.teacher || '',
+        schedule.classroom || '',
+        schedule.details || ''
+      ].join('||');
+      const existing = map.get(groupKey);
+      if (existing) {
+        existing.push(schedule);
+      } else {
+        map.set(groupKey, [schedule]);
+      }
+      return map;
+    }, new Map<string, ClassSchedule[]>())
+  )
+    .map(([groupKey, groupedSchedules]) => {
+      const sortedSchedules = [...groupedSchedules].sort((a, b) => {
+        const dayDelta = dayOrder.indexOf(a.dayOfWeek) - dayOrder.indexOf(b.dayOfWeek);
+        if (dayDelta !== 0) return dayDelta;
+        const startDelta = a.startTime.localeCompare(b.startTime);
+        if (startDelta !== 0) return startDelta;
+        return a.endTime.localeCompare(b.endTime);
+      });
+
+      return {
+        key: groupKey,
+        primarySchedule: sortedSchedules[0],
+        schedules: sortedSchedules,
+        daySummary: sortedSchedules.map(schedule => dayShortMap[schedule.dayOfWeek] || schedule.dayOfWeek?.slice(0, 3) || '-').join(', '),
+        timeSlots: sortedSchedules.map(schedule => ({
+          scheduleId: schedule.scheduleId,
+          dayLabel: dayShortMap[schedule.dayOfWeek] || schedule.dayOfWeek?.slice(0, 3) || '-',
+          timeLabel: `${formatTime(schedule.startTime)} - ${formatTime(schedule.endTime)}`,
+          schedule
+        }))
+      };
+    })
+    .sort((a, b) => {
+      const dayDelta = dayOrder.indexOf(a.primarySchedule.dayOfWeek) - dayOrder.indexOf(b.primarySchedule.dayOfWeek);
+      if (dayDelta !== 0) return dayDelta;
+      const timeDelta = a.primarySchedule.startTime.localeCompare(b.primarySchedule.startTime);
+      if (timeDelta !== 0) return timeDelta;
+      const semesterDelta = (a.primarySchedule.semester || '').localeCompare(b.primarySchedule.semester || '');
+      if (semesterDelta !== 0) return semesterDelta;
+      return (a.primarySchedule.courseCode || '').localeCompare(b.primarySchedule.courseCode || '');
+    });
+
+  const currentDayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
+  const todaysSemestralGroups = groupedSemestralSchedules.filter(group =>
+    group.schedules.some(schedule => schedule.dayOfWeek === currentDayName)
+  );
+  const todaysSpecialSchedules = specialSchedules.filter(schedule => schedule.status === 'today');
+
+  const renderSemestralGroupCard = (group: typeof groupedSemestralSchedules[number], options?: { emphasizeTodayOnly?: boolean }) => {
+    const schedule = group.primarySchedule;
+    const hasTodaySlot = group.schedules.some(item => item.dayOfWeek === currentDayName);
+
+    return (
+      <div
+        key={group.key}
+        onClick={() => setSelectedSchedule(hasTodaySlot ? (group.schedules.find(item => item.dayOfWeek === currentDayName) || schedule) : schedule)}
+        className={`bg-white rounded-xl border overflow-hidden cursor-pointer transition-all hover:shadow-md ${
+          hasTodaySlot ? 'border-purple-300 ring-2 ring-purple-100' : 'border-stone-200 hover:border-purple-200'
+        }`}
+      >
+        <div className={`px-4 py-3 border-b ${hasTodaySlot ? 'bg-purple-50 border-purple-100' : 'bg-stone-50 border-stone-100'}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-stone-800">{schedule.courseCode}</span>
+                {schedule.semester && (
+                  <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">{schedule.semester}</span>
+                )}
+                {hasTodaySlot && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-600 text-white">Today</span>
+                )}
+              </div>
+              {schedule.courseName && (
+                <p className="text-sm text-stone-500 mt-1">{schedule.courseName}</p>
+              )}
+            </div>
+            {canManage && (
+              <div className="flex flex-wrap items-center justify-end gap-2 flex-shrink-0">
+                {group.schedules.map(item => (
+                  <div key={item.scheduleId} className="flex items-center gap-1 rounded-full bg-white/80 border border-stone-200 px-2 py-1">
+                    <span className={`text-[11px] font-medium ${item.dayOfWeek === currentDayName ? 'text-purple-700' : 'text-stone-600'}`}>
+                      {dayShortMap[item.dayOfWeek] || item.dayOfWeek?.slice(0, 3) || '-'}
+                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEditingSchedule(item); }}
+                      className="p-1 text-stone-400 hover:text-blue-500"
+                      title={`Edit ${item.dayOfWeek} schedule`}
+                    >
+                      <Icon name="edit" className="text-sm" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setScheduleToDelete(item.scheduleId); }}
+                      className="p-1 text-stone-400 hover:text-red-500"
+                      title={`Delete ${item.dayOfWeek} schedule`}
+                    >
+                      <Icon name="delete" className="text-sm" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-4 space-y-3">
+          <div className="space-y-2">
+            {group.timeSlots.map(slot => {
+              const isTodaySlot = slot.schedule.dayOfWeek === currentDayName;
+              if (options?.emphasizeTodayOnly && !isTodaySlot) return null;
+
+              return (
+                <div
+                  key={slot.scheduleId}
+                  className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 ${
+                    isTodaySlot ? 'border-purple-200 bg-purple-50' : 'border-stone-200 bg-stone-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      isTodaySlot ? 'bg-purple-600 text-white' : 'bg-white text-stone-600 border border-stone-200'
+                    }`}>
+                      {slot.dayLabel}
+                    </span>
+                    <span className="text-sm text-stone-700">{slot.timeLabel}</span>
+                  </div>
+                  {isTodaySlot && <span className="text-xs font-medium text-purple-700">Current day</span>}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap items-center gap-4 text-sm text-stone-600">
+            {schedule.classroom && (
+              <span className="flex items-center gap-1">
+                <Icon name="room" className="text-base" />
+                {schedule.classroom}
+              </span>
+            )}
+            {schedule.teacher && (
+              <span className="flex items-center gap-1">
+                <Icon name="person" className="text-base" />
+                {schedule.teacher}
+              </span>
+            )}
+          </div>
+          {schedule.details && (
+            <p className="text-xs text-stone-500 italic">"{schedule.details}"</p>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // Calendar view helpers
   const toDateKey = (d: Date | string) => {
@@ -5538,7 +6311,6 @@ const SchedulePage = ({
 
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-stone-900' : 'bg-stone-50'}`}>
-      <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
       {/* Header */}
       <header className={`${darkMode ? 'bg-stone-800 border-stone-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-40`}>
         <div className="max-w-6xl mx-auto px-4 py-3">
@@ -5644,8 +6416,25 @@ const SchedulePage = ({
       {/* Main Content */}
       <main className="max-w-6xl mx-auto p-4">
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border rounded-2xl p-4`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <Skeleton className="h-4 w-24" darkMode={darkMode} />
+                      <Skeleton className="h-3 w-40 mt-2" darkMode={darkMode} />
+                    </div>
+                    <Skeleton className="h-6 w-16 rounded-full" darkMode={darkMode} />
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    <Skeleton className="h-3 w-full" darkMode={darkMode} />
+                    <Skeleton className="h-3 w-5/6" darkMode={darkMode} />
+                    <Skeleton className="h-3 w-3/4" darkMode={darkMode} />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ) : schedules.length === 0 ? (
           <div className="text-center py-12">
@@ -5670,8 +6459,76 @@ const SchedulePage = ({
             {/* LIST VIEW */}
             {viewMode === 'list' && (
               <div className="space-y-6">
-                {/* Semestral Schedules by Day */}
-                {semestralSchedules.length > 0 && (
+                {renderCurrentSchedulePanel('list')}
+
+                {/* Today's Classes */}
+                {(todaysSemestralGroups.length > 0 || todaysSpecialSchedules.length > 0) && (
+                  <div>
+                    <h2 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2">
+                      <Icon name="today" className="text-green-600" />
+                      Today's Classes
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {todaysSemestralGroups.map(group => renderSemestralGroupCard(group, { emphasizeTodayOnly: true }))}
+                      {todaysSpecialSchedules.map(schedule => (
+                        <div
+                          key={schedule.scheduleId}
+                          onClick={() => setSelectedSchedule(schedule)}
+                          className="bg-green-50 border border-green-200 rounded-xl p-4 hover:shadow-md transition-all cursor-pointer"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-stone-800">{schedule.courseCode}</span>
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-green-600 text-white font-medium">Today</span>
+                                <span className={`px-2 py-0.5 text-xs rounded-full font-medium capitalize ${getScheduleTypeColor(schedule.type)}`}>
+                                  {schedule.type}
+                                </span>
+                              </div>
+                              {schedule.courseName && (
+                                <p className="text-sm text-stone-500 mt-1">{schedule.courseName}</p>
+                              )}
+                              <div className="flex items-center gap-4 mt-2 text-sm text-stone-600 flex-wrap">
+                                <span className="flex items-center gap-1">
+                                  <Icon name="schedule" className="text-base" />
+                                  {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
+                                </span>
+                                {schedule.classroom && (
+                                  <span className="flex items-center gap-1">
+                                    <Icon name="room" className="text-base" />
+                                    {schedule.classroom}
+                                  </span>
+                                )}
+                              </div>
+                              {schedule.teacher && (
+                                <p className="text-xs text-stone-400 mt-1">Teacher: {schedule.teacher}</p>
+                              )}
+                            </div>
+                            {canManage && (
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setEditingSchedule(schedule); }}
+                                  className="p-1.5 text-stone-400 hover:text-blue-500 hover:bg-white rounded-lg"
+                                >
+                                  <Icon name="edit" className="text-sm" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setScheduleToDelete(schedule.scheduleId); }}
+                                  className="p-1.5 text-stone-400 hover:text-red-500 hover:bg-white rounded-lg"
+                                >
+                                  <Icon name="delete" className="text-sm" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Grouped Semestral Schedules */}
+                {groupedSemestralSchedules.length > 0 && (
                   <div>
                     <h2 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2">
                       <Icon name="school" className="text-purple-600" />
@@ -5679,76 +6536,7 @@ const SchedulePage = ({
                       {selectedSemester && <span className="text-sm font-normal text-purple-600">({selectedSemester} Sem)</span>}
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {dayOrder.map(day => {
-                        const daySchedules = schedulesByDay[day];
-                        if (daySchedules.length === 0) return null;
-                        const isToday = day === ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
-                        
-                        return (
-                          <div key={day} className={`bg-white rounded-xl border ${isToday ? 'border-purple-300 ring-2 ring-purple-100' : 'border-stone-200'} overflow-hidden`}>
-                            <div className={`px-4 py-2 ${isToday ? 'bg-purple-600 text-white' : 'bg-stone-100 text-stone-700'} font-semibold text-sm flex items-center justify-between`}>
-                              <span>{day}</span>
-                              {isToday && <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">Today</span>}
-                            </div>
-                            <div className="divide-y divide-stone-100">
-                              {daySchedules.map(schedule => (
-                                <div
-                                  key={schedule.scheduleId}
-                                  onClick={() => setSelectedSchedule(schedule)}
-                                  className="p-3 hover:bg-stone-50 cursor-pointer transition-colors"
-                                >
-                                  <div className="flex items-start justify-between">
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-semibold text-stone-800">{schedule.courseCode}</span>
-                                        {schedule.semester && (
-                                          <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">{schedule.semester}</span>
-                                        )}
-                                      </div>
-                                      {schedule.courseName && (
-                                        <p className="text-xs text-stone-500 truncate">{schedule.courseName}</p>
-                                      )}
-                                      <div className="flex items-center gap-3 mt-1 text-xs text-stone-600">
-                                        <span className="flex items-center gap-1">
-                                          <Icon name="schedule" className="text-sm" />
-                                          {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
-                                        </span>
-                                        {schedule.classroom && (
-                                          <span className="flex items-center gap-1">
-                                            <Icon name="room" className="text-sm" />
-                                            {schedule.classroom}
-                                          </span>
-                                        )}
-                                      </div>
-                                      {schedule.teacher && (
-                                        <p className="text-xs text-stone-400 mt-1">
-                                          <Icon name="person" className="text-sm inline mr-1" />{schedule.teacher}
-                                        </p>
-                                      )}
-                                    </div>
-                                    {canManage && (
-                                      <div className="flex items-center gap-1 flex-shrink-0">
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); setEditingSchedule(schedule); }}
-                                          className="p-1 text-stone-400 hover:text-blue-500"
-                                        >
-                                          <Icon name="edit" className="text-sm" />
-                                        </button>
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); setScheduleToDelete(schedule.scheduleId); }}
-                                          className="p-1 text-stone-400 hover:text-red-500"
-                                        >
-                                          <Icon name="delete" className="text-sm" />
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {groupedSemestralSchedules.map(group => renderSemestralGroupCard(group))}
                     </div>
                   </div>
                 )}
@@ -5875,39 +6663,36 @@ const SchedulePage = ({
                     const isToday = key === todayKey;
                     
                     return (
-                      <div
-                        key={idx}
-                        className={`min-h-[80px] sm:min-h-[100px] p-1 border-b border-r border-stone-100 ${
-                          !inMonth ? 'bg-stone-50' : 'bg-white'
-                        }`}
+                        <div
+                          key={idx}
+                          className={`min-h-[80px] sm:min-h-[100px] p-1 border-b border-r border-stone-100 ${
+                            !inMonth ? 'bg-stone-50' : 'bg-white'
+                          }`}
                       >
-                        <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${
-                          isToday ? 'bg-purple-600 text-white' : !inMonth ? 'text-stone-300' : 'text-stone-600'
-                        }`}>
-                          {date.getDate()}
-                        </div>
-                        <div className="space-y-0.5 overflow-y-auto max-h-[60px] sm:max-h-[80px]">
-                          {events.slice(0, 3).map((event, i) => (
-                            <button
-                              key={event.scheduleId + '-' + i}
-                              onClick={() => setSelectedSchedule(event)}
-                              className={`w-full text-left px-1 py-0.5 text-xs rounded truncate ${
+                          <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${
+                            isToday ? 'bg-purple-600 text-white' : !inMonth ? 'text-stone-300' : 'text-stone-600'
+                          }`}>
+                            {date.getDate()}
+                          </div>
+                          <div className="space-y-0.5 overflow-y-auto max-h-[110px] sm:max-h-[140px] pr-0.5">
+                            {events.map((event, i) => (
+                              <button
+                                key={event.scheduleId + '-' + i}
+                                onClick={() => setSelectedSchedule(event)}
+                                className={`w-full text-left px-1 py-0.5 text-xs rounded truncate ${
                                 event.type === 'semestral' ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' :
                                 event.type === 'makeup' ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' :
                                 event.type === 'activity' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' :
                                 'bg-pink-100 text-pink-700 hover:bg-pink-200'
                               }`}
-                            >
-                              {event.courseCode}
-                            </button>
-                          ))}
-                          {events.length > 3 && (
-                            <p className="text-xs text-stone-400 px-1">+{events.length - 3} more</p>
-                          )}
+                              >
+                                {event.courseCode}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
                 </div>
 
                 {/* Legend */}
@@ -5923,6 +6708,8 @@ const SchedulePage = ({
             {/* TABLE VIEW - Semestral Only */}
             {viewMode === 'table' && (
               <div>
+                {renderCurrentSchedulePanel('table')}
+
                 <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
                   <div className="p-4 bg-purple-50 border-b border-purple-100">
                     <h3 className="font-semibold text-purple-800 flex items-center gap-2">
@@ -5933,7 +6720,7 @@ const SchedulePage = ({
                     <p className="text-xs text-purple-600 mt-1">Regular class schedules for the semester</p>
                   </div>
                   
-                  {semestralSchedules.length === 0 ? (
+                  {groupedSemestralSchedules.length === 0 ? (
                     <div className="p-8 text-center">
                       <Icon name="event_busy" className="text-4xl text-stone-300 mb-2" />
                       <p className="text-stone-500">No semestral schedules found</p>
@@ -5954,27 +6741,42 @@ const SchedulePage = ({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-stone-100">
-                          {dayOrder.map(day => {
-                            const daySchedules = schedulesByDay[day];
-                            if (daySchedules.length === 0) return null;
-                            const isToday = day === ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
-                            
-                            return daySchedules.map((schedule, idx) => (
+                          {groupedSemestralSchedules.map(group => {
+                            const schedule = group.primarySchedule;
+                            const isToday = group.schedules.some(item => item.dayOfWeek === ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()]);
+
+                            return (
                               <tr 
-                                key={schedule.scheduleId} 
-                                className={`hover:bg-stone-50 cursor-pointer ${isToday ? 'bg-purple-50' : ''}`}
+                                key={group.key}
+                                className="hover:bg-stone-50 cursor-pointer"
                                 onClick={() => setSelectedSchedule(schedule)}
                               >
                                 <td className="py-3 px-4 font-medium text-stone-700">
-                                  {idx === 0 && (
-                                    <div className="flex items-center gap-2">
-                                      <span className={isToday ? 'text-purple-700' : ''}>{day.substring(0, 3)}</span>
-                                      {isToday && <span className="text-xs bg-purple-600 text-white px-1.5 py-0.5 rounded">Today</span>}
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      {group.schedules.map((item, index) => {
+                                        const isCurrentDay = item.dayOfWeek === currentDayName;
+                                        const label = dayShortMap[item.dayOfWeek] || item.dayOfWeek?.slice(0, 3) || '-';
+
+                                        return (
+                                          <React.Fragment key={item.scheduleId}>
+                                            <span className={isCurrentDay ? 'text-purple-700 font-semibold' : ''}>{label}</span>
+                                            {index < group.schedules.length - 1 && <span className="text-stone-400">,</span>}
+                                          </React.Fragment>
+                                        );
+                                      })}
                                     </div>
-                                  )}
+                                    {isToday && <span className="text-xs bg-purple-600 text-white px-1.5 py-0.5 rounded">Today</span>}
+                                  </div>
                                 </td>
-                                <td className="py-3 px-4 text-stone-600 whitespace-nowrap">
-                                  {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
+                                <td className="py-3 px-4 text-stone-600">
+                                  <div className="flex flex-col gap-1">
+                                    {group.timeSlots.map(slot => (
+                                      <span key={slot.scheduleId} className="whitespace-nowrap">
+                                        {slot.dayLabel} • {slot.timeLabel}
+                                      </span>
+                                    ))}
+                                  </div>
                                 </td>
                                 <td className="py-3 px-4 font-semibold text-stone-800">{schedule.courseCode}</td>
                                 <td className="py-3 px-4 text-stone-600 hidden md:table-cell max-w-[200px] truncate">{schedule.courseName || '-'}</td>
@@ -5987,24 +6789,31 @@ const SchedulePage = ({
                                 </td>
                                 {canManage && (
                                   <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex items-center justify-center gap-1">
-                                      <button
-                                        onClick={() => setEditingSchedule(schedule)}
-                                        className="p-1 text-stone-400 hover:text-blue-500"
-                                      >
-                                        <Icon name="edit" className="text-sm" />
-                                      </button>
-                                      <button
-                                        onClick={() => setScheduleToDelete(schedule.scheduleId)}
-                                        className="p-1 text-stone-400 hover:text-red-500"
-                                      >
-                                        <Icon name="delete" className="text-sm" />
-                                      </button>
+                                    <div className="flex flex-wrap items-center justify-center gap-2">
+                                      {group.schedules.map(item => (
+                                        <div key={item.scheduleId} className="flex items-center gap-1 rounded-full bg-stone-100 px-2 py-1">
+                                          <span className="text-[11px] font-medium text-stone-600">{dayShortMap[item.dayOfWeek] || item.dayOfWeek?.slice(0, 3) || '-'}</span>
+                                          <button
+                                            onClick={() => setEditingSchedule(item)}
+                                            className="p-1 text-stone-400 hover:text-blue-500"
+                                            title={`Edit ${item.dayOfWeek} schedule`}
+                                          >
+                                            <Icon name="edit" className="text-sm" />
+                                          </button>
+                                          <button
+                                            onClick={() => setScheduleToDelete(item.scheduleId)}
+                                            className="p-1 text-stone-400 hover:text-red-500"
+                                            title={`Delete ${item.dayOfWeek} schedule`}
+                                          >
+                                            <Icon name="delete" className="text-sm" />
+                                          </button>
+                                        </div>
+                                      ))}
                                     </div>
                                   </td>
                                 )}
                               </tr>
-                            ));
+                            );
                           })}
                         </tbody>
                       </table>
@@ -6207,14 +7016,14 @@ const SchedulePage = ({
 
       {/* Add/Edit Schedule Modal */}
       {(showAddModal || editingSchedule) && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => { setShowAddModal(false); setEditingSchedule(null); setIsCreatingNewCourse(false); setNewCourseCode(''); setNewCourseName(''); }}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={resetScheduleModalState}>
           <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>
                   {editingSchedule ? 'Edit Schedule' : 'Add Schedule'}
                 </h2>
-                <button onClick={() => { setShowAddModal(false); setEditingSchedule(null); setIsCreatingNewCourse(false); setNewCourseCode(''); setNewCourseName(''); }} className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-full`}>
+                <button onClick={resetScheduleModalState} className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-full`}>
                   <Icon name="close" className={darkMode ? 'text-gray-400' : 'text-stone-500'} />
                 </button>
               </div>
@@ -6238,19 +7047,33 @@ const SchedulePage = ({
                   details: formData.get('details') as string
                 };
 
+                const schedulesToSubmit: Partial<ClassSchedule>[] = [scheduleData];
+                if (!editingSchedule && scheduleData.type === 'semestral' && includeAdditionalMeetings) {
+                  const invalidMeeting = additionalMeetings.find(meeting => !meeting.dayOfWeek || !meeting.startTime || !meeting.endTime);
+                  if (invalidMeeting) {
+                    addToast('Complete all extra meeting day and time fields first.', 'error');
+                    return;
+                  }
+
+                  schedulesToSubmit.push(
+                    ...additionalMeetings.map(meeting => ({
+                      ...scheduleData,
+                      dayOfWeek: meeting.dayOfWeek,
+                      startTime: meeting.startTime,
+                      endTime: meeting.endTime
+                    }))
+                  );
+                }
+
                 let success;
                 if (editingSchedule) {
                   success = await handleUpdateSchedule(scheduleData);
                 } else {
-                  success = await handleAddSchedule(scheduleData);
+                  success = await handleAddSchedules(schedulesToSubmit);
                 }
 
                 if (success) {
-                  setShowAddModal(false);
-                  setEditingSchedule(null);
-                  setIsCreatingNewCourse(false);
-                  setNewCourseCode('');
-                  setNewCourseName('');
+                  resetScheduleModalState();
                   form.reset();
                 }
               }} className="space-y-4">
@@ -6261,6 +7084,14 @@ const SchedulePage = ({
                     name="type" 
                     required 
                     defaultValue={editingSchedule?.type || (canManageSemestral ? 'semestral' : 'activity')}
+                    onChange={(e) => {
+                      const nextType = e.target.value;
+                      setScheduleFormType(nextType);
+                      if (nextType !== 'semestral') {
+                        setIncludeAdditionalMeetings(false);
+                        setAdditionalMeetings([]);
+                      }
+                    }}
                     className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
                     {canManageSemestral && (
@@ -6420,6 +7251,85 @@ const SchedulePage = ({
                     <option value="Sunday">Sunday</option>
                   </select>
                 </div>
+
+                {!editingSchedule && scheduleFormType === 'semestral' && (
+                  <div className="rounded-xl border border-purple-200 bg-purple-50 p-4 space-y-3">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={includeAdditionalMeetings}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setIncludeAdditionalMeetings(checked);
+                          setAdditionalMeetings(checked ? [createAdditionalMeeting()] : []);
+                        }}
+                        className="mt-1 h-4 w-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                      />
+                      <div>
+                        <div className="text-sm font-medium text-purple-900">Add another meeting for the same subject</div>
+                        <p className="text-xs text-purple-700">
+                          Use this for pairs like Monday and Wednesday or Tuesday and Thursday without re-entering the whole course.
+                        </p>
+                      </div>
+                    </label>
+
+                    {includeAdditionalMeetings && (
+                      <div className="space-y-3">
+                        {additionalMeetings.map((meeting, index) => (
+                          <div key={meeting.id} className="rounded-lg border border-purple-100 bg-white p-3 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-purple-700">
+                                Extra meeting {index + 1}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setAdditionalMeetings(current => current.filter(item => item.id !== meeting.id))}
+                                className="text-xs text-stone-500 hover:text-red-500"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                            <select
+                              value={meeting.dayOfWeek}
+                              onChange={(e) => setAdditionalMeetings(current => current.map(item => item.id === meeting.id ? { ...item, dayOfWeek: e.target.value } : item))}
+                              className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            >
+                              <option value="">Select day</option>
+                              <option value="Monday">Monday</option>
+                              <option value="Tuesday">Tuesday</option>
+                              <option value="Wednesday">Wednesday</option>
+                              <option value="Thursday">Thursday</option>
+                              <option value="Friday">Friday</option>
+                              <option value="Saturday">Saturday</option>
+                              <option value="Sunday">Sunday</option>
+                            </select>
+                            <div className="grid grid-cols-2 gap-3">
+                              <input
+                                type="time"
+                                value={meeting.startTime}
+                                onChange={(e) => setAdditionalMeetings(current => current.map(item => item.id === meeting.id ? { ...item, startTime: e.target.value } : item))}
+                                className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              />
+                              <input
+                                type="time"
+                                value={meeting.endTime}
+                                onChange={(e) => setAdditionalMeetings(current => current.map(item => item.id === meeting.id ? { ...item, endTime: e.target.value } : item))}
+                                className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setAdditionalMeetings(current => [...current, createAdditionalMeeting()])}
+                          className="w-full rounded-xl border border-dashed border-purple-300 px-4 py-3 text-sm font-medium text-purple-700 hover:bg-purple-100"
+                        >
+                          Add another meeting slot
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Specific Date (for non-semestral) */}
                 <div>
@@ -6723,7 +7633,7 @@ const LoginModal = ({
           <>
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Welcome to CumLaude!</h2>
+                <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Welcome to the Classroom Virtual Environment</h2>
                 <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'} mt-1`}>Sign in to your account</p>
               </div>
               <button onClick={onClose} className={darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-stone-400 hover:text-stone-600'}>
@@ -6894,10 +7804,12 @@ const ResourceViewer = ({
     return (
       <div className="w-full h-full relative">
         {isLoading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-stone-800 rounded-lg">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-amber-500 border-t-transparent mb-4"></div>
-            <p className="text-white text-sm">Loading document...</p>
-            <p className="text-stone-400 text-xs mt-2">If loading takes too long, try "Open Externally"</p>
+          <div className="absolute inset-0 rounded-lg bg-stone-800 p-6 flex flex-col justify-center">
+            <Skeleton className="h-8 w-2/3" darkMode />
+            <Skeleton className="h-4 w-full mt-4" darkMode />
+            <Skeleton className="h-4 w-5/6 mt-2" darkMode />
+            <Skeleton className="h-40 w-full mt-6 rounded-xl" darkMode />
+            <p className="text-stone-400 text-xs mt-4 text-center">Loading document...</p>
           </div>
         )}
         <iframe
@@ -6941,7 +7853,46 @@ const ResourceViewer = ({
 
 // --- Main App ---
 
-const App = () => {
+type AppProps = {
+  routeRole: RouteRole;
+};
+
+const InvalidRoleFallback = ({ invalidRole }: { invalidRole: string }) => (
+  <div className="min-h-screen bg-stone-950 text-stone-100 flex items-center justify-center p-6">
+    <div className="max-w-md w-full bg-stone-900 border border-stone-800 rounded-3xl p-8 text-center shadow-2xl">
+      <div className="text-xs uppercase tracking-[0.28em] text-amber-300">Invalid Role</div>
+      <h1 className="text-3xl font-bold mt-3">Route not available</h1>
+      <p className="text-stone-400 mt-3">
+        The role <strong className="text-stone-200">{invalidRole || 'unknown'}</strong> is not supported.
+      </p>
+      <a
+        href="/visitor?page=home"
+        className="inline-flex mt-6 px-4 py-2 rounded-xl bg-amber-400 text-stone-900 font-semibold pointer-events-auto"
+      >
+        Go to visitor home
+      </a>
+    </div>
+  </div>
+);
+
+const LayoutWrapper = () => {
+  const params = useParams<{ role: string }>();
+  const rawRole = (params.role || '').toLowerCase();
+
+  if (!ALLOWED_ROUTE_ROLES.includes(rawRole as RouteRole)) {
+    return <InvalidRoleFallback invalidRole={params.role || ''} />;
+  }
+
+  const routeRole = rawRole as RouteRole;
+
+  return (
+    <App routeRole={routeRole} />
+  );
+};
+
+const App = ({ routeRole }: AppProps) => {
+  const navigate = useNavigate();
+  const initialUrlPage = normalizePageKey(getInitialUrlParam('page'));
   // User State
   const [user, setUser] = useState<User | null>(null);
   const [showLogin, setShowLogin] = useState(false);
@@ -6984,6 +7935,8 @@ const App = () => {
 
   // Data State
   const [view, setView] = useState<AppView>(() => {
+    const initialPage = getPageConfig(initialUrlPage).view;
+    if (initialPage) return initialPage;
     const saved = localStorage.getItem('cumlaude_lastView');
     return (saved as AppView) || 'HOME';
   });
@@ -7009,6 +7962,8 @@ const App = () => {
   const [academicYear, setAcademicYear] = useState<string>('');
   const [semesterConfig, setSemesterConfig] = useState<Array<{ semester: string; startDate: string; endDate: string; academicYear: string; isActive: boolean }>>([]);
   const [semesterSubjects, setSemesterSubjects] = useState<string[]>([]); // Subjects filtered by semester
+  const [semesterSchedules, setSemesterSchedules] = useState<ClassSchedule[]>([]);
+  const [isSemesterSubjectsLoading, setIsSemesterSubjectsLoading] = useState(false);
   const [homeResourceTab, setHomeResourceTab] = useState<'subjects' | 'resources'>('subjects'); // Tab for home resources card
   const [resourcePageTab, setResourcePageTab] = useState<'subjects' | 'resources'>('subjects'); // Tab for ALL_RESOURCES page
   
@@ -7031,6 +7986,7 @@ const App = () => {
   
   // Post-Exam Celebration State
   const [completedExamAlert, setCompletedExamAlert] = useState<Exam | null>(null);
+  const semesterLoadRequestRef = useRef(0);
   
   // Generic Modal States
   const [alertModal, setAlertModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'info' | 'warning' | 'error' | 'success' }>({ isOpen: false, title: '', message: '', type: 'info' });
@@ -7041,11 +7997,16 @@ const App = () => {
   
   // Navigation State
   const [activeSubject, setActiveSubject] = useState<string | null>(() => {
-    return localStorage.getItem('cumlaude_lastSubject');
+    return getInitialUrlParam('subject') || getInitialUrlParam('course') || localStorage.getItem('cumlaude_lastSubject');
   });
-  const [activeTab, setActiveTab] = useState<'Flashcards' | 'Resources' | 'Exams'>(() => {
+  const [activeTab, setActiveTab] = useState<'Classroom' | 'Schedule' | 'Resources' | 'Exams'>(() => {
+    const tabFromUrl = getInitialUrlParam('tab');
+    if (tabFromUrl === 'classroom' || tabFromUrl === 'flashcards') return 'Classroom';
+    if (tabFromUrl === 'schedule') return 'Schedule';
+    if (tabFromUrl === 'resources') return 'Resources';
+    if (tabFromUrl === 'exams') return 'Exams';
     const saved = localStorage.getItem('cumlaude_lastTab');
-    return (saved as 'Flashcards' | 'Resources' | 'Exams') || 'Flashcards';
+    return (saved as 'Classroom' | 'Schedule' | 'Resources' | 'Exams') || 'Classroom';
   });
   const [activeDeck, setActiveDeck] = useState<Deck | null>(null);
   const [deckLoading, setDeckLoading] = useState<string | null>(null); // Track which deck is loading
@@ -7067,6 +8028,74 @@ const App = () => {
   const [notificationPermission, setNotificationPermission] = useState<'default' | 'granted' | 'denied'>('default');
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const isAuthPhase = showLogin || !user;
+  const syncedPage =
+    showLogin ? 'login' :
+    showProfile ? 'profile' :
+    showUpload ? 'upload' :
+    showRequestResource ? 'request-resource' :
+    VIEW_TO_PAGE[view];
+  const syncedParams = buildPageScopedParams({
+    page: syncedPage,
+    isAuthPhase,
+    routeRole,
+    user,
+    activeSubject,
+    activeTab,
+    activeDeck,
+    activeResource
+  });
+  const stateSyncSignature = JSON.stringify([syncedPage, syncedParams]);
+
+  const applyUrlState = (nextPage: string, nextParams: URLSearchParams) => {
+    const requestedConfig = getPageConfig(nextPage);
+    if (requestedConfig.view !== view) {
+      setView(requestedConfig.view);
+    }
+
+    const requestedOverlay = requestedConfig.overlay;
+    const nextShowLogin = requestedOverlay === 'login';
+    const nextShowProfile = requestedOverlay === 'profile' && !!user;
+    const nextShowUpload = requestedOverlay === 'upload';
+    const nextShowRequestResource = requestedOverlay === 'request-resource';
+
+    if (showLogin !== nextShowLogin) setShowLogin(nextShowLogin);
+    if (showProfile !== nextShowProfile) setShowProfile(nextShowProfile);
+    if (showUpload !== nextShowUpload) setShowUpload(nextShowUpload);
+    if (showRequestResource !== nextShowRequestResource) setShowRequestResource(nextShowRequestResource);
+
+    const subjectFromUrl = nextParams.get('subject') || nextParams.get('course');
+    if (subjectFromUrl && subjectFromUrl !== activeSubject) {
+      setActiveSubject(subjectFromUrl);
+    }
+
+    const deckFromUrl = nextParams.get('deck');
+    if (deckFromUrl && deckFromUrl !== activeDeck?.name && decks.length > 0) {
+      const matchedDeck = decks.find(deck => deck.name === deckFromUrl || deck.sheetName === deckFromUrl) || null;
+      if (matchedDeck) {
+        setActiveDeck(matchedDeck);
+      }
+    }
+
+    const resourceFromUrl = nextParams.get('resource');
+    if (resourceFromUrl && resourceFromUrl !== activeResource?.name) {
+      const flattenedResources = Object.values(resources).flat();
+      const matchedResource = flattenedResources.find(resource => resource.name === resourceFromUrl || resource.title === resourceFromUrl) || null;
+      if (matchedResource) {
+        setActiveResource(matchedResource);
+      }
+    }
+  };
+
+  const liveUrlState = useUrlState({
+    defaultPage: 'home',
+    currentPage: syncedPage,
+    stateParams: syncedParams,
+    stateSignature: stateSyncSignature,
+    onUrlStateChange: applyUrlState
+  });
+  const { page: syncedUrlPage, params: syncedUrlParams, mapToPage } = liveUrlState;
+  const urlParamSignature = syncedUrlParams.toString();
 
   // Save navigation state to localStorage
   useEffect(() => {
@@ -7082,6 +8111,65 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('cumlaude_lastTab', activeTab);
   }, [activeTab]);
+
+  useEffect(() => {
+    const currentPage = normalizePageKey(syncedUrlPage);
+
+    if (!user && AUTH_REQUIRED_PAGES.has(currentPage)) {
+      mapToPage('login', () => {
+        setShowProfile(false);
+        setShowUpload(false);
+        setShowRequestResource(false);
+        setShowLogin(true);
+        setView('HOME');
+      }, {
+        role: 'visitor'
+      }, { replace: true });
+      return;
+    }
+
+    if (!user && routeRole !== 'visitor') {
+      navigate(
+        {
+          pathname: '/visitor',
+          search: '?page=login'
+        },
+        { replace: true }
+      );
+    }
+  }, [mapToPage, navigate, routeRole, syncedUrlPage, user]);
+
+  useEffect(() => {
+    const expectedRole = deriveRouteRoleForUser(user);
+    if (routeRole !== expectedRole) {
+      navigate(
+        {
+          pathname: `/${expectedRole}`,
+          search: `?${syncedUrlParams.toString()}`
+        },
+        { replace: true }
+      );
+    }
+  }, [navigate, routeRole, syncedUrlParams, urlParamSignature, user]);
+
+  useEffect(() => {
+    const needsSubject = view === 'SUBJECT' || view === 'RESOURCE_VIEW';
+    const needsDeck = view === 'DECK_OVERVIEW' || view === 'PLAY' || view === 'SUMMARY' || view === 'ANALYTICS';
+
+    if (needsSubject && !activeSubject) {
+      setView('HOME');
+      return;
+    }
+
+    if (needsDeck && !activeDeck) {
+      setView(activeSubject ? 'SUBJECT' : 'HOME');
+      return;
+    }
+
+    if (view === 'RESOURCE_VIEW' && !activeResource) {
+      setView(activeSubject ? 'SUBJECT' : 'HOME');
+    }
+  }, [activeDeck, activeResource, activeSubject, view]);
 
   // Real-time exam countdown - refresh every second
   useEffect(() => {
@@ -7167,23 +8255,15 @@ const App = () => {
       setDecks(cachedDecks);
       
       // Load cached subjects
-      const cachedSubjects = localStorage.getItem('cumlaude_subjects');
+      const cachedSubjects = await getSecureSessionItem<string[]>('subjects');
       if (cachedSubjects) {
-        try {
-          setApiSubjects(JSON.parse(cachedSubjects));
-        } catch (e) {
-          // ignore
-        }
+        setApiSubjects(cachedSubjects);
       }
       
       // Load cached subject info (code to name mapping)
-      const cachedSubjectInfo = localStorage.getItem('cumlaude_subjectInfo');
+      const cachedSubjectInfo = await getSecureSessionItem<Record<string, SubjectInfo>>('subjectInfo');
       if (cachedSubjectInfo) {
-        try {
-          setSubjectInfo(JSON.parse(cachedSubjectInfo));
-        } catch (e) {
-          // ignore
-        }
+        setSubjectInfo(cachedSubjectInfo);
       }
       
       // Load cached exams
@@ -7197,29 +8277,25 @@ const App = () => {
       }
       
       // Load cached semester configuration
-      const cachedCurrentSemester = localStorage.getItem('cumlaude_currentSemester');
+      const cachedCurrentSemester = await getSecureSessionItem<'1st' | '2nd'>('currentSemester');
       if (cachedCurrentSemester) {
-        setCurrentSemester(cachedCurrentSemester as '1st' | '2nd');
+        setCurrentSemester(cachedCurrentSemester);
       }
-      const cachedAcademicYear = localStorage.getItem('cumlaude_academicYear');
+      const cachedAcademicYear = await getSecureSessionItem<string>('academicYear');
       if (cachedAcademicYear) {
         setAcademicYear(cachedAcademicYear);
       }
-      const cachedSemesterConfig = localStorage.getItem('cumlaude_semesterConfig');
+      const cachedSemesterConfig = await getSecureSessionItem<Array<{ semester: string; startDate: string; endDate: string; academicYear: string; isActive: boolean }>>('semesterConfig');
       if (cachedSemesterConfig) {
-        try {
-          setSemesterConfig(JSON.parse(cachedSemesterConfig));
-        } catch (e) {
-          // ignore
-        }
+        setSemesterConfig(cachedSemesterConfig);
       }
-      const cachedSemesterSubjects = localStorage.getItem('cumlaude_semesterSubjects');
+      const cachedSemesterSubjects = await getSecureSessionItem<string[]>('semesterSubjects');
       if (cachedSemesterSubjects) {
-        try {
-          setSemesterSubjects(JSON.parse(cachedSemesterSubjects));
-        } catch (e) {
-          // ignore
-        }
+        setSemesterSubjects(cachedSemesterSubjects);
+      }
+      const cachedSemesterSchedules = await getSecureSessionItem<ClassSchedule[]>('semesterSchedules');
+      if (cachedSemesterSchedules) {
+        setSemesterSchedules(cachedSemesterSchedules);
       }
       // Load cached semester view selection (manual override)
       const cachedSelectedSemesterView = localStorage.getItem('cumlaude_selectedSemesterView');
@@ -7288,8 +8364,8 @@ const App = () => {
 
     setApiSubjects(subjects);
     setSubjectInfo(info);
-    localStorage.setItem('cumlaude_subjects', JSON.stringify(subjects));
-    localStorage.setItem('cumlaude_subjectInfo', JSON.stringify(info));
+    void setSecureSessionItem('subjects', subjects);
+    void setSecureSessionItem('subjectInfo', info);
   };
 
   const fetchAllBackendSubjects = async () => {
@@ -7307,8 +8383,8 @@ const App = () => {
       } else {
         setApiSubjects([]);
         setSubjectInfo({});
-        localStorage.setItem('cumlaude_subjects', JSON.stringify([]));
-        localStorage.setItem('cumlaude_subjectInfo', JSON.stringify({}));
+        void setSecureSessionItem('subjects', []);
+        void setSecureSessionItem('subjectInfo', {});
       }
     } catch (error) {
       console.warn('Failed to load backend subjects:', error);
@@ -7329,13 +8405,36 @@ const App = () => {
       if (data.success && Array.isArray(data.subjects)) {
         const subjectCodes = data.subjects.map((s: any) => typeof s === 'string' ? s : s.code);
         setSemesterSubjects(subjectCodes);
-        localStorage.setItem('cumlaude_semesterSubjects', JSON.stringify(subjectCodes));
+        void setSecureSessionItem('semesterSubjects', subjectCodes);
       } else {
         setSemesterSubjects([]);
-        localStorage.setItem('cumlaude_semesterSubjects', JSON.stringify([]));
+        void setSecureSessionItem('semesterSubjects', []);
       }
     } catch (error) {
       console.warn('Failed to load backend semester subjects:', error);
+    }
+  };
+
+  const fetchBackendSemesterSchedules = async (semester: '1st' | '2nd') => {
+    try {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'getClassSchedules',
+          semester
+        })
+      });
+      const data = await response.json();
+
+      if (data.success && Array.isArray(data.schedules)) {
+        setSemesterSchedules(data.schedules);
+        void setSecureSessionItem('semesterSchedules', data.schedules);
+      } else {
+        setSemesterSchedules([]);
+        void setSecureSessionItem('semesterSchedules', []);
+      }
+    } catch (error) {
+      console.warn('Failed to load backend semester schedules:', error);
     }
   };
 
@@ -7359,20 +8458,43 @@ const App = () => {
 
       if (currentSemesterData.success && currentSemesterData.currentSemester) {
         setCurrentSemester(currentSemesterData.currentSemester);
-        localStorage.setItem('cumlaude_currentSemester', currentSemesterData.currentSemester);
+        void setSecureSessionItem('currentSemester', currentSemesterData.currentSemester);
       }
 
       if (currentSemesterData.success && currentSemesterData.academicYear !== undefined) {
         setAcademicYear(currentSemesterData.academicYear || '');
-        localStorage.setItem('cumlaude_academicYear', currentSemesterData.academicYear || '');
+        void setSecureSessionItem('academicYear', currentSemesterData.academicYear || '');
       }
 
       if (semesterConfigData.success && Array.isArray(semesterConfigData.semesters)) {
         setSemesterConfig(semesterConfigData.semesters);
-        localStorage.setItem('cumlaude_semesterConfig', JSON.stringify(semesterConfigData.semesters));
+        void setSecureSessionItem('semesterConfig', semesterConfigData.semesters);
       }
     } catch (error) {
       console.warn('Failed to load schedule context:', error);
+    }
+  };
+
+  const loadSemesterSubjectsView = async (semester: '1st' | '2nd') => {
+    const requestId = ++semesterLoadRequestRef.current;
+    const startedAt = Date.now();
+    setIsSemesterSubjectsLoading(true);
+
+    try {
+      await Promise.all([
+        fetchBackendSemesterSubjects(semester),
+        fetchBackendSemesterSchedules(semester)
+      ]);
+    } finally {
+      const elapsed = Date.now() - startedAt;
+      const minSkeletonTime = 180;
+      if (elapsed < minSkeletonTime) {
+        await new Promise(resolve => setTimeout(resolve, minSkeletonTime - elapsed));
+      }
+
+      if (semesterLoadRequestRef.current === requestId) {
+        setIsSemesterSubjectsLoading(false);
+      }
     }
   };
 
@@ -7384,7 +8506,8 @@ const App = () => {
 
   useEffect(() => {
     if (!isOnline) return;
-    fetchBackendSemesterSubjects(selectedSemesterView || currentSemester);
+    const semesterToLoad = selectedSemesterView || currentSemester;
+    void loadSemesterSubjectsView(semesterToLoad);
   }, [selectedSemesterView, currentSemester, isOnline]);
 
   // --- PWA Install Prompt & Cache Management ---
@@ -7877,16 +9000,18 @@ const App = () => {
 
   // Semester Switch Function
   const handleSemesterSwitch = async (semester: '1st' | '2nd') => {
+    if (activeSemester === semester) return;
+    setIsSemesterSubjectsLoading(true);
     setSelectedSemesterView(semester);
     localStorage.setItem('cumlaude_selectedSemesterView', semester);
-    await fetchBackendSemesterSubjects(semester);
   };
   
   // Reset to current semester (auto-detect)
   const handleResetToCurrentSemester = async () => {
+    if (!selectedSemesterView) return;
+    setIsSemesterSubjectsLoading(true);
     setSelectedSemesterView(null);
     localStorage.removeItem('cumlaude_selectedSemesterView');
-    await fetchBackendSemesterSubjects(currentSemester);
   };
 
   const handleLogout = () => {
@@ -7894,10 +9019,40 @@ const App = () => {
     localStorage.removeItem(STORAGE_KEY_USER);
   };
 
+  const handleLoginSuccess = (authenticatedUser: User) => {
+    mapToPage('home', () => {
+      setUser(authenticatedUser);
+      setShowLogin(false);
+      setShowProfile(false);
+      setShowUpload(false);
+      setShowRequestResource(false);
+      setActiveSubject(null);
+      setActiveDeck(null);
+      setActiveResource(null);
+      setActiveTab('Classroom');
+      setViewHistory(['HOME']);
+      setView('HOME');
+    }, {
+      studentId: authenticatedUser.idNumber,
+      role: authenticatedUser.role || 'student',
+      subject: null,
+      course: null,
+      deck: null,
+      resource: null,
+      tab: null
+    }, { replace: true });
+  };
+
   // Navigation helpers
   const navigateTo = (newView: AppView) => {
-    setViewHistory(prev => [...prev, view]);
-    setView(newView);
+    mapToPage(VIEW_TO_PAGE[newView], () => {
+      setViewHistory(prev => [...prev, view]);
+      setShowLogin(false);
+      setShowProfile(false);
+      setShowUpload(false);
+      setShowRequestResource(false);
+      setView(newView);
+    });
   };
   
   const goBack = () => {
@@ -8088,9 +9243,24 @@ const App = () => {
   };
 
   const openSubject = (subject: string) => {
-    setActiveSubject(subject);
-    setActiveTab('Flashcards');
-    setView('SUBJECT');
+    mapToPage('subject', () => {
+      setViewHistory(prev => [...prev, view]);
+      setShowLogin(false);
+      setShowProfile(false);
+      setShowUpload(false);
+      setShowRequestResource(false);
+      setActiveSubject(subject);
+      setActiveTab('Classroom');
+      setActiveDeck(null);
+      setActiveResource(null);
+      setView('SUBJECT');
+    }, {
+      subject,
+      course: subject,
+      tab: 'classroom',
+      deck: null,
+      resource: null
+    });
   };
 
   const openDeck = async (deck: Deck) => {
@@ -8128,7 +9298,27 @@ const App = () => {
     
     removeToast(loadingToast);
     setDeckLoading(null);
-    setView('DECK_OVERVIEW');
+    const subjectForDeck = deck.subject || activeSubject;
+    mapToPage('deck', () => {
+      setViewHistory(prev => [...prev, view]);
+      setShowLogin(false);
+      setShowProfile(false);
+      setShowUpload(false);
+      setShowRequestResource(false);
+      if (subjectForDeck) {
+        setActiveSubject(subjectForDeck);
+      }
+      setActiveTab('Classroom');
+      setActiveResource(null);
+      setActiveDeck(deck);
+      setView('DECK_OVERVIEW');
+    }, {
+      subject: subjectForDeck || null,
+      course: subjectForDeck || null,
+      tab: 'classroom',
+      deck: deck.name,
+      resource: null
+    });
   };
 
   const getDeckProgress = (deckName: string): DeckProgress | null => {
@@ -8395,6 +9585,69 @@ const App = () => {
   
   const getSubjectExams = (subjectCode: string): Exam[] => {
     return exams.filter(e => e.courseCode === subjectCode);
+  };
+
+  const scheduleDayOrder: Record<string, number> = {
+    Monday: 1,
+    Tuesday: 2,
+    Wednesday: 3,
+    Thursday: 4,
+    Friday: 5,
+    Saturday: 6,
+    Sunday: 7
+  };
+
+  const sortClassSchedules = (a: ClassSchedule, b: ClassSchedule) => {
+    const statusWeight: Record<string, number> = {
+      today: 0,
+      upcoming: 1,
+      scheduled: 2,
+      completed: 3
+    };
+
+    const statusDelta = (statusWeight[a.status] ?? 99) - (statusWeight[b.status] ?? 99);
+    if (statusDelta !== 0) return statusDelta;
+
+    if (a.type === 'semestral' && b.type === 'semestral') {
+      const dayDelta = (scheduleDayOrder[a.dayOfWeek] ?? 99) - (scheduleDayOrder[b.dayOfWeek] ?? 99);
+      if (dayDelta !== 0) return dayDelta;
+      return a.startTime.localeCompare(b.startTime);
+    }
+
+    if (a.type === 'semestral') return -1;
+    if (b.type === 'semestral') return 1;
+
+    const dateDelta = (a.specificDate || '').localeCompare(b.specificDate || '');
+    if (dateDelta !== 0) return dateDelta;
+    return a.startTime.localeCompare(b.startTime);
+  };
+
+  const getSubjectSchedules = (subjectCode: string) =>
+    semesterSchedules
+      .filter(schedule => schedule.courseCode === subjectCode)
+      .sort(sortClassSchedules);
+
+  const formatScheduleDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    return new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const formatScheduleTimeRange = (schedule: ClassSchedule) => {
+    const start = schedule.startTime12h || formatExamTime(schedule.startTime);
+    const end = schedule.endTime12h || formatExamTime(schedule.endTime);
+    return `${start} - ${end}`;
+  };
+
+  const describeSchedule = (schedule: ClassSchedule) => {
+    if (schedule.type === 'semestral') {
+      return `${schedule.dayOfWeek} • ${formatScheduleTimeRange(schedule)}`;
+    }
+
+    return `${formatScheduleDate(schedule.specificDate)} • ${formatScheduleTimeRange(schedule)}`;
   };
   
   const formatExamDate = (dateStr: string): string => {
@@ -8719,9 +9972,24 @@ const App = () => {
   };
 
   const openResource = (resource: Resource) => {
-    setActiveResource(resource);
-    setPreviousView('SUBJECT');
-    setView('RESOURCE_VIEW');
+    mapToPage('resource', () => {
+      setViewHistory(prev => [...prev, view]);
+      setShowLogin(false);
+      setShowProfile(false);
+      setShowUpload(false);
+      setShowRequestResource(false);
+      setActiveTab('Resources');
+      setActiveDeck(null);
+      setActiveResource(resource);
+      setPreviousView('SUBJECT');
+      setView('RESOURCE_VIEW');
+    }, {
+      subject: activeSubject || null,
+      course: activeSubject || null,
+      tab: 'resources',
+      deck: null,
+      resource: resource.name
+    });
   };
 
   const startSession = (mode: 'new' | 'retry' | 'smart' | 'continue', selectedPlayMode?: 'shuffle' | 'chronological') => {
@@ -8883,7 +10151,6 @@ const App = () => {
     return (
       <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-[#F5F5F4]'}`}>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         
         {/* Update Available Toast */}
         {showUpdateToast && newVersionAvailable && (
@@ -8946,7 +10213,7 @@ const App = () => {
         <LoginModal
           isOpen={showLogin}
           onClose={() => setShowLogin(false)}
-          onLogin={(u) => { setUser(u); }}
+          onLogin={handleLoginSuccess}
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
@@ -8967,6 +10234,7 @@ const App = () => {
             updateToast={updateToast}
             removeToast={removeToast}
             darkMode={darkMode}
+            setDarkMode={setDarkMode}
           />
         )}
 
@@ -9236,7 +10504,7 @@ const App = () => {
                 <Icon name="school" className={darkMode ? 'text-stone-900' : 'text-white'} />
               </div>
               <div>
-                <h1 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>CumLaude!</h1>
+                <h1 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>Classroom Virtual Environment</h1>
                 <div className="flex items-center gap-1.5">
                   <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-stone-400'}`}></span>
                   <span className={`text-xs ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>{isOnline ? 'Online' : 'Offline'}</span>
@@ -9614,14 +10882,15 @@ const App = () => {
         <main className="max-w-5xl mx-auto p-4">
           {user && (
             <div className="bg-gradient-to-r from-stone-800 to-stone-700 rounded-2xl p-4 mb-6 text-white">
-              <div className="flex justify-between items-start">
+              <div className="flex justify-between items-start gap-4">
                 <div>
                   <p className="text-sm opacity-80">Welcome back,</p>
                   <p className="text-xl font-bold">{user.name}</p>
                   <p className="text-xs opacity-60 mt-1">ID: {user.idNumber}</p>
                 </div>
-                {user.idNumber === ADMIN_USER_ID && (
-                  <div className="flex flex-col gap-2">
+                <div className="flex flex-col items-end gap-2">
+                  {user.idNumber === ADMIN_USER_ID && (
+                    <>
                     <button
                       onClick={() => setShowAnnouncementPanel(true)}
                       className="flex items-center gap-1 px-3 py-1.5 bg-amber-500/30 hover:bg-amber-500/50 text-amber-200 text-xs rounded-lg transition-colors"
@@ -9638,8 +10907,9 @@ const App = () => {
                       <Icon name="delete_sweep" className="text-sm" />
                       <span>Clear Cache</span>
                     </button>
-                  </div>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -9677,7 +10947,7 @@ const App = () => {
                   <div className={`w-10 h-10 ${darkMode ? 'bg-amber-900/30' : 'bg-amber-100'} rounded-xl flex items-center justify-center mb-3 text-amber-600 group-hover:scale-110 transition-transform`}>
                     <Icon name="event" />
                   </div>
-                  <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Exam Schedule</h3>
+                  <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Deadlines</h3>
                   <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-400'} mt-1`}>
                     {exams.filter(e => getExamStatus(e) === 'upcoming').length} upcoming
                   </p>
@@ -9847,6 +11117,10 @@ const App = () => {
   // SUBJECT View
   if (view === 'SUBJECT' && activeSubject) {
     const subjectResources = resources[activeSubject] || [];
+    const subjectSchedules = getSubjectSchedules(activeSubject);
+    const semestralSubjectSchedules = subjectSchedules.filter(schedule => schedule.type === 'semestral');
+    const specialSubjectSchedules = subjectSchedules.filter(schedule => schedule.type !== 'semestral');
+    const nextSubjectSchedule = subjectSchedules.find(schedule => schedule.status !== 'completed') || subjectSchedules[0] || null;
     
     // Get decks for this subject using the subject property
     const subjectDecks = decks.filter(d => d.subject === activeSubject);
@@ -9957,11 +11231,10 @@ const App = () => {
     return (
       <div className={`min-h-screen ${darkMode ? 'bg-stone-900' : 'bg-[#F5F5F4]'}`}>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <LoginModal 
           isOpen={showLogin} 
           onClose={() => setShowLogin(false)} 
-          onLogin={setUser}
+          onLogin={handleLoginSuccess}
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
@@ -10097,7 +11370,7 @@ const App = () => {
         {/* Header */}
         <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
           <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-            <button onClick={resetHome} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
+            <button onClick={goBack} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
               <Icon name="arrow_back" className="text-stone-600" />
             </button>
             <div className="flex-1 min-w-0">
@@ -10137,7 +11410,7 @@ const App = () => {
           
           {/* Tabs */}
           <div className="max-w-5xl mx-auto px-4 flex gap-4">
-            {['Flashcards', 'Resources', 'Exams'].map(tab => (
+            {['Classroom', 'Schedule', 'Resources', 'Exams'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab as any)}
@@ -10155,11 +11428,11 @@ const App = () => {
 
 
         <main className="max-w-5xl mx-auto p-4">
-          {activeTab === 'Flashcards' ? (
+          {activeTab === 'Classroom' ? (
             <div className="space-y-4">
               {subjectDecks.length === 0 ? (
                 <div className="text-center py-12 text-stone-400">
-                  No flashcard decks available for this subject
+                  No classroom learning sets available for this subject
                 </div>
               ) : (
                 subjectDecks.map(deck => {
@@ -10189,8 +11462,8 @@ const App = () => {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-stone-800">{deck.name}</h3>
-                          <p className="text-sm text-stone-400">{deck.cards.length} cards</p>
+                            <h3 className="font-semibold text-stone-800">{deck.name}</h3>
+                           <p className="text-sm text-stone-400">{deck.cards.length} learning cards</p>
                           {/* Progress indicator */}
                           {answeredCount > 0 ? (
                             <div className="mt-2">
@@ -10206,7 +11479,7 @@ const App = () => {
                               </div>
                             </div>
                           ) : (
-                            <p className="text-xs text-stone-400 mt-1 italic">No progress yet. Tap to study.</p>
+                              <p className="text-xs text-stone-400 mt-1 italic">No activity yet. Open this learning set to begin.</p>
                           )}
                         </div>
                         <Icon name="chevron_right" className="text-stone-300 flex-shrink-0" />
@@ -10214,6 +11487,72 @@ const App = () => {
                     </button>
                   );
                 })
+              )}
+            </div>
+          ) : activeTab === 'Schedule' ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} rounded-xl border p-4`}>
+                  <p className={`text-xs uppercase tracking-[0.18em] ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>Weekly Classes</p>
+                  <p className={`mt-2 text-2xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{semestralSubjectSchedules.length}</p>
+                </div>
+                <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} rounded-xl border p-4`}>
+                  <p className={`text-xs uppercase tracking-[0.18em] ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>Special Sessions</p>
+                  <p className={`mt-2 text-2xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{specialSubjectSchedules.length}</p>
+                </div>
+                <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} rounded-xl border p-4`}>
+                  <p className={`text-xs uppercase tracking-[0.18em] ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>Next Class</p>
+                  <p className={`mt-2 text-sm font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>
+                    {nextSubjectSchedule ? describeSchedule(nextSubjectSchedule) : 'No schedule yet'}
+                  </p>
+                </div>
+              </div>
+
+              {subjectSchedules.length === 0 ? (
+                <div className={`rounded-2xl border p-8 text-center ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-400' : 'bg-white border-stone-200 text-stone-500'}`}>
+                  No class schedules are set for this course in the {activeSemester} semester.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {subjectSchedules.map(schedule => (
+                    <div
+                      key={schedule.scheduleId}
+                      className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} rounded-2xl border p-4`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                              schedule.status === 'today'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : schedule.type === 'semestral'
+                                  ? darkMode ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-100 text-blue-700'
+                                  : darkMode ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              {schedule.status === 'today' ? 'Today' : schedule.type === 'semestral' ? 'Semestral' : schedule.type}
+                            </span>
+                            <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>
+                              {describeSchedule(schedule)}
+                            </span>
+                          </div>
+                          <p className={`mt-2 text-sm ${darkMode ? 'text-gray-300' : 'text-stone-600'}`}>
+                            {schedule.courseName || activeSubject}
+                          </p>
+                        </div>
+                        {schedule.classroom && (
+                          <span className={`text-xs px-2.5 py-1 rounded-lg ${darkMode ? 'bg-gray-700 text-gray-200' : 'bg-stone-100 text-stone-700'}`}>
+                            {schedule.classroom}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className={`mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>
+                        <div>{schedule.teacher ? `Teacher: ${schedule.teacher}` : 'Teacher not set'}</div>
+                        <div>{schedule.details ? `Notes: ${schedule.details}` : 'No notes'}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           ) : activeTab === 'Resources' ? (
@@ -10419,7 +11758,6 @@ const App = () => {
   if (view === 'RESOURCE_VIEW' && activeResource) {
     return (
       <>
-        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <ResourceViewer 
           resource={activeResource} 
           onClose={() => { 
@@ -10442,7 +11780,6 @@ const App = () => {
 
     return (
       <div className={`min-h-screen ${darkMode ? 'bg-stone-900' : 'bg-[#F5F5F4]'} flex flex-col`}>
-        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <header className={`${darkMode ? 'bg-stone-800 border-stone-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-10 px-4 py-3`}>
           <div className="max-w-5xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -10618,7 +11955,6 @@ const App = () => {
 
     return (
       <div className={`h-[100dvh] ${darkMode ? 'bg-gray-900' : 'bg-[#E7E5E4]'} flex flex-col overflow-hidden`}>
-        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <header className={`flex-shrink-0 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#F5F5F4] border-stone-200/50'} px-4 py-3 border-b`}>
           <div className="flex justify-between items-center">
             <button onClick={goBack} className="p-2 -ml-2">
@@ -10747,7 +12083,6 @@ const App = () => {
 
     return (
       <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-[#F5F5F4]'} p-4 flex items-center justify-center`}>
-        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <div className={`w-full max-w-sm ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} rounded-2xl p-6 shadow-sm border text-center`}>
           <div className="w-20 h-20 mx-auto mb-4 relative">
             <svg className="w-full h-full -rotate-90">
@@ -10826,11 +12161,10 @@ const App = () => {
     return (
       <div className={`min-h-screen ${darkMode ? 'bg-stone-900' : 'bg-[#F5F5F4]'}`}>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <LoginModal 
           isOpen={showLogin} 
           onClose={() => setShowLogin(false)} 
-          onLogin={setUser}
+          onLogin={handleLoginSuccess}
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
@@ -10863,9 +12197,33 @@ const App = () => {
               </button>
             </div>
           ) : loadingAnalytics ? (
-            <div className="text-center py-12">
-              <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-stone-500">Loading analytics...</p>
+            <div className="space-y-4 py-4">
+              <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} rounded-2xl p-6 border`}>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <Skeleton className="h-5 w-40" darkMode={darkMode} />
+                    <Skeleton className="h-4 w-56 mt-3" darkMode={darkMode} />
+                  </div>
+                  <Skeleton className="w-20 h-20 rounded-full" darkMode={darkMode} />
+                </div>
+                <div className="grid grid-cols-3 gap-3 mt-6">
+                  <Skeleton className="h-16" darkMode={darkMode} />
+                  <Skeleton className="h-16" darkMode={darkMode} />
+                  <Skeleton className="h-16" darkMode={darkMode} />
+                </div>
+              </div>
+              {Array.from({ length: 2 }).map((_, index) => (
+                <div key={index} className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} rounded-2xl p-6 border`}>
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-5 w-32" darkMode={darkMode} />
+                    <Skeleton className="h-7 w-14 rounded-full" darkMode={darkMode} />
+                  </div>
+                  <div className="space-y-3 mt-5">
+                    <Skeleton className="h-12 w-full rounded-xl" darkMode={darkMode} />
+                    <Skeleton className="h-12 w-full rounded-xl" darkMode={darkMode} />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : !userAnalytics || !userAnalytics.analytics || userAnalytics.analytics.length === 0 ? (
             <div className="text-center py-16">
@@ -11203,11 +12561,10 @@ const App = () => {
     return (
       <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-[#F5F5F4]'}`}>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <LoginModal 
           isOpen={showLogin} 
           onClose={() => setShowLogin(false)} 
-          onLogin={setUser}
+          onLogin={handleLoginSuccess}
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
@@ -11224,28 +12581,30 @@ const App = () => {
               <div className="flex-1 min-w-0">
                 <h1 className={`font-bold ${darkMode ? 'text-white' : 'text-stone-800'} text-lg`}>Subjects & Resources</h1>
                 <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>
-                  {displaySubjects.length} subjects • {allResourcesList.length} resources
+                  {isSemesterSubjectsLoading ? 'Loading courses...' : `${displaySubjects.length} subjects • ${allResourcesList.length} resources`}
                 </p>
               </div>
               {/* Semester Toggle */}
               <div className={`hidden sm:flex items-center ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} rounded-lg p-0.5`}>
                 <button
                   onClick={() => handleSemesterSwitch('1st')}
+                  disabled={isSemesterSubjectsLoading}
                   className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${
                     activeSemester === '1st'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : darkMode ? 'text-gray-300 hover:text-white' : 'text-stone-600 hover:text-stone-800'
-                  }`}
+                  } ${isSemesterSubjectsLoading ? 'opacity-60 cursor-wait' : ''}`}
                 >
                   1st
                 </button>
                 <button
                   onClick={() => handleSemesterSwitch('2nd')}
+                  disabled={isSemesterSubjectsLoading}
                   className={`px-2 py-1 text-xs font-medium rounded-md transition-all ${
                     activeSemester === '2nd'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : darkMode ? 'text-gray-300 hover:text-white' : 'text-stone-600 hover:text-stone-800'
-                  }`}
+                  } ${isSemesterSubjectsLoading ? 'opacity-60 cursor-wait' : ''}`}
                 >
                   2nd
                 </button>
@@ -11304,21 +12663,23 @@ const App = () => {
                 <div className={`flex items-center ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} rounded-lg p-0.5`}>
                   <button
                     onClick={() => handleSemesterSwitch('1st')}
+                    disabled={isSemesterSubjectsLoading}
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                       activeSemester === '1st'
                         ? 'bg-blue-600 text-white shadow-sm'
                         : darkMode ? 'text-gray-300' : 'text-stone-600'
-                    }`}
+                    } ${isSemesterSubjectsLoading ? 'opacity-60 cursor-wait' : ''}`}
                   >
                     1st Semester
                   </button>
                   <button
                     onClick={() => handleSemesterSwitch('2nd')}
+                    disabled={isSemesterSubjectsLoading}
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                       activeSemester === '2nd'
                         ? 'bg-blue-600 text-white shadow-sm'
                         : darkMode ? 'text-gray-300' : 'text-stone-600'
-                    }`}
+                    } ${isSemesterSubjectsLoading ? 'opacity-60 cursor-wait' : ''}`}
                   >
                     2nd Semester
                   </button>
@@ -11326,7 +12687,29 @@ const App = () => {
               </div>
 
               {/* Subjects Grid */}
-              {displaySubjects.length === 0 ? (
+              {isSemesterSubjectsLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} p-4 rounded-xl border animate-pulse`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-12 h-12 rounded-xl flex-shrink-0 ${darkMode ? 'bg-gray-700' : 'bg-stone-200'}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className={`h-5 w-24 rounded ${darkMode ? 'bg-gray-700' : 'bg-stone-200'}`} />
+                          <div className={`h-4 w-40 rounded mt-2 ${darkMode ? 'bg-gray-700' : 'bg-stone-100'}`} />
+                          <div className="flex items-center gap-2 mt-3">
+                            <div className={`h-6 w-20 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-stone-100'}`} />
+                            <div className={`h-6 w-24 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-stone-100'}`} />
+                          </div>
+                          <div className={`h-12 rounded-lg mt-3 ${darkMode ? 'bg-gray-700/80' : 'bg-stone-100'}`} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : displaySubjects.length === 0 ? (
                 <div className="text-center py-12">
                   <div className={`w-20 h-20 ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
                     <Icon name="school" className="text-4xl text-stone-400" />
@@ -11341,6 +12724,10 @@ const App = () => {
                     const resourceCount = (resources[subject] || []).length;
                     const info = subjectInfo[subject];
                     const courseName = info?.name || null;
+                    const subjectSchedules = getSubjectSchedules(subject);
+                    const semestralCount = subjectSchedules.filter(schedule => schedule.type === 'semestral').length;
+                    const specialCount = subjectSchedules.filter(schedule => schedule.type !== 'semestral').length;
+                    const nextSchedule = subjectSchedules.find(schedule => schedule.status !== 'completed') || subjectSchedules[0] || null;
                     
                     return (
                       <button
@@ -11362,6 +12749,10 @@ const App = () => {
                                 <Icon name="style" className="text-sm" />
                                 {deckCount} {deckCount === 1 ? 'deck' : 'decks'}
                               </span>
+                              <span className={`inline-flex items-center gap-1 px-2 py-1 ${darkMode ? 'bg-emerald-900/30 text-emerald-300' : 'bg-emerald-50 text-emerald-700'} rounded-lg text-xs`}>
+                                <Icon name="schedule" className="text-sm" />
+                                {subjectSchedules.length} {subjectSchedules.length === 1 ? 'schedule' : 'schedules'}
+                              </span>
                               {resourceCount > 0 && (
                                 <span className={`inline-flex items-center gap-1 px-2 py-1 ${darkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600'} rounded-lg text-xs`}>
                                   <Icon name="folder" className="text-sm" />
@@ -11369,6 +12760,16 @@ const App = () => {
                                 </span>
                               )}
                             </div>
+                            {nextSchedule && (
+                              <div className={`mt-3 rounded-lg px-3 py-2 ${darkMode ? 'bg-gray-700/70' : 'bg-stone-50'} text-xs`}>
+                                <p className={`font-semibold ${darkMode ? 'text-gray-200' : 'text-stone-700'}`}>
+                                  Next: {describeSchedule(nextSchedule)}
+                                </p>
+                                <p className={`mt-1 ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>
+                                  {semestralCount > 0 ? `${semestralCount} weekly` : 'No weekly classes'}{specialCount > 0 ? ` • ${specialCount} special` : ''}
+                                </p>
+                              </div>
+                            )}
                           </div>
                           <Icon name="chevron_right" className={`${darkMode ? 'text-gray-500 group-hover:text-blue-400' : 'text-stone-400 group-hover:text-blue-500'} transition-colors`} />
                         </div>
@@ -11480,7 +12881,7 @@ const App = () => {
                         setActiveSubject(resource.subject);
                         setActiveResource(resource);
                         setPreviousView('ALL_RESOURCES');
-                        setView('RESOURCE_VIEW');
+                        navigateTo('RESOURCE_VIEW');
                       }}
                       className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} p-3 sm:p-4 rounded-xl border text-left hover:border-blue-300 hover:shadow-md transition-all group`}
                     >
@@ -11514,13 +12915,11 @@ const App = () => {
   // CLASS View
   if (view === 'CLASS') {
     if (!user) {
-      setView('HOME');
       return null;
     }
     return (
       <>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <ClassPage
           user={user}
           onBack={goBack}
@@ -11538,7 +12937,6 @@ const App = () => {
     return (
       <>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <FinancePage onBack={goBack} darkMode={darkMode} />
       </>
     );
@@ -11549,7 +12947,6 @@ const App = () => {
     return (
       <>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <AttendancePage onBack={goBack} darkMode={darkMode} />
       </>
     );
@@ -11563,7 +12960,7 @@ const App = () => {
         <LoginModal 
           isOpen={showLogin} 
           onClose={() => setShowLogin(false)} 
-          onLogin={setUser}
+          onLogin={handleLoginSuccess}
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
@@ -11638,11 +13035,10 @@ const App = () => {
     return (
       <div className={`min-h-screen ${darkMode ? 'bg-stone-900' : 'bg-[#F5F5F4]'}`}>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <LoginModal 
           isOpen={showLogin} 
           onClose={() => setShowLogin(false)} 
-          onLogin={setUser}
+          onLogin={handleLoginSuccess}
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
@@ -11677,7 +13073,7 @@ const App = () => {
                     <Icon name="arrow_back" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
                   </button>
                   <div>
-                    <h1 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'} text-lg`}>Schedule</h1>
+                    <h1 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'} text-lg`}>Obligations</h1>
                     <p className={`text-xs ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>See all scheduled activities</p>
                   </div>
                 </div>
@@ -12249,12 +13645,11 @@ const App = () => {
     
     return (
       <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-[#F5F5F4]'}`}>
-        <FloatingThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
         <ToastContainer toasts={toasts} removeToast={removeToast} />
         <LoginModal 
           isOpen={showLogin} 
           onClose={() => setShowLogin(false)} 
-          onLogin={setUser}
+          onLogin={handleLoginSuccess}
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
@@ -12712,7 +14107,13 @@ window.__cumlaudeRoot = root;
 
 root.render(
   <ErrorBoundary>
-    <App />
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/visitor?page=home" replace />} />
+        <Route path="/:role" element={<LayoutWrapper />} />
+        <Route path="*" element={<Navigate to="/visitor?page=home" replace />} />
+      </Routes>
+    </BrowserRouter>
   </ErrorBoundary>
 );
 
