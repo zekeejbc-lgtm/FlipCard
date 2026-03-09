@@ -84,6 +84,24 @@ const COURSE_COL = {
   UPDATED_AT: 6
 };
 
+const OBLIGATION_COL = {
+  OBLIGATION_ID: 0,
+  COURSE_CODE: 1,
+  COURSE_NAME: 2,
+  CATEGORY: 3,
+  DATE: 4,
+  START_TIME: 5,
+  END_TIME: 6,
+  LOCATION: 7,
+  FACILITATOR: 8,
+  NOTES: 9,
+  IS_ACTIVE: 10,
+  CREATED_BY: 11,
+  CREATED_BY_NAME: 12,
+  CREATED_AT: 13,
+  UPDATED_AT: 14
+};
+
 const USER_ACCOUNT_COL = {
   ID_NUMBER: 0,
   ROLE: 20,
@@ -250,6 +268,9 @@ function doGet(e) {
 
       case 'getCourses':
         return jsonResponse(getCourses(e.parameter.semester));
+
+      case 'getObligations':
+        return jsonResponse(getObligations(e.parameter.subject));
       
       default:
         return jsonResponse({ error: 'Unknown action: ' + action });
@@ -300,6 +321,18 @@ function doPost(e) {
       case 'getCourses':
         return jsonResponse(getCourses(data.semester));
 
+      case 'getObligations':
+        return jsonResponse(getObligations(data.subject));
+
+      case 'addObligation':
+        return jsonResponse(addObligation(data));
+
+      case 'updateObligation':
+        return jsonResponse(updateObligation(data));
+
+      case 'deleteObligation':
+        return jsonResponse(deleteObligation(data.obligationId, data.userId));
+
       case 'addCourse':
         return jsonResponse(addCourse(data));
 
@@ -318,6 +351,9 @@ function doPost(e) {
 
       case 'setupCourseCatalogSheet':
         return jsonResponse(setupCourseCatalogSheet());
+
+      case 'setupObligationsSheet':
+        return jsonResponse(setupObligationsSheet());
       
       default:
         return jsonResponse({ error: 'Unknown action: ' + action });
@@ -349,6 +385,7 @@ function setupAllSheets() {
   results.push(setupClassScheduleSheet());
   results.push(setupSemesterConfigSheet());
   results.push(setupCourseCatalogSheet());
+  results.push(setupObligationsSheet());
   
   return { 
     success: true, 
@@ -426,6 +463,42 @@ function setupSemesterConfigSheet() {
   }
   
   return { success: true, message: 'SemesterConfig sheet already exists' };
+}
+
+function setupObligationsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Obligations');
+
+  if (!sheet) {
+    sheet = ss.insertSheet('Obligations');
+    sheet.appendRow([
+      'ObligationID',
+      'CourseCode',
+      'CourseName',
+      'Category',
+      'Date',
+      'StartTime',
+      'EndTime',
+      'Location',
+      'Facilitator',
+      'Notes',
+      'IsActive',
+      'CreatedBy',
+      'CreatedByName',
+      'CreatedAt',
+      'UpdatedAt'
+    ]);
+    sheet.setFrozenRows(1);
+
+    const headerRange = sheet.getRange(1, 1, 1, 15);
+    headerRange.setBackground('#0f766e');
+    headerRange.setFontColor('#ffffff');
+    headerRange.setFontWeight('bold');
+
+    return { success: true, message: 'Obligations sheet created' };
+  }
+
+  return { success: true, message: 'Obligations sheet already exists' };
 }
 
 /**
@@ -657,6 +730,51 @@ function syncCoursesFromSchedules() {
   } catch (error) {
     return { success: false, synced: 0, error: error.message };
   }
+}
+
+function normalizeTimeValue(timeValue) {
+  if (!timeValue) return '';
+
+  if (timeValue instanceof Date) {
+    return Utilities.formatDate(timeValue, MANILA_TIMEZONE, 'HH:mm');
+  }
+
+  const value = String(timeValue).trim();
+  if (!value) return '';
+  if (/^\d{2}:\d{2}$/.test(value)) return value;
+
+  const converted = formatTime24Hour(value);
+  if (/^\d{2}:\d{2}$/.test(converted)) return converted;
+
+  const parts = value.split(':');
+  if (parts.length >= 2) {
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    if (!isNaN(hours) && !isNaN(minutes)) {
+      return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+    }
+  }
+
+  return value;
+}
+
+function canManageRestrictedObligations(userId) {
+  return canManageSemestral(userId);
+}
+
+function isRestrictedObligationCategory(category) {
+  const normalized = String(category || '').trim().toLowerCase();
+  return [
+    'midterm exam',
+    'final exam',
+    'quiz',
+    'le deadline',
+    'reporting',
+    'performance',
+    'presentation',
+    'submission',
+    'exam'
+  ].includes(normalized);
 }
 
 function getCourses(semester) {
@@ -1340,6 +1458,313 @@ function deleteClassSchedule(scheduleId, userId) {
     
   } catch (error) {
     return { error: 'Failed to delete schedule: ' + error.message };
+  }
+}
+
+function getOrCreateObligationsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Obligations');
+
+  if (!sheet) {
+    setupObligationsSheet();
+    sheet = ss.getSheetByName('Obligations');
+  }
+
+  return sheet;
+}
+
+function getObligationStatus(dateValue, startTime, endTime) {
+  const now = getManilaDate();
+  let obligationDate;
+
+  if (dateValue instanceof Date) {
+    obligationDate = new Date(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate());
+  } else {
+    const rawDate = String(dateValue || '').trim();
+    if (!rawDate) return 'upcoming';
+    if (rawDate.includes('-')) {
+      const dateParts = rawDate.split('-').map(Number);
+      obligationDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+    } else {
+      obligationDate = new Date(rawDate);
+    }
+  }
+
+  const normalizedStartTime = normalizeTimeValue(startTime) || '00:00';
+  const normalizedEndTime = normalizeTimeValue(endTime) || '23:59';
+  const [startHour, startMinute] = normalizedStartTime.split(':').map(Number);
+  const [endHour, endMinute] = normalizedEndTime.split(':').map(Number);
+
+  const startDateTime = new Date(obligationDate);
+  startDateTime.setHours(startHour || 0, startMinute || 0, 0, 0);
+
+  const endDateTime = new Date(obligationDate);
+  endDateTime.setHours(endHour || 23, endMinute || 59, 59, 999);
+
+  if (endDateTime.getTime() <= startDateTime.getTime()) {
+    endDateTime.setHours(23, 59, 59, 999);
+  }
+
+  if (now.getTime() < startDateTime.getTime()) return 'upcoming';
+  if (now.getTime() <= endDateTime.getTime()) return 'ongoing';
+  return 'done';
+}
+
+function mapObligationRow(row, displayRow) {
+  const rawDate = row[OBLIGATION_COL.DATE];
+  const startTime = normalizeTimeValue(displayRow[OBLIGATION_COL.START_TIME] || row[OBLIGATION_COL.START_TIME]);
+  const endTime = normalizeTimeValue(displayRow[OBLIGATION_COL.END_TIME] || row[OBLIGATION_COL.END_TIME]);
+  const date = rawDate instanceof Date
+    ? Utilities.formatDate(rawDate, MANILA_TIMEZONE, 'yyyy-MM-dd')
+    : String(rawDate || '').trim();
+
+  return {
+    examId: String(row[OBLIGATION_COL.OBLIGATION_ID] || '').trim(),
+    obligationId: String(row[OBLIGATION_COL.OBLIGATION_ID] || '').trim(),
+    courseCode: normalizeCourseCode(row[OBLIGATION_COL.COURSE_CODE]),
+    courseName: String(row[OBLIGATION_COL.COURSE_NAME] || '').trim(),
+    examType: String(row[OBLIGATION_COL.CATEGORY] || '').trim() || 'Obligation',
+    obligationType: String(row[OBLIGATION_COL.CATEGORY] || '').trim() || 'Obligation',
+    date: date,
+    startTime: startTime,
+    endTime: endTime,
+    room: String(row[OBLIGATION_COL.LOCATION] || '').trim(),
+    location: String(row[OBLIGATION_COL.LOCATION] || '').trim(),
+    proctor: String(row[OBLIGATION_COL.FACILITATOR] || '').trim(),
+    facilitator: String(row[OBLIGATION_COL.FACILITATOR] || '').trim(),
+    notes: String(row[OBLIGATION_COL.NOTES] || '').trim(),
+    createdBy: String(row[OBLIGATION_COL.CREATED_BY] || '').trim(),
+    createdByName: String(row[OBLIGATION_COL.CREATED_BY_NAME] || '').trim(),
+    createdAt: String(row[OBLIGATION_COL.CREATED_AT] || ''),
+    updatedAt: String(row[OBLIGATION_COL.UPDATED_AT] || ''),
+    status: getObligationStatus(rawDate, startTime, endTime)
+  };
+}
+
+function getObligations(subject) {
+  try {
+    const sheet = getOrCreateObligationsSheet();
+    const dataRange = sheet.getDataRange();
+    const data = dataRange.getValues();
+    const displayData = dataRange.getDisplayValues();
+
+    if (data.length <= 1) {
+      return { success: true, obligations: [], exams: [] };
+    }
+
+    const obligations = [];
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (!isTruthy(row[OBLIGATION_COL.IS_ACTIVE])) continue;
+
+      const courseCode = normalizeCourseCode(row[OBLIGATION_COL.COURSE_CODE]);
+      if (subject && courseCode !== normalizeCourseCode(subject)) continue;
+
+      obligations.push(mapObligationRow(row, displayData[i]));
+    }
+
+    obligations.sort(function(a, b) {
+      const statusOrder = { ongoing: 0, upcoming: 1, done: 2 };
+      if (statusOrder[a.status] !== statusOrder[b.status]) {
+        return statusOrder[a.status] - statusOrder[b.status];
+      }
+      return new Date(a.date + 'T' + (a.startTime || '00:00')).getTime() -
+        new Date(b.date + 'T' + (b.startTime || '00:00')).getTime();
+    });
+
+    return { success: true, obligations: obligations, exams: obligations };
+  } catch (error) {
+    return { error: 'Failed to get obligations: ' + error.message };
+  }
+}
+
+function addObligation(data) {
+  try {
+    const category = String(data.examType || data.obligationType || data.category || '').trim();
+    const userId = data.userId;
+    const userName = data.userName;
+    const courseCode = normalizeCourseCode(data.courseCode);
+
+    if (!canManageSchedules(userId)) {
+      return { error: 'Unauthorized. Only Mayor, Vice Mayor, Secretary, or PIOs can manage obligations.' };
+    }
+
+    if (isRestrictedObligationCategory(category) && !canManageRestrictedObligations(userId)) {
+      return { error: 'Unauthorized. Only Mayor, Vice Mayor, or Secretary can add exam-type obligations.' };
+    }
+
+    if (!courseCode || !category || !data.date || !data.startTime) {
+      return { error: 'Missing required fields (courseCode, category, date, startTime)' };
+    }
+
+    const sheet = getOrCreateObligationsSheet();
+    const courseResult = ensureCourseExists(courseCode, data.courseName, userId, userName);
+    if (!courseResult.success) {
+      return { error: courseResult.error || 'Failed to save course' };
+    }
+
+    const obligationId = 'OBL-' + Date.now();
+    const now = getManilaTimestamp();
+    const dateValue = String(data.date || '').trim();
+    const startTime = normalizeTimeValue(data.startTime);
+    const endTime = normalizeTimeValue(data.endTime);
+    const location = String(data.room || data.location || '').trim();
+    const facilitator = String(data.proctor || data.facilitator || '').trim();
+    const notes = String(data.notes || '').trim();
+
+    sheet.appendRow([
+      obligationId,
+      courseCode,
+      courseResult.course.name,
+      category,
+      dateValue,
+      startTime,
+      endTime,
+      location,
+      facilitator,
+      notes,
+      true,
+      userId,
+      userName || '',
+      now,
+      now
+    ]);
+
+    return {
+      success: true,
+      message: 'Obligation added',
+      obligation: mapObligationRow([
+        obligationId,
+        courseCode,
+        courseResult.course.name,
+        category,
+        dateValue,
+        startTime,
+        endTime,
+        location,
+        facilitator,
+        notes,
+        true,
+        userId,
+        userName || '',
+        now,
+        now
+      ], [
+        obligationId,
+        courseCode,
+        courseResult.course.name,
+        category,
+        dateValue,
+        startTime,
+        endTime,
+        location,
+        facilitator,
+        notes,
+        'TRUE',
+        userId,
+        userName || '',
+        now,
+        now
+      ])
+    };
+  } catch (error) {
+    return { error: 'Failed to add obligation: ' + error.message };
+  }
+}
+
+function updateObligation(data) {
+  try {
+    const obligationId = String(data.obligationId || data.examId || '').trim();
+    const userId = data.userId;
+
+    if (!obligationId) {
+      return { error: 'Missing obligationId' };
+    }
+
+    if (!canManageSchedules(userId)) {
+      return { error: 'Unauthorized. Only Mayor, Vice Mayor, Secretary, or PIOs can manage obligations.' };
+    }
+
+    const sheet = getOrCreateObligationsSheet();
+    const values = sheet.getDataRange().getValues();
+
+    for (let i = 1; i < values.length; i++) {
+      if (String(values[i][OBLIGATION_COL.OBLIGATION_ID]) !== obligationId) continue;
+
+      if (userId && String(values[i][OBLIGATION_COL.CREATED_BY]) !== String(userId)) {
+        return { error: 'You can only edit obligations you created' };
+      }
+
+      const nextCategory = String(
+        data.examType !== undefined ? data.examType :
+        data.obligationType !== undefined ? data.obligationType :
+        data.category !== undefined ? data.category :
+        values[i][OBLIGATION_COL.CATEGORY]
+      ).trim();
+
+      if (isRestrictedObligationCategory(nextCategory) && !canManageRestrictedObligations(userId)) {
+        return { error: 'Unauthorized. Only Mayor, Vice Mayor, or Secretary can manage exam-type obligations.' };
+      }
+
+      const rowIndex = i + 1;
+      const nextCourseCode = data.courseCode !== undefined ? normalizeCourseCode(data.courseCode) : normalizeCourseCode(values[i][OBLIGATION_COL.COURSE_CODE]);
+      const nextCourseName = data.courseName !== undefined ? data.courseName : values[i][OBLIGATION_COL.COURSE_NAME];
+      const courseResult = ensureCourseExists(
+        nextCourseCode,
+        nextCourseName,
+        userId,
+        data.userName || values[i][OBLIGATION_COL.CREATED_BY_NAME]
+      );
+
+      if (!courseResult.success) {
+        return { error: courseResult.error || 'Failed to save course' };
+      }
+
+      if (data.courseCode !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.COURSE_CODE + 1).setValue(nextCourseCode);
+      if (data.courseCode !== undefined || data.courseName !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.COURSE_NAME + 1).setValue(courseResult.course.name);
+      if (data.examType !== undefined || data.obligationType !== undefined || data.category !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.CATEGORY + 1).setValue(nextCategory);
+      if (data.date !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.DATE + 1).setValue(String(data.date || '').trim());
+      if (data.startTime !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.START_TIME + 1).setValue(normalizeTimeValue(data.startTime));
+      if (data.endTime !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.END_TIME + 1).setValue(normalizeTimeValue(data.endTime));
+      if (data.room !== undefined || data.location !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.LOCATION + 1).setValue(String(data.room !== undefined ? data.room : data.location || '').trim());
+      if (data.proctor !== undefined || data.facilitator !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.FACILITATOR + 1).setValue(String(data.proctor !== undefined ? data.proctor : data.facilitator || '').trim());
+      if (data.notes !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.NOTES + 1).setValue(String(data.notes || '').trim());
+      sheet.getRange(rowIndex, OBLIGATION_COL.UPDATED_AT + 1).setValue(getManilaTimestamp());
+
+      return { success: true, message: 'Obligation updated' };
+    }
+
+    return { error: 'Obligation not found' };
+  } catch (error) {
+    return { error: 'Failed to update obligation: ' + error.message };
+  }
+}
+
+function deleteObligation(obligationId, userId) {
+  try {
+    if (!obligationId) {
+      return { error: 'Missing obligationId' };
+    }
+
+    const sheet = getOrCreateObligationsSheet();
+    const values = sheet.getDataRange().getValues();
+
+    for (let i = 1; i < values.length; i++) {
+      if (String(values[i][OBLIGATION_COL.OBLIGATION_ID]) !== String(obligationId)) continue;
+
+      if (userId && String(values[i][OBLIGATION_COL.CREATED_BY]) !== String(userId)) {
+        return { error: 'You can only delete obligations you created' };
+      }
+
+      sheet.getRange(i + 1, OBLIGATION_COL.IS_ACTIVE + 1).setValue(false);
+      sheet.getRange(i + 1, OBLIGATION_COL.UPDATED_AT + 1).setValue(getManilaTimestamp());
+      return { success: true, message: 'Obligation deleted' };
+    }
+
+    return { error: 'Obligation not found' };
+  } catch (error) {
+    return { error: 'Failed to delete obligation: ' + error.message };
   }
 }
 
