@@ -63,34 +63,43 @@ type ResourceRequest = {
   fulfilledAt?: string;
 };
 
-type CourseDropdownOption = {
-  code: string;
-  name?: string;
+type DropdownOption = {
+  value: string;
+  label: string;
+  description?: string;
 };
 
-function CourseDropdown({
+function CustomDropdown({
   name,
   options,
   value,
   defaultValue = '',
-  placeholder = 'Select a course',
+  placeholder = 'Select an option',
   required = false,
-  onChange
+  onChange,
+  theme = 'light',
+  size = 'default',
+  renderSelected,
+  renderOption
 }: {
   name: string;
-  options: CourseDropdownOption[];
+  options: DropdownOption[];
   value?: string;
   defaultValue?: string;
   placeholder?: string;
   required?: boolean;
   onChange?: (value: string) => void;
+  theme?: 'light' | 'dark';
+  size?: 'default' | 'compact';
+  renderSelected?: (option: DropdownOption) => React.ReactNode;
+  renderOption?: (option: DropdownOption, selected: boolean) => React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedCode, setSelectedCode] = useState(value ?? defaultValue);
+  const [selectedValue, setSelectedValue] = useState(value ?? defaultValue);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setSelectedCode(value ?? defaultValue);
+    setSelectedValue(value ?? defaultValue);
   }, [value, defaultValue]);
 
   useEffect(() => {
@@ -119,15 +128,23 @@ function CourseDropdown({
     };
   }, [isOpen]);
 
-  const selectedOption = options.find(option => option.code === selectedCode);
+  const selectedOption = options.find(option => option.value === selectedValue);
+  const isDark = theme === 'dark';
+  const isCompact = size === 'compact';
+  const triggerClassName = isDark
+    ? `flex w-full items-center gap-3 rounded-xl border border-gray-600 bg-gray-700 ${isCompact ? 'px-3 py-2' : 'px-4 py-3'} text-left text-white shadow-sm transition ${isOpen ? 'ring-2 ring-gray-400' : 'hover:border-gray-500'}`
+    : `flex w-full items-center gap-3 rounded-xl border border-stone-300 bg-white ${isCompact ? 'px-3 py-2' : 'px-4 py-3'} text-left shadow-sm transition ${isOpen ? 'ring-2 ring-stone-500' : 'hover:border-stone-400'}`;
+  const menuClassName = isDark
+    ? 'absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-gray-600 bg-gray-800 shadow-2xl'
+    : 'absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl';
 
   return (
     <div className="relative" ref={containerRef}>
       <select
         name={name}
-        value={selectedCode}
+        value={selectedValue}
         onChange={(e) => {
-          setSelectedCode(e.target.value);
+          setSelectedValue(e.target.value);
           onChange?.(e.target.value);
         }}
         required={required}
@@ -135,10 +152,9 @@ function CourseDropdown({
         aria-hidden="true"
         className="sr-only"
       >
-        <option value="">{placeholder}</option>
         {options.map(option => (
-          <option key={option.code} value={option.code}>
-            {option.code}{option.name ? ` - ${option.name}` : ''}
+          <option key={`${name}-${option.value || 'empty'}`} value={option.value}>
+            {option.description ? `${option.label} - ${option.description}` : option.label}
           </option>
         ))}
       </select>
@@ -146,79 +162,207 @@ function CourseDropdown({
       <button
         type="button"
         onClick={() => setIsOpen(open => !open)}
-        className={`flex w-full items-center gap-3 rounded-xl border border-stone-300 bg-white px-4 py-3 text-left shadow-sm transition ${
-          isOpen ? 'ring-2 ring-stone-500' : 'hover:border-stone-400'
-        }`}
+        className={triggerClassName}
       >
         <div className="min-w-0 flex-1">
           {selectedOption ? (
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="shrink-0 font-semibold text-stone-900">{selectedOption.code}</span>
-              {selectedOption.name ? (
-                <>
-                  <span className="shrink-0 text-stone-400">-</span>
-                  <span className="truncate text-sm text-stone-600" title={selectedOption.name}>
-                    {selectedOption.name}
-                  </span>
-                </>
-              ) : null}
-            </div>
+            renderSelected ? (
+              renderSelected(selectedOption)
+            ) : (
+              <span className={`block truncate ${isDark ? 'text-white' : 'text-stone-900'} ${isCompact ? 'text-sm' : ''}`}>
+                {selectedOption.label}
+              </span>
+            )
           ) : (
-            <span className="block truncate text-stone-500">{placeholder}</span>
+            <span className={`block truncate ${isDark ? 'text-gray-400' : 'text-stone-500'} ${isCompact ? 'text-sm' : ''}`}>
+              {placeholder}
+            </span>
           )}
         </div>
-        <Icon name="expand_more" className={`shrink-0 text-stone-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <Icon name="expand_more" className={`shrink-0 transition-transform ${isDark ? 'text-gray-300' : 'text-stone-500'} ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
+        <div className={menuClassName}>
           <div className="max-h-[min(18rem,40vh)] overflow-y-auto py-2">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedCode('');
-                onChange?.('');
-                setIsOpen(false);
-              }}
-              className={`flex w-full items-center px-4 py-3 text-left transition hover:bg-stone-50 ${
-                !selectedCode ? 'bg-stone-100 text-stone-900' : 'text-stone-500'
-              }`}
-            >
-              <span className="truncate">{placeholder}</span>
-            </button>
-
-            {options.map(option => (
-              <button
-                key={option.code}
-                type="button"
-                onClick={() => {
-                  setSelectedCode(option.code);
-                  onChange?.(option.code);
-                  setIsOpen(false);
-                }}
-                className={`flex w-full items-center gap-2 px-4 py-3 text-left transition hover:bg-stone-50 ${
-                  selectedCode === option.code ? 'bg-stone-100' : ''
-                }`}
-                title={option.name ? `${option.code} - ${option.name}` : option.code}
-              >
-                <span className="shrink-0 font-semibold text-stone-900">{option.code}</span>
-                {option.name ? (
-                  <>
-                    <span className="shrink-0 text-stone-400">-</span>
-                    <span className="truncate text-sm text-stone-600">{option.name}</span>
-                  </>
-                ) : null}
-                {selectedCode === option.code ? (
-                  <Icon name="check" className="ml-auto shrink-0 text-stone-700" />
-                ) : null}
-              </button>
-            ))}
+            {options.map(option => {
+              const isSelected = selectedValue === option.value;
+              return (
+                <button
+                  key={`${name}-option-${option.value || 'empty'}`}
+                  type="button"
+                  onClick={() => {
+                    setSelectedValue(option.value);
+                    onChange?.(option.value);
+                    setIsOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-2 px-4 ${isCompact ? 'py-2.5' : 'py-3'} text-left transition ${
+                    isDark
+                      ? isSelected
+                        ? 'bg-gray-700'
+                        : 'hover:bg-gray-700/70'
+                      : isSelected
+                        ? 'bg-stone-100'
+                        : 'hover:bg-stone-50'
+                  }`}
+                  title={option.description ? `${option.label} - ${option.description}` : option.label}
+                >
+                  <div className="min-w-0 flex-1">
+                    {renderOption ? (
+                      renderOption(option, isSelected)
+                    ) : (
+                      <>
+                        <div className={`truncate ${isDark ? 'text-white' : 'text-stone-900'} ${isCompact ? 'text-sm' : ''}`}>
+                          {option.label}
+                        </div>
+                        {option.description ? (
+                          <div className={`truncate text-sm ${isDark ? 'text-gray-400' : 'text-stone-500'}`}>
+                            {option.description}
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                  {isSelected ? (
+                    <Icon name="check" className={`shrink-0 ${isDark ? 'text-gray-200' : 'text-stone-700'}`} />
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
     </div>
   );
 }
+
+function RefreshIconButton({
+  onClick,
+  disabled = false,
+  spinning = false,
+  darkMode = false,
+  title = 'Refresh'
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  spinning?: boolean;
+  darkMode?: boolean;
+  title?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-colors disabled:cursor-wait disabled:opacity-70 ${
+        darkMode
+          ? 'border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600'
+          : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'
+      }`}
+      title={title}
+      aria-label={title}
+    >
+      <Icon
+        name="refresh"
+        className={spinning ? 'animate-spin text-base' : 'text-base'}
+      />
+    </button>
+  );
+}
+
+type CourseDropdownOption = {
+  code: string;
+  name?: string;
+};
+
+function CourseDropdown({
+  name,
+  options,
+  value,
+  defaultValue = '',
+  placeholder = 'Select a course',
+  required = false,
+  onChange
+}: {
+  name: string;
+  options: CourseDropdownOption[];
+  value?: string;
+  defaultValue?: string;
+  placeholder?: string;
+  required?: boolean;
+  onChange?: (value: string) => void;
+}) {
+  return (
+    <CustomDropdown
+      name={name}
+      options={[
+        { value: '', label: placeholder },
+        ...options.map(option => ({
+          value: option.code,
+          label: option.code,
+          description: option.name
+        }))
+      ]}
+      value={value}
+      defaultValue={defaultValue}
+      placeholder={placeholder}
+      required={required}
+      onChange={onChange}
+      renderSelected={(option) => option.value ? (
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 font-semibold text-stone-900">{option.label}</span>
+          {option.description ? (
+            <>
+              <span className="shrink-0 text-stone-400">-</span>
+              <span className="truncate text-sm text-stone-600" title={option.description}>
+                {option.description}
+              </span>
+            </>
+          ) : null}
+        </div>
+      ) : (
+        <span className="block truncate text-stone-500">{placeholder}</span>
+      )}
+      renderOption={(option) => option.value ? (
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 font-semibold text-stone-900">{option.label}</span>
+          {option.description ? (
+            <>
+              <span className="shrink-0 text-stone-400">-</span>
+              <span className="truncate text-sm text-stone-600">{option.description}</span>
+            </>
+          ) : null}
+        </div>
+      ) : (
+        <span className="truncate text-stone-500">{placeholder}</span>
+      )}
+    />
+  );
+}
+
+const EXAM_TYPE_OPTIONS: DropdownOption[] = [
+  { value: 'Activity', label: 'Activity' },
+  { value: 'Special Event', label: 'Special Event' },
+  { value: 'Meeting', label: 'Meeting' },
+  { value: 'Workshop', label: 'Workshop' },
+  { value: 'LE Deadline', label: 'LE Deadline' },
+  { value: 'Quiz', label: 'Quiz' },
+  { value: 'Midterm Exam', label: 'Midterm Exam' },
+  { value: 'Final Exam', label: 'Final Exam' },
+  { value: 'Reporting', label: 'Reporting' },
+  { value: 'Performance', label: 'Performance' },
+  { value: 'Presentation', label: 'Presentation' },
+  { value: 'Submission', label: 'Submission' }
+];
+
+const DAY_OF_WEEK_OPTIONS: DropdownOption[] = [
+  { value: 'Monday', label: 'Monday' },
+  { value: 'Tuesday', label: 'Tuesday' },
+  { value: 'Wednesday', label: 'Wednesday' },
+  { value: 'Thursday', label: 'Thursday' },
+  { value: 'Friday', label: 'Friday' },
+  { value: 'Saturday', label: 'Saturday' },
+  { value: 'Sunday', label: 'Sunday' }
+];
 // --- Resource Request Modal ---
 const ResourceRequestModal = ({ isOpen, onClose, subject, user, onRequestComplete, addToast, updateToast, removeToast, darkMode }: {
   isOpen: boolean;
@@ -325,6 +469,7 @@ const ResourceRequestList = ({ subject, user, onFulfill, onMarkFulfilled, addToa
 }) => {
   const [requests, setRequests] = useState<ResourceRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [fulfillModal, setFulfillModal] = useState<{ open: boolean; request: ResourceRequest | null }>({ open: false, request: null });
   const [fulfillUrl, setFulfillUrl] = useState('');
@@ -470,8 +615,13 @@ type Card = {
 
 type Deck = {
   name: string;        // Display name from C1
+  fileId?: string;
   sheetName?: string;  // Original sheet name (F-xxx)
   subject?: string;    // Subject category from D1 (FL111, FL112, etc.)
+  url?: string;
+  submittedBy?: string;
+  submittedByName?: string;
+  timestamp?: string;
   cards: Card[];
 };
 
@@ -485,6 +635,26 @@ type Resource = {
   submittedBy?: string;
   submittedByName?: string;
   timestamp?: string;
+  subject?: string;
+  linkedObligations?: Array<{
+    obligationId: string;
+    obligationType?: string;
+    obligationLabel?: string;
+    courseCode?: string;
+  }>;
+};
+
+type ResourceLink = {
+  resourceUrl: string;
+  resourceTitle?: string;
+  resourceCategory?: string;
+  obligationId: string;
+  obligationType?: string;
+  obligationLabel?: string;
+  courseCode?: string;
+  createdBy?: string;
+  createdByName?: string;
+  createdAt?: string;
 };
 
 type CategoryItem = {
@@ -643,7 +813,12 @@ function buildPageScopedParams(args: {
 
   const params: Record<string, string | null> = {
     studentId: isAuthPhase ? null : user?.idNumber || null,
-    role: user?.role || routeRole
+    role: user?.role || routeRole,
+    subject: null,
+    course: null,
+    tab: null,
+    deck: null,
+    resource: null
   };
 
   if (isAuthPhase) {
@@ -691,6 +866,15 @@ type DeckProgress = {
   mode: 'shuffle' | 'chronological';
   shuffledOrder?: string[]; // Card IDs in shuffled order
   lastUpdated: number | string;
+};
+
+type CardSessionSummary = {
+  cardId: string;
+  question: string;
+  answer: string;
+  finalStatus: 'correct' | 'incorrect';
+  attemptCount: number;
+  timeSpentMs: number;
 };
 
 type Subject = {
@@ -780,10 +964,14 @@ type ClassPosition =
 // --- Constants ---
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx7gVOloTlgAZ5NJalR5QRrEo8iRdc-rJWZiaiStu2KMU7hAXvicAJXUm2Jm5iCLZZn/exec';
+const RESOURCE_GAS_URL = 'https://script.google.com/macros/s/AKfycbxIeozV9nVhvOY0WfayX1L7AyFZFhKKT3Rptr2x8ThOrLtl3ev7xyOHXlSeKw6HanDu/exec';
 const CLASS_SCHEDULE_GAS_URL = 'https://script.google.com/macros/s/AKfycbxJoCpVWKo1cWku1ErvwGRuVhvPaqoT2hL51mJMS_8KyjSfmCCTngZt7nZ9T6Yq7Q8oNw/exec';
 const STORAGE_KEY_USER = 'cumlaude_user';
 const STORAGE_KEY_STATE = 'flashcard_session_state';
 const STORAGE_KEY_CACHE_VERSION = 'cumlaude_cache_version';
+const getHomeSemesterSubjectsCacheKey = (semester: '1st' | '2nd') => `home_semesterSubjects_${semester}`;
+const getHomeSemesterSchedulesCacheKey = (semester: '1st' | '2nd') => `home_semesterSchedules_${semester}`;
+const getAnalyticsCacheKey = (userId: string) => `analytics_${userId}`;
 const SECURE_SESSION_KEY = 'cumlaude_secure_session_key';
 const SECURE_SESSION_PREFIX = 'cumlaude_secure_';
 
@@ -893,6 +1081,57 @@ async function postToAppsScript(payload: unknown) {
   });
 }
 
+async function postJson(url: string, payload: unknown) {
+  return fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8'
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+async function getJson(url: string, params: Record<string, string | number | boolean | null | undefined>) {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === '') return;
+    searchParams.set(key, String(value));
+  });
+
+  const requestUrl = searchParams.toString() ? `${url}?${searchParams.toString()}` : url;
+  return fetch(requestUrl, { method: 'GET' });
+}
+
+function clearSecureSessionCache() {
+  if (typeof window === 'undefined') return;
+
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i);
+    if (!key) continue;
+    if (key === SECURE_SESSION_KEY || key.startsWith(SECURE_SESSION_PREFIX)) {
+      keysToRemove.push(key);
+    }
+  }
+
+  keysToRemove.forEach(key => sessionStorage.removeItem(key));
+}
+
+function clearLegacyMetadataCache() {
+  if (typeof window === 'undefined') return;
+
+  [
+    'cumlaude_subjects',
+    'cumlaude_subjectInfo',
+    'cumlaude_currentSemester',
+    'cumlaude_academicYear',
+    'cumlaude_semesterConfig',
+    'cumlaude_semesterSubjects',
+    'cumlaude_exams'
+  ].forEach(key => localStorage.removeItem(key));
+}
+
 async function ensureAppServiceWorker() {
   const existingRegistration = await navigator.serviceWorker.getRegistration();
   if (existingRegistration) {
@@ -936,6 +1175,31 @@ db.version(2).stores({
 
 // Progress storage key prefix
 const PROGRESS_KEY_PREFIX = 'cumlaude_deck_progress_';
+
+const hashDeckCardContent = (value: string): string => {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+};
+
+const buildDeckCards = (deckKey: string, cards: Array<{ q?: string; a?: string }>): Card[] => {
+  const occurrenceCounts: Record<string, number> = {};
+
+  return cards.map((card) => {
+    const question = card.q || '';
+    const answer = card.a || '';
+    const fingerprint = `${question}\u0000${answer}`;
+    occurrenceCounts[fingerprint] = (occurrenceCounts[fingerprint] || 0) + 1;
+
+    return {
+      id: `${deckKey}-${hashDeckCardContent(fingerprint)}-${occurrenceCounts[fingerprint]}`,
+      q: question,
+      a: answer
+    };
+  });
+};
 
 // --- Components ---
 
@@ -1027,19 +1291,22 @@ const ToastContainer = ({ toasts, removeToast }: { toasts: Toast[]; removeToast:
 };
 
 // Upload Modal Component
-const UploadModal = ({ 
-  isOpen, 
-  onClose, 
+const UploadModal = ({
+  isOpen,
+  onClose,
   subject,
   user,
   onUploadComplete,
   addToast,
   updateToast,
   removeToast,
-  darkMode
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
+  darkMode,
+  obligations,
+  formatExamDate,
+  formatExamTime
+}: {
+  isOpen: boolean;
+  onClose: () => void;
   subject: string;
   user: User | null;
   onUploadComplete: () => void;
@@ -1047,30 +1314,57 @@ const UploadModal = ({
   updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
   removeToast: (id: number) => void;
   darkMode: boolean;
+  obligations: Exam[];
+  formatExamDate: (dateStr: string) => string;
+  formatExamTime: (timeStr: string | number) => string;
 }) => {
-  const [mode, setMode] = useState<'upload' | 'link'>('upload');
+  type ResourceUploadCategory = 'PDF' | 'PPT' | 'Video' | 'Flipcard';
+  type UploadMode = 'upload' | 'link' | 'csv' | 'sheet-link';
+
+  const [category, setCategory] = useState<ResourceUploadCategory>('PDF');
+  const [mode, setMode] = useState<UploadMode>('upload');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<'Lesson PPT' | 'Lesson PDF' | 'Video' | 'Reviewer'>('Lesson PDF');
   const [files, setFiles] = useState<File[]>([]);
   const [driveLink, setDriveLink] = useState('');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [showInstructions, setShowInstructions] = useState(false);
+  const [selectedObligationId, setSelectedObligationId] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const MAX_FILE_SIZE = 35 * 1024 * 1024; // 35MB limit for base64 upload
+  const MAX_FILE_SIZE = 35 * 1024 * 1024;
+  const currentModes = category === 'Flipcard'
+    ? [
+        { key: 'sheet-link' as const, label: 'Sheets Link', icon: 'link' },
+        { key: 'csv' as const, label: 'CSV Upload', icon: 'upload_file' }
+      ]
+    : [
+        { key: 'upload' as const, label: 'Upload File', icon: 'cloud_upload' },
+        { key: 'link' as const, label: 'Paste Link', icon: 'link' }
+      ];
+  const subjectObligations = obligations.filter(obligation => obligation.courseCode === subject);
+  const selectedObligation = subjectObligations.find(obligation => obligation.examId === selectedObligationId) || null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
-    const oversizedFiles = selectedFiles.filter(f => f.size > MAX_FILE_SIZE);
+    const nextFiles = category === 'Flipcard' ? selectedFiles.slice(0, 1) : selectedFiles;
+    const oversizedFiles = nextFiles.filter(f => f.size > MAX_FILE_SIZE);
     
     if (oversizedFiles.length > 0) {
-      setError(`File "${oversizedFiles[0].name}" exceeds 35MB limit. Use "Paste Link" for larger files.`);
+      setError(`File "${oversizedFiles[0].name}" exceeds 35MB limit.`);
+      return;
+    }
+
+    if (category === 'Flipcard' && nextFiles[0] && !nextFiles[0].name.toLowerCase().endsWith('.csv')) {
+      setError('Flipcard upload requires a .csv file.');
       return;
     }
     
-    setFiles(selectedFiles);
+    setFiles(nextFiles);
+    if (!title.trim() && nextFiles[0]) {
+      setTitle(nextFiles[0].name.replace(/\.[^.]+$/, ''));
+    }
     setError('');
   };
 
@@ -1086,13 +1380,13 @@ const UploadModal = ({
   };
 
   const validateDriveLink = (url: string): boolean => {
-    const patterns = [
-      /drive\.google\.com/,
-      /docs\.google\.com/,
-      /youtube\.com/,
-      /youtu\.be/,
-    ];
-    return patterns.some(pattern => pattern.test(url));
+    if (category === 'Flipcard') {
+      return /docs\.google\.com\/spreadsheets|drive\.google\.com/i.test(url);
+    }
+    if (category === 'Video') {
+      return /drive\.google\.com|docs\.google\.com|youtube\.com|youtu\.be/i.test(url);
+    }
+    return /drive\.google\.com|docs\.google\.com/i.test(url);
   };
 
   const resetForm = () => {
@@ -1100,16 +1394,86 @@ const UploadModal = ({
     setDescription('');
     setFiles([]);
     setDriveLink('');
+    setSelectedObligationId('');
     setError('');
   };
 
+  const parseCsvLine = (line: string) => {
+    const cells: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const next = line[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && next === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        cells.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+
+    cells.push(current.trim());
+    return cells.map(cell => cell.replace(/^"(.*)"$/, '$1').trim());
+  };
+
+  const parseFlipcardCsv = async (file: File) => {
+    const rows = (await file.text())
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(parseCsvLine);
+
+    if (rows.length === 0) {
+      throw new Error('The CSV file is empty.');
+    }
+
+    const header = rows[0].map(cell => cell.toLowerCase());
+    const questionIndex = header.findIndex(cell => ['question', 'q', 'front', 'term', 'prompt'].includes(cell));
+    const answerIndex = header.findIndex(cell => ['answer', 'a', 'back', 'definition', 'meaning'].includes(cell));
+    const titleIndex = header.findIndex(cell => ['title', 'deck', 'deck title', 'name', 'set'].includes(cell));
+    const hasHeader = questionIndex !== -1 && answerIndex !== -1;
+    const qIndex = hasHeader ? questionIndex : 0;
+    const aIndex = hasHeader ? answerIndex : 1;
+    const cards = rows
+      .slice(hasHeader ? 1 : 0)
+      .map(row => ({ q: (row[qIndex] || '').trim(), a: (row[aIndex] || '').trim() }))
+      .filter(card => card.q && card.a);
+
+    if (cards.length === 0) {
+      throw new Error('No valid question and answer rows were detected in the CSV.');
+    }
+
+    return {
+      cards,
+      suggestedTitle: (hasHeader && titleIndex !== -1 ? rows[1]?.[titleIndex] : '')?.trim() || file.name.replace(/\.[^.]+$/, '')
+    };
+  };
+
   const handleSubmit = async () => {
+    if (!user) {
+      setError('Please login first');
+      return;
+    }
+    if (!subject) {
+      setError('Open a course page first before adding resources');
+      return;
+    }
     if (!title.trim()) {
       setError('Please enter a title');
       return;
     }
     if (mode === 'upload' && files.length === 0) {
-      setError('Please select at least one file');
+      setError(category === 'Flipcard' ? 'Please select a CSV file' : 'Please select at least one file');
       return;
     }
     if (mode === 'link' && !driveLink.trim()) {
@@ -1117,33 +1481,32 @@ const UploadModal = ({
       return;
     }
     if (mode === 'link' && !validateDriveLink(driveLink)) {
-      setError('Please enter a valid Google Drive or YouTube link');
-      return;
-    }
-    if (!user) {
-      setError('Please login first');
+      setError('Please enter a valid link for this resource type');
       return;
     }
 
     setUploading(true);
     setError('');
+    let toastId: number;
 
     if (mode === 'link') {
-      // Direct link - just save to Resources sheet
-      const toastId = addToast('Step 1/4: Validating link...', 'loading', 10);
-      
+      toastId = addToast('Preparing request...', 'loading', 10);
       try {
         updateToast(toastId, 'Step 2/4: Connecting to server...', 'loading', 30);
         
-        const response = await fetch(GAS_URL, {
+        const response = await fetch(RESOURCE_GAS_URL, {
           method: 'POST',
           body: JSON.stringify({
-            action: 'addResourceByLink',
+            action: category === 'Flipcard' ? 'createDeckFromSheetLink' : 'addResourceByLink',
             title: title,
             description: description,
             subject: subject,
             category: category,
             link: driveLink,
+            sheetUrl: driveLink,
+            obligationId: selectedObligation?.examId || '',
+            obligationType: selectedObligation?.examType || '',
+            obligationLabel: selectedObligation ? `${selectedObligation.examType} • ${selectedObligation.courseCode} • ${formatExamDate(selectedObligation.date)}` : '',
             userId: user.idNumber,
             userName: user.name
           })
@@ -1173,7 +1536,7 @@ const UploadModal = ({
       }
     } else {
       // File upload
-      const toastId = addToast('Step 1/6: Preparing upload...', 'loading', 5);
+      toastId = addToast('Step 1/6: Preparing upload...', 'loading', 5);
       
       try {
         let successCount = 0;
@@ -1200,10 +1563,10 @@ const UploadModal = ({
           
           updateToast(toastId, `Step 3/6: Connecting to server${fileNum}...`, 'loading', 40);
           
-          const response = await fetch(GAS_URL, {
+          const response = await fetch(RESOURCE_GAS_URL, {
             method: 'POST',
             body: JSON.stringify({
-              action: 'uploadResource',
+              action: category === 'Flipcard' ? 'createDeckFromCards' : 'uploadResource',
               title: fileTitle,
               description: description,
               subject: subject,
@@ -1211,6 +1574,9 @@ const UploadModal = ({
               fileData: base64,
               fileName: file.name,
               mimeType: file.type,
+              obligationId: selectedObligation?.examId || '',
+              obligationType: selectedObligation?.examType || '',
+              obligationLabel: selectedObligation ? `${selectedObligation.examType} • ${selectedObligation.courseCode} • ${formatExamDate(selectedObligation.date)}` : '',
               userId: user.idNumber,
               userName: user.name
             })
@@ -1320,7 +1686,7 @@ const UploadModal = ({
               mode === 'upload' ? 'bg-white shadow text-stone-800' : 'text-stone-500'
             }`}
           >
-            <Icon name="cloud_upload" className="text-base" /> Upload
+            <Icon name={category === 'Flipcard' ? 'upload_file' : 'cloud_upload'} className="text-base" /> {category === 'Flipcard' ? 'CSV Upload' : 'Upload'}
           </button>
           <button
             onClick={() => { setMode('link'); setError(''); }}
@@ -1329,7 +1695,7 @@ const UploadModal = ({
               mode === 'link' ? 'bg-white shadow text-stone-800' : 'text-stone-500'
             }`}
           >
-            <Icon name="link" className="text-base" /> Paste Link
+            <Icon name="link" className="text-base" /> {category === 'Flipcard' ? 'Sheets Link' : 'Paste Link'}
           </button>
         </div>
 
@@ -1360,12 +1726,30 @@ const UploadModal = ({
             <input type="text" value={subject} readOnly className="w-full p-3 border border-stone-200 rounded-xl bg-stone-50 text-stone-500" />
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Link to Obligation</label>
+            <select
+              value={selectedObligationId}
+              onChange={(e) => setSelectedObligationId(e.target.value)}
+              disabled={uploading}
+              className="w-full p-3 border border-stone-200 rounded-xl bg-white focus:ring-2 focus:ring-stone-400 outline-none"
+            >
+              <option value="">None</option>
+              {subjectObligations.map(obligation => (
+                <option key={obligation.examId} value={obligation.examId}>
+                  {obligation.examType} - {formatExamDate(obligation.date)} - {formatExamTime(obligation.startTime)}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-stone-400 mt-1">Optional. Link this resource to a specific quiz, exam, deadline, or other obligation.</p>
+          </div>
+
           {/* Category */}
           <div>
             <label className="block text-sm font-medium text-stone-600 mb-1">Category *</label>
             <div className="grid grid-cols-2 gap-2">
-              {(['Lesson PPT', 'Lesson PDF', 'Reviewer', 'Video'] as const).map(cat => (
-                <button key={cat} onClick={() => setCategory(cat)} disabled={uploading}
+              {(['PDF', 'PPT', 'Video', 'Flipcard'] as const).map(cat => (
+                <button key={cat} onClick={() => { setCategory(cat); setMode('upload'); setFiles([]); setDriveLink(''); setError(''); }} disabled={uploading}
                   className={`p-2.5 rounded-xl border text-sm font-medium transition-all ${
                     category === cat ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-600 border-stone-200 hover:border-stone-400'
                   }`}
@@ -1384,14 +1768,18 @@ const UploadModal = ({
           {/* Upload Mode */}
           {mode === 'upload' && (
             <div>
-              <label className="block text-sm font-medium text-stone-600 mb-1">File * <span className="text-stone-400">(Max 35MB)</span></label>
-              <input ref={fileInputRef} type="file" multiple onChange={handleFileChange} className="hidden" disabled={uploading} />
+              <label className="block text-sm font-medium text-stone-600 mb-1">{category === 'Flipcard' ? 'CSV File *' : 'File *'} <span className="text-stone-400">(Max 35MB)</span></label>
+              <input ref={fileInputRef} type="file" accept={category === 'Flipcard' ? '.csv,text/csv' : undefined} multiple={category !== 'Flipcard'} onChange={handleFileChange} className="hidden" disabled={uploading} />
               <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
                 className="w-full p-4 border-2 border-dashed border-stone-300 rounded-xl text-stone-500 hover:border-stone-400 flex items-center justify-center gap-2"
               >
-                <Icon name="cloud_upload" /> Select files
+                <Icon name={category === 'Flipcard' ? 'upload_file' : 'cloud_upload'} /> {category === 'Flipcard' ? 'Select CSV file' : 'Select files'}
               </button>
-              <p className="text-xs text-stone-400 mt-1">For larger files, use <button onClick={() => setMode('link')} className="text-blue-500 underline">Paste Link</button></p>
+              <p className="text-xs text-stone-400 mt-1">
+                {category === 'Flipcard'
+                  ? 'Upload a CSV file. The app will auto-detect common question and answer headers.'
+                  : <>For larger files, use <button onClick={() => setMode('link')} className="text-blue-500 underline">Paste Link</button></>}
+              </p>
               
               {files.length > 0 && (
                 <div className="mt-2 space-y-1">
@@ -1414,16 +1802,16 @@ const UploadModal = ({
           {mode === 'link' && (
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-sm font-medium text-stone-600">Link *</label>
+                <label className="text-sm font-medium text-stone-600">{category === 'Flipcard' ? 'Google Sheets Link *' : 'Link *'}</label>
                 <button onClick={() => setShowInstructions(true)} className="text-xs text-blue-500 flex items-center gap-1">
                   <Icon name="help" className="text-sm" /> How?
                 </button>
               </div>
               <input type="url" value={driveLink} onChange={(e) => setDriveLink(e.target.value)}
-                placeholder="https://drive.google.com/..." disabled={uploading}
+                placeholder={category === 'Flipcard' ? 'https://docs.google.com/spreadsheets/...' : 'https://drive.google.com/...'} disabled={uploading}
                 className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none"
               />
-              <p className="text-xs text-stone-400 mt-1">Google Drive, Docs, Sheets, Slides, or YouTube</p>
+              <p className="text-xs text-stone-400 mt-1">{category === 'Flipcard' ? 'Paste the Google Sheets link for the flipcard set.' : category === 'Video' ? 'Google Drive or YouTube links are supported.' : 'Google Drive, Google Docs, and Google Slides links are supported.'}</p>
             </div>
           )}
 
@@ -1433,9 +1821,9 @@ const UploadModal = ({
             className="w-full py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {uploading ? (
-              <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {mode === 'link' ? 'Saving...' : 'Uploading...'}</>
+              <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {category === 'Flipcard' ? 'Adding Flipcard...' : mode === 'link' ? 'Saving...' : 'Uploading...'}</>
             ) : (
-              <><Icon name={mode === 'link' ? 'add_link' : 'cloud_upload'} /> {mode === 'link' ? 'Add Resource' : 'Upload'}</>
+              <><Icon name={category === 'Flipcard' ? 'style' : mode === 'link' ? 'add_link' : 'cloud_upload'} /> {category === 'Flipcard' ? 'Add Flipcard' : mode === 'link' ? 'Add Resource' : 'Upload'}</>
             )}
           </button>
         </div>
@@ -1552,7 +1940,9 @@ const ExamDetailModal = ({
   formatCountdown,
   formatExamDate,
   formatExamTime,
-  darkMode
+  darkMode,
+  linkedResources = [],
+  onOpenResource
 }: {
   exam: Exam | null;
   onClose: () => void;
@@ -1564,6 +1954,8 @@ const ExamDetailModal = ({
   formatExamDate: (dateStr: string) => string;
   formatExamTime: (timeStr: string) => string;
   darkMode: boolean;
+  linkedResources?: Resource[];
+  onOpenResource?: (resource: Resource) => void;
 }) => {
   if (!exam) return null;
 
@@ -1675,6 +2067,37 @@ const ExamDetailModal = ({
               <div className="flex-1">
                 <p className="text-sm text-stone-500">Notes</p>
                 <p className="text-stone-700 whitespace-pre-wrap bg-amber-50 p-3 rounded-xl mt-1 text-sm">{exam.notes}</p>
+              </div>
+            </div>
+          )}
+
+          {linkedResources.length > 0 && (
+            <div className="pt-2">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600">
+                  <Icon name="folder_special" />
+                </div>
+                <div>
+                  <p className="text-sm text-stone-500">Linked Resources</p>
+                  <p className="font-semibold text-stone-800">{linkedResources.length} item{linkedResources.length === 1 ? '' : 's'}</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {linkedResources.map(resource => (
+                  <button
+                    key={`${resource.url}-${resource.name}`}
+                    onClick={() => onOpenResource?.(resource)}
+                    className="w-full text-left p-3 rounded-xl border border-stone-200 hover:border-stone-400 hover:shadow-sm transition-all bg-white"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-stone-800 truncate">{resource.name || resource.title}</p>
+                        <p className="text-xs text-stone-500 mt-1">{resource.category}</p>
+                      </div>
+                      <span className="text-xs text-blue-600 font-medium">Open</span>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -1800,24 +2223,12 @@ const AddExamModal = ({
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-stone-700 mb-1">Category *</label>
-              <select 
+              <CustomDropdown
+                name="examType"
                 value={examType}
-                onChange={(e) => setExamType(e.target.value)}
-                className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500"
-              >
-                <option value="Activity">Activity</option>
-                <option value="Special Event">Special Event</option>
-                <option value="Meeting">Meeting</option>
-                <option value="Workshop">Workshop</option>
-                <option value="LE Deadline">LE Deadline</option>
-                <option value="Quiz">Quiz</option>
-                <option value="Midterm Exam">Midterm Exam</option>
-                <option value="Final Exam">Final Exam</option>
-                <option value="Reporting">Reporting</option>
-                <option value="Performance">Performance</option>
-                <option value="Presentation">Presentation</option>
-                <option value="Submission">Submission</option>
-              </select>
+                onChange={setExamType}
+                options={EXAM_TYPE_OPTIONS}
+              />
             </div>
             
             <div>
@@ -3695,59 +4106,56 @@ const RegistrationForm = ({
 
             <div>
               <label className="block text-sm font-medium text-stone-600 mb-1">School</label>
-              <select
+              <CustomDropdown
+                name="school"
                 value={formData.school}
-                onChange={(e) => updateField('school', e.target.value)}
-                className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white"
-              >
-                {SCHOOL_DATA.schools.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+                onChange={(nextValue) => updateField('school', nextValue)}
+                options={SCHOOL_DATA.schools.map(s => ({ value: s, label: s }))}
+              />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-stone-600 mb-1">College</label>
-              <select
+              <CustomDropdown
+                name="college"
                 value={formData.college}
-                onChange={(e) => updateField('college', e.target.value)}
-                className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white"
-              >
-                {SCHOOL_DATA.colleges.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+                onChange={(nextValue) => updateField('college', nextValue)}
+                options={SCHOOL_DATA.colleges.map(c => ({ value: c, label: c }))}
+              />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-stone-600 mb-1">Program</label>
-              <select
+              <CustomDropdown
+                name="program"
                 value={formData.program}
-                onChange={(e) => updateField('program', e.target.value)}
-                className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white"
-              >
-                {SCHOOL_DATA.programs.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
+                onChange={(nextValue) => updateField('program', nextValue)}
+                options={SCHOOL_DATA.programs.map(p => ({ value: p, label: p }))}
+              />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-stone-600 mb-1">Major *</label>
-              <select
+              <CustomDropdown
+                name="major"
                 value={formData.major}
-                onChange={(e) => updateField('major', e.target.value)}
-                className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white"
-              >
-                <option value="">Select your major</option>
-                {SCHOOL_DATA.majors.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+                onChange={(nextValue) => updateField('major', nextValue)}
+                options={[
+                  { value: '', label: 'Select your major' },
+                  ...SCHOOL_DATA.majors.map(m => ({ value: m, label: m }))
+                ]}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-stone-600 mb-1">Year Level *</label>
-                <select
-                  value={formData.year}
-                  onChange={(e) => updateField('year', parseInt(e.target.value))}
-                  className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-400 outline-none bg-white"
-                >
-                  {SCHOOL_DATA.years.map(y => <option key={y} value={y}>Year {y}</option>)}
-                </select>
+                <CustomDropdown
+                  name="year"
+                  value={String(formData.year)}
+                  onChange={(nextValue) => updateField('year', parseInt(nextValue))}
+                  options={SCHOOL_DATA.years.map(y => ({ value: String(y), label: `Year ${y}` }))}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-600 mb-1">Section *</label>
@@ -4829,6 +5237,181 @@ type Classmate = {
   createdAt: string;
 };
 
+type SemesterConfigItem = {
+  semester: string;
+  startDate: string;
+  endDate: string;
+  academicYear: string;
+  isActive: boolean;
+};
+
+type SessionBootstrapData = {
+  subjects?: string[];
+  subjectInfo?: Record<string, SubjectInfo>;
+  currentSemester?: '1st' | '2nd';
+  academicYear?: string;
+  semesterConfig?: SemesterConfigItem[];
+  semesterSubjects?: string[];
+  semesterSchedules?: ClassSchedule[];
+  courseCatalog?: Subject[];
+  classmates?: Classmate[];
+};
+
+function normalizeSubjectsPayload(subjectsPayload: any[]) {
+  const subjects = subjectsPayload
+    .map((subject: any) => typeof subject === 'string' ? subject : subject?.code)
+    .filter(Boolean);
+
+  const info = subjectsPayload.reduce((acc: Record<string, SubjectInfo>, subject: any) => {
+    if (typeof subject === 'string') {
+      acc[subject] = { code: subject, name: '' };
+      return acc;
+    }
+
+    if (subject?.code) {
+      acc[subject.code] = {
+        code: subject.code,
+        name: subject.name || ''
+      };
+    }
+
+    return acc;
+  }, {});
+
+  return { subjects, info };
+}
+
+function normalizeCourseCatalogPayload(coursesPayload: any[]) {
+  return coursesPayload.map((course: any) => ({
+    code: String(course?.code || '').trim(),
+    name: String(course?.name || '').trim()
+  }));
+}
+
+function getClassmatesCacheKey(idNumber: string) {
+  return `classmates_${idNumber}`;
+}
+
+async function prefetchSessionBootstrapData(user: User): Promise<SessionBootstrapData> {
+  const bootstrap: SessionBootstrapData = {};
+
+  try {
+    const [
+      currentSemesterResult,
+      semesterConfigResult,
+      allSubjectsResult,
+      courseCatalogResult,
+      classmatesResult
+    ] = await Promise.all([
+      postJson(CLASS_SCHEDULE_GAS_URL, { action: 'getCurrentSemester' })
+        .then(response => response.json())
+        .catch(() => null),
+      postJson(CLASS_SCHEDULE_GAS_URL, { action: 'getSemesterConfig' })
+        .then(response => response.json())
+        .catch(() => null),
+      postJson(CLASS_SCHEDULE_GAS_URL, { action: 'getSubjectsBySemester' })
+        .then(response => response.json())
+        .catch(() => null),
+      postJson(CLASS_SCHEDULE_GAS_URL, { action: 'getCourses' })
+        .then(response => response.json())
+        .catch(() => null),
+      user.section
+        ? postToAppsScript({
+            action: 'getClassmates',
+            idNumber: user.idNumber,
+            section: user.section
+          })
+            .then(response => response.json())
+            .catch(() => null)
+        : Promise.resolve(null)
+    ]);
+
+    const writeTasks: Array<Promise<void>> = [];
+
+    if (currentSemesterResult?.success && currentSemesterResult.currentSemester) {
+      bootstrap.currentSemester = currentSemesterResult.currentSemester;
+      writeTasks.push(setSecureSessionItem('currentSemester', currentSemesterResult.currentSemester));
+    }
+
+    if (currentSemesterResult?.success && currentSemesterResult.academicYear !== undefined) {
+      bootstrap.academicYear = currentSemesterResult.academicYear || '';
+      writeTasks.push(setSecureSessionItem('academicYear', bootstrap.academicYear));
+    }
+
+    if (semesterConfigResult?.success && Array.isArray(semesterConfigResult.semesters)) {
+      bootstrap.semesterConfig = semesterConfigResult.semesters;
+      writeTasks.push(setSecureSessionItem('semesterConfig', semesterConfigResult.semesters));
+    }
+
+    if (allSubjectsResult?.success && Array.isArray(allSubjectsResult.subjects)) {
+      const { subjects, info } = normalizeSubjectsPayload(allSubjectsResult.subjects);
+      bootstrap.subjects = subjects;
+      bootstrap.subjectInfo = info;
+      writeTasks.push(setSecureSessionItem('subjects', subjects));
+      writeTasks.push(setSecureSessionItem('subjectInfo', info));
+      writeTasks.push(setSecureSessionItem('schedulePage_subjects_all', subjects));
+      writeTasks.push(setSecureSessionItem('schedulePage_subjectInfo_all', info));
+    }
+
+    if (courseCatalogResult?.success && Array.isArray(courseCatalogResult.courses)) {
+      const courseCatalog = normalizeCourseCatalogPayload(courseCatalogResult.courses);
+      bootstrap.courseCatalog = courseCatalog;
+      writeTasks.push(setSecureSessionItem('schedulePage_courseCatalog', courseCatalog));
+    }
+
+    if (classmatesResult?.success && Array.isArray(classmatesResult.classmates)) {
+      bootstrap.classmates = classmatesResult.classmates;
+      writeTasks.push(setSecureSessionItem(getClassmatesCacheKey(user.idNumber), classmatesResult.classmates));
+    } else if (user.section) {
+      writeTasks.push(setSecureSessionItem(getClassmatesCacheKey(user.idNumber), []));
+    }
+
+    await Promise.all(writeTasks);
+
+    const semesterToLoad = bootstrap.currentSemester;
+    if (!semesterToLoad) {
+      return bootstrap;
+    }
+
+    const [semesterSubjectsResult, semesterSchedulesResult] = await Promise.all([
+      postJson(CLASS_SCHEDULE_GAS_URL, {
+        action: 'getSubjectsBySemester',
+        semester: semesterToLoad
+      })
+        .then(response => response.json())
+        .catch(() => null),
+      postJson(CLASS_SCHEDULE_GAS_URL, {
+        action: 'getClassSchedules',
+        semester: semesterToLoad
+      })
+        .then(response => response.json())
+        .catch(() => null)
+    ]);
+
+    const semesterWriteTasks: Array<Promise<void>> = [];
+
+    if (semesterSubjectsResult?.success && Array.isArray(semesterSubjectsResult.subjects)) {
+      const { subjects, info } = normalizeSubjectsPayload(semesterSubjectsResult.subjects);
+      bootstrap.semesterSubjects = subjects;
+      semesterWriteTasks.push(setSecureSessionItem('semesterSubjects', subjects));
+      semesterWriteTasks.push(setSecureSessionItem(`schedulePage_subjects_${semesterToLoad}`, subjects));
+      semesterWriteTasks.push(setSecureSessionItem(`schedulePage_subjectInfo_${semesterToLoad}`, info));
+    }
+
+    if (semesterSchedulesResult?.success && Array.isArray(semesterSchedulesResult.schedules)) {
+      bootstrap.semesterSchedules = semesterSchedulesResult.schedules;
+      semesterWriteTasks.push(setSecureSessionItem('semesterSchedules', semesterSchedulesResult.schedules));
+      semesterWriteTasks.push(setSecureSessionItem(`schedulePage_schedules_${semesterToLoad}`, semesterSchedulesResult.schedules));
+    }
+
+    await Promise.all(semesterWriteTasks);
+  } catch (error) {
+    console.warn('Failed to prefetch session bootstrap data:', error);
+  }
+
+  return bootstrap;
+}
+
 // Role options for admin assignment
 const ROLE_OPTIONS = [
   { value: 'student', label: 'Student' },
@@ -4856,7 +5439,7 @@ const POSITION_OPTIONS = [
 ];
 
 // Class Page Component
-const ClassPage = ({
+const ClassPage = ({ 
   user,
   onBack,
   addToast,
@@ -4873,6 +5456,7 @@ const ClassPage = ({
 }) => {
   const [classmates, setClassmates] = useState<Classmate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [selectedClassmate, setSelectedClassmate] = useState<Classmate | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -4887,27 +5471,44 @@ const ClassPage = ({
   }, [user.section]);
 
   const loadClassmates = async () => {
+    const cacheKey = getClassmatesCacheKey(user.idNumber);
+
     if (!user.section) {
+      setClassmates([]);
+      void setSecureSessionItem(cacheKey, []);
       setLoading(false);
       return;
     }
-    
-    setLoading(true);
+
+    const cachedClassmates = await getSecureSessionItem<Classmate[]>(cacheKey);
+    const hasCachedClassmates = Array.isArray(cachedClassmates);
+
+    if (cachedClassmates) {
+      setClassmates(cachedClassmates);
+    }
+
+    setLoading(!hasCachedClassmates);
+    setRefreshing(hasCachedClassmates);
+
     try {
-      const response = await fetch(GAS_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'getClassmates', idNumber: user.idNumber, section: user.section })
-      });
+      const response = await postToAppsScript({ action: 'getClassmates', idNumber: user.idNumber, section: user.section });
       const result = await response.json();
       if (result.success) {
         setClassmates(result.classmates || []);
+        void setSecureSessionItem(cacheKey, result.classmates || []);
       }
     } catch (err) {
       console.error('Failed to load classmates:', err);
       addToast('Failed to load classmates', 'error');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const handleRefreshClassmates = () => {
+    if (refreshing) return;
+    void loadClassmates();
   };
 
   const handleAssignRole = (classmate: Classmate) => {
@@ -5070,8 +5671,19 @@ const ClassPage = ({
               </button>
               <div>
                 <h1 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>My Class</h1>
-                <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>Section {user.section} • {classmates.length} classmates</p>
+                <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>
+                  {refreshing
+                    ? `Section ${user.section} • ${classmates.length} classmates • syncing...`
+                    : `Section ${user.section} • ${classmates.length} classmates`}
+                </p>
               </div>
+              <RefreshIconButton
+                onClick={handleRefreshClassmates}
+                disabled={refreshing}
+                spinning={refreshing}
+                darkMode={darkMode}
+                title="Refresh classmates"
+              />
             </div>
             
             {/* View Toggle */}
@@ -5147,9 +5759,17 @@ const ClassPage = ({
           /* Card View */
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {sortedClassmates.map(classmate => (
-              <button
+              <div
                 key={classmate.idNumber}
                 onClick={() => setSelectedClassmate(classmate)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedClassmate(classmate);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
                 className={`${darkMode ? 'bg-gray-800 border-gray-700 hover:border-gray-600' : 'bg-white border-stone-200 hover:border-stone-300'} rounded-2xl p-4 border hover:shadow-md transition-all text-left group`}
               >
                 <div className="relative">
@@ -5196,16 +5816,24 @@ const ClassPage = ({
                     <Icon name="admin_panel_settings" className="text-sm" /> Assign
                   </button>
                 )}
-              </button>
+              </div>
             ))}
           </div>
         ) : (
           /* List View */
           <div className={`${darkMode ? 'bg-gray-800 border-gray-700 divide-gray-700' : 'bg-white border-stone-200 divide-stone-100'} rounded-2xl border divide-y overflow-hidden`}>
             {sortedClassmates.map(classmate => (
-              <button
+              <div
                 key={classmate.idNumber}
                 onClick={() => setSelectedClassmate(classmate)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedClassmate(classmate);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
                 className={`w-full p-3 sm:p-4 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-50'} transition-all flex items-center gap-3 sm:gap-4 text-left group`}
               >
                 <div className="relative flex-shrink-0">
@@ -5257,7 +5885,7 @@ const ClassPage = ({
                   </button>
                 )}
                 <Icon name="chevron_right" className={`${darkMode ? 'text-gray-600' : 'text-stone-300'} text-lg sm:text-xl`} />
-              </button>
+              </div>
             ))}
           </div>
         )}
@@ -5417,29 +6045,25 @@ const ClassPage = ({
               <div className="space-y-3 sm:space-y-4">
                 <div>
                   <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1.5 sm:mb-2`}>Role</label>
-                  <select
+                  <CustomDropdown
+                    name="role"
                     value={editingRole.role}
-                    onChange={(e) => setEditingRole(prev => prev ? { ...prev, role: e.target.value } : null)}
-                    className={`w-full p-2.5 sm:p-3 border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-stone-200 bg-white'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none text-sm sm:text-base`}
-                  >
-                    {ROLE_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
+                    onChange={(nextValue) => setEditingRole(prev => prev ? { ...prev, role: nextValue } : null)}
+                    options={ROLE_OPTIONS.map(opt => ({ value: opt.value, label: opt.label }))}
+                    theme={darkMode ? 'dark' : 'light'}
+                  />
                   <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'} mt-1`}>User's access level in the system</p>
                 </div>
                 
                 <div>
                   <label className={`block text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-stone-600'} mb-1.5 sm:mb-2`}>Class Position</label>
-                  <select
+                  <CustomDropdown
+                    name="position"
                     value={editingRole.position}
-                    onChange={(e) => setEditingRole(prev => prev ? { ...prev, position: e.target.value } : null)}
-                    className={`w-full p-2.5 sm:p-3 border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-stone-200 bg-white'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none text-sm sm:text-base`}
-                  >
-                    {POSITION_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
+                    onChange={(nextValue) => setEditingRole(prev => prev ? { ...prev, position: nextValue } : null)}
+                    options={POSITION_OPTIONS.map(opt => ({ value: opt.value, label: opt.label }))}
+                    theme={darkMode ? 'dark' : 'light'}
+                  />
                   <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'} mt-1`}>Class officer position (if applicable)</p>
                 </div>
               </div>
@@ -5590,6 +6214,7 @@ const SchedulePage = ({
 }) => {
   const [schedules, setSchedules] = useState<ClassSchedule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'calendar' | 'list' | 'table'>('list');
   const [selectedSemester, setSelectedSemester] = useState<'1st' | '2nd' | ''>('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -5597,6 +6222,8 @@ const SchedulePage = ({
   const [selectedSchedule, setSelectedSchedule] = useState<ClassSchedule | null>(null);
   const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [calendarSelectedDate, setCalendarSelectedDate] = useState<Date | null>(() => new Date());
+  const [calendarDetailDate, setCalendarDetailDate] = useState<Date | null>(null);
   const [showSemesterConfig, setShowSemesterConfig] = useState(false);
   const [isCreatingNewCourse, setIsCreatingNewCourse] = useState(false);
   const [newCourseCode, setNewCourseCode] = useState('');
@@ -5755,13 +6382,17 @@ const SchedulePage = ({
 
   // Fetch schedules from backend
   const fetchSchedules = async () => {
-    setLoading(true);
     const cacheKey = `schedulePage_schedules_${selectedSemester || 'all'}`;
 
     const cachedSchedules = await getSecureSessionItem<ClassSchedule[]>(cacheKey);
+    const hasCachedSchedules = Array.isArray(cachedSchedules);
+
     if (cachedSchedules) {
       setSchedules(cachedSchedules);
     }
+
+    setLoading(!hasCachedSchedules);
+    setRefreshing(hasCachedSchedules);
 
     try {
       const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
@@ -5779,7 +6410,20 @@ const SchedulePage = ({
       console.error('Error fetching schedules:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const handleRefreshSchedules = () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    void Promise.all([
+      fetchSchedules(),
+      fetchScheduleSubjects(),
+      fetchCourseCatalog()
+    ]).finally(() => {
+      setRefreshing(false);
+    });
   };
 
   const fetchScheduleSubjects = async (semester: '1st' | '2nd' | '' = selectedSemester) => {
@@ -6433,6 +7077,7 @@ const SchedulePage = ({
   const month = monthStart.getMonth();
   const startDay = monthStart.getDay();
   const todayKey = toDateKey(new Date());
+  const selectedKey = calendarSelectedDate ? toDateKey(calendarSelectedDate) : null;
 
   const gridDays = Array.from({ length: 42 }, (_, idx) => {
     const date = new Date(year, month, idx - startDay + 1);
@@ -6466,6 +7111,35 @@ const SchedulePage = ({
     });
   });
 
+  const selectedDaySchedules = selectedKey ? [...(calendarEvents[selectedKey] || [])].sort((a, b) => {
+    const startDelta = a.startTime.localeCompare(b.startTime);
+    if (startDelta !== 0) return startDelta;
+    const endDelta = a.endTime.localeCompare(b.endTime);
+    if (endDelta !== 0) return endDelta;
+    return a.courseCode.localeCompare(b.courseCode);
+  }) : [];
+
+  const detailSchedules = calendarDetailDate ? [...(calendarEvents[toDateKey(calendarDetailDate)] || [])].sort((a, b) => {
+    const startDelta = a.startTime.localeCompare(b.startTime);
+    if (startDelta !== 0) return startDelta;
+    const endDelta = a.endTime.localeCompare(b.endTime);
+    if (endDelta !== 0) return endDelta;
+    return a.courseCode.localeCompare(b.courseCode);
+  }) : [];
+
+  const detailLabel = calendarDetailDate
+    ? calendarDetailDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+    : '';
+
+  const selectedLabel = selectedKey
+    ? new Date(selectedKey).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+    : 'Selected day';
+
+  const handleScheduleDaySelect = (date: Date) => {
+    setCalendarSelectedDate(date);
+    setCalendarDetailDate(date);
+  };
+
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-stone-900' : 'bg-stone-50'}`}>
       {/* Header */}
@@ -6479,10 +7153,19 @@ const SchedulePage = ({
               </button>
               <div className="min-w-0">
                 <h1 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'} text-base truncate`}>Class Schedule</h1>
-                <p className={`text-xs ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>{schedules.length} schedules</p>
+                <p className={`text-xs ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>
+                  {refreshing ? `${schedules.length} schedules • syncing...` : `${schedules.length} schedules`}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <RefreshIconButton
+                onClick={handleRefreshSchedules}
+                disabled={refreshing}
+                spinning={refreshing}
+                darkMode={darkMode}
+                title="Refresh schedules"
+              />
               {canManage && (
                 <button
                   onClick={() => setShowAddModal(true)}
@@ -6502,20 +7185,32 @@ const SchedulePage = ({
               </button>
               <div>
                 <h1 className="text-xl font-bold text-stone-800">Class Schedule</h1>
-                <p className="text-xs text-stone-500">{schedules.length} total schedules</p>
+                <p className="text-xs text-stone-500">
+                  {refreshing ? `${schedules.length} total schedules • syncing...` : `${schedules.length} total schedules`}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <RefreshIconButton
+                onClick={handleRefreshSchedules}
+                disabled={refreshing}
+                spinning={refreshing}
+                title="Refresh schedules"
+              />
               {/* Semester Filter */}
-              <select
-                value={selectedSemester}
-                onChange={(e) => setSelectedSemester(e.target.value as '1st' | '2nd' | '')}
-                className="px-3 py-2 border border-stone-200 rounded-xl text-sm bg-white"
-              >
-                <option value="">All Semesters</option>
-                <option value="1st">1st Semester</option>
-                <option value="2nd">2nd Semester</option>
-              </select>
+              <div className="min-w-[11rem]">
+                <CustomDropdown
+                  name="selectedSemester"
+                  value={selectedSemester}
+                  onChange={(nextValue) => setSelectedSemester(nextValue as '1st' | '2nd' | '')}
+                  options={[
+                    { value: '', label: 'All Semesters' },
+                    { value: '1st', label: '1st Semester' },
+                    { value: '2nd', label: '2nd Semester' }
+                  ]}
+                  size="compact"
+                />
+              </div>
               {canManageSemestral && (
                 <button
                   onClick={() => setShowSemesterConfig(true)}
@@ -6818,14 +7513,24 @@ const SchedulePage = ({
                     const key = toDateKey(date);
                     const events = calendarEvents[key] || [];
                     const isToday = key === todayKey;
+                    const isSelected = key === selectedKey;
                     
                     return (
                         <div
                           key={idx}
-                          className={`min-h-[80px] sm:min-h-[100px] p-1 border-b border-r border-stone-100 ${
-                            !inMonth ? 'bg-stone-50' : 'bg-white'
-                          }`}
-                      >
+                          onClick={() => handleScheduleDaySelect(date)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              handleScheduleDaySelect(date);
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          className={`min-h-[80px] sm:min-h-[100px] p-1 border-b border-r border-stone-100 text-left transition-colors ${
+                            !inMonth ? 'bg-stone-50' : 'bg-white hover:bg-stone-50'
+                          } ${isSelected ? 'ring-2 ring-purple-300 ring-inset' : ''}`}
+                        >
                           <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${
                             isToday ? 'bg-purple-600 text-white' : !inMonth ? 'text-stone-300' : 'text-stone-600'
                           }`}>
@@ -6835,7 +7540,10 @@ const SchedulePage = ({
                             {events.map((event, i) => (
                               <button
                                 key={event.scheduleId + '-' + i}
-                                onClick={() => setSelectedSchedule(event)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedSchedule(event);
+                                }}
                                 className={`w-full text-left px-1 py-0.5 text-xs rounded truncate ${
                                 event.type === 'semestral' ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' :
                                 event.type === 'makeup' ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' :
@@ -6850,6 +7558,47 @@ const SchedulePage = ({
                         </div>
                       );
                     })}
+                </div>
+
+                <div className="p-4 border-t border-stone-200 bg-white">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="min-w-0">
+                      <p className="text-xs text-stone-400">Schedules</p>
+                      <h4 className="font-semibold text-stone-800 truncate">{selectedLabel}</h4>
+                    </div>
+                    <span className="text-xs text-stone-500">{selectedDaySchedules.length} items</span>
+                  </div>
+                  {selectedDaySchedules.length === 0 ? (
+                    <p className="text-sm text-stone-500">No schedules for this day.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedDaySchedules.map(schedule => (
+                        <button
+                          key={schedule.scheduleId}
+                          type="button"
+                          onClick={() => setSelectedSchedule(schedule)}
+                          className="w-full text-left p-3 border border-stone-200 rounded-xl hover:border-purple-300 hover:shadow-sm transition-all bg-white"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-semibold text-stone-800">{schedule.courseCode}</span>
+                                <span className={`px-2 py-0.5 text-[11px] rounded-full font-medium capitalize ${getScheduleTypeColor(schedule.type)}`}>
+                                  {schedule.type}
+                                </span>
+                              </div>
+                              {schedule.courseName && <p className="text-sm text-stone-500">{schedule.courseName}</p>}
+                              <p className="text-xs text-stone-500 mt-1">
+                                {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
+                                {schedule.classroom ? ` • ${schedule.classroom}` : ''}
+                              </p>
+                            </div>
+                            <Icon name="chevron_right" className="text-stone-400" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Legend */}
@@ -7237,27 +7986,24 @@ const SchedulePage = ({
                 {/* Schedule Type */}
                 <div>
                   <label className="block text-sm font-medium text-stone-700 mb-1">Schedule Type *</label>
-                  <select 
-                    name="type" 
-                    required 
-                    defaultValue={editingSchedule?.type || (canManageSemestral ? 'semestral' : 'activity')}
-                    onChange={(e) => {
-                      const nextType = e.target.value;
+                  <CustomDropdown
+                    name="type"
+                    required
+                    value={scheduleFormType}
+                    onChange={(nextType) => {
                       setScheduleFormType(nextType);
                       if (nextType !== 'semestral') {
                         setIncludeAdditionalMeetings(false);
                         setAdditionalMeetings([]);
                       }
                     }}
-                    className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    {canManageSemestral && (
-                      <option value="semestral">Semestral (Permanent)</option>
-                    )}
-                    <option value="makeup">Make-up Class</option>
-                    <option value="activity">Activity</option>
-                    <option value="special">Special Event</option>
-                  </select>
+                    options={[
+                      ...(canManageSemestral ? [{ value: 'semestral', label: 'Semestral (Permanent)' }] : []),
+                      { value: 'makeup', label: 'Make-up Class' },
+                      { value: 'activity', label: 'Activity' },
+                      { value: 'special', label: 'Special Event' }
+                    ]}
+                  />
                   <p className="text-xs text-stone-400 mt-1">
                     {canManageSemestral 
                       ? 'Semestral schedules are recurring weekly classes' 
@@ -7269,14 +8015,14 @@ const SchedulePage = ({
                 {canManageSemestral && (
                   <div>
                     <label className="block text-sm font-medium text-stone-700 mb-1">Semester</label>
-                    <select 
+                    <CustomDropdown
                       name="semester"
                       defaultValue={editingSchedule?.semester || '1st'}
-                      className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    >
-                      <option value="1st">1st Semester</option>
-                      <option value="2nd">2nd Semester</option>
-                    </select>
+                      options={[
+                        { value: '1st', label: '1st Semester' },
+                        { value: '2nd', label: '2nd Semester' }
+                      ]}
+                    />
                   </div>
                 )}
 
@@ -7285,8 +8031,28 @@ const SchedulePage = ({
                   <label className="block text-sm font-medium text-stone-700 mb-1">Course Code *</label>
                   {!isCreatingNewCourse ? (
                     <>
+                      <CustomDropdown
+                        name="courseCode"
+                        required={!isCreatingNewCourse}
+                        defaultValue={editingSchedule?.courseCode || ''}
+                        onChange={(nextValue) => {
+                          if (nextValue === '__CREATE_NEW__') {
+                            setIsCreatingNewCourse(true);
+                          }
+                        }}
+                        options={[
+                          { value: '', label: 'Select a course' },
+                          { value: '__CREATE_NEW__', label: 'Create New Course...' },
+                          ...scheduleSubjects.map(s => ({
+                            value: s,
+                            label: s,
+                            description: scheduleSubjectInfo[s]?.name || undefined
+                          }))
+                        ]}
+                      />
                       <select 
-                        name="courseCode" 
+                        disabled
+                        name="legacyCourseCode" 
                         required={!isCreatingNewCourse}
                         defaultValue={editingSchedule?.courseCode || ''}
                         onChange={(e) => {
@@ -7295,7 +8061,7 @@ const SchedulePage = ({
                             e.target.value = '';
                           }
                         }}
-                        className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className="hidden"
                       >
                         <option value="">Select a course</option>
                         <option value="__CREATE_NEW__" className="text-purple-600 font-medium">➕ Create New Course...</option>
@@ -7393,20 +8159,14 @@ const SchedulePage = ({
                 {/* Day of Week (for semestral) */}
                 <div>
                   <label className="block text-sm font-medium text-stone-700 mb-1">Day of Week (for Semestral)</label>
-                  <select 
+                  <CustomDropdown
                     name="dayOfWeek"
                     defaultValue={editingSchedule?.dayOfWeek || ''}
-                    className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="">Select day (required for semestral)</option>
-                    <option value="Monday">Monday</option>
-                    <option value="Tuesday">Tuesday</option>
-                    <option value="Wednesday">Wednesday</option>
-                    <option value="Thursday">Thursday</option>
-                    <option value="Friday">Friday</option>
-                    <option value="Saturday">Saturday</option>
-                    <option value="Sunday">Sunday</option>
-                  </select>
+                    options={[
+                      { value: '', label: 'Select day (required for semestral)' },
+                      ...DAY_OF_WEEK_OPTIONS
+                    ]}
+                  />
                 </div>
 
                 {!editingSchedule && scheduleFormType === 'semestral' && (
@@ -7446,20 +8206,15 @@ const SchedulePage = ({
                                 Remove
                               </button>
                             </div>
-                            <select
+                            <CustomDropdown
+                              name={`additionalMeetingDay-${meeting.id}`}
                               value={meeting.dayOfWeek}
-                              onChange={(e) => setAdditionalMeetings(current => current.map(item => item.id === meeting.id ? { ...item, dayOfWeek: e.target.value } : item))}
-                              className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-                            >
-                              <option value="">Select day</option>
-                              <option value="Monday">Monday</option>
-                              <option value="Tuesday">Tuesday</option>
-                              <option value="Wednesday">Wednesday</option>
-                              <option value="Thursday">Thursday</option>
-                              <option value="Friday">Friday</option>
-                              <option value="Saturday">Saturday</option>
-                              <option value="Sunday">Sunday</option>
-                            </select>
+                              onChange={(nextValue) => setAdditionalMeetings(current => current.map(item => item.id === meeting.id ? { ...item, dayOfWeek: nextValue } : item))}
+                              options={[
+                                { value: '', label: 'Select day' },
+                                ...DAY_OF_WEEK_OPTIONS
+                              ]}
+                            />
                             <div className="grid grid-cols-2 gap-3">
                               <input
                                 type="time"
@@ -7679,6 +8434,64 @@ const SchedulePage = ({
         </div>
       )}
 
+      {calendarDetailDate && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setCalendarDetailDate(null)}>
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl`} onClick={e => e.stopPropagation()}>
+            <div className={`p-4 border-b ${darkMode ? 'border-gray-700' : 'border-stone-200'} flex items-start justify-between gap-3`}>
+              <div>
+                <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Selected date</p>
+                <h3 className={`font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{detailLabel}</h3>
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{detailSchedules.length} scheduled</p>
+              </div>
+              <button onClick={() => setCalendarDetailDate(null)} className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-full`}>
+                <Icon name="close" className={darkMode ? 'text-gray-400' : 'text-stone-500'} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-2">
+              {detailSchedules.length === 0 && (
+                <div className={`text-center ${darkMode ? 'text-gray-400' : 'text-stone-500'} py-8`}>
+                  <Icon name="event" className={`text-3xl ${darkMode ? 'text-gray-600' : 'text-stone-300'} mb-2`} />
+                  <p>No schedules for this date.</p>
+                </div>
+              )}
+
+              {detailSchedules.map((schedule) => (
+                <button
+                  key={schedule.scheduleId}
+                  onClick={() => { setSelectedSchedule(schedule); setCalendarDetailDate(null); }}
+                  className={`w-full text-left p-3 rounded-xl border ${darkMode ? 'border-gray-700 bg-gray-800 hover:border-gray-500' : 'border-stone-200 bg-white hover:border-stone-400'} hover:shadow-sm transition-all flex items-start gap-3`}
+                >
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${getScheduleTypeColor(schedule.type)}`}>
+                    <Icon name={getScheduleTypeIcon(schedule.type)} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`font-semibold line-clamp-1 ${darkMode ? 'text-white' : 'text-stone-800'}`}>{schedule.courseCode}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${getScheduleTypeColor(schedule.type)}`}>
+                        {schedule.type}
+                      </span>
+                    </div>
+                    {schedule.courseName && <p className={`text-xs line-clamp-1 ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{schedule.courseName}</p>}
+                    <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}</p>
+                    {schedule.classroom && <p className={`text-[11px] ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Room: {schedule.classroom}</p>}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className={`p-4 border-t flex justify-end ${darkMode ? 'border-gray-700' : 'border-stone-200'}`}>
+              <button
+                onClick={() => setCalendarDetailDate(null)}
+                className={`px-4 py-2 rounded-xl font-medium transition-colors ${darkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'}`}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {scheduleToDelete && (
         <ConfirmModal
@@ -7705,8 +8518,8 @@ const LoginModal = ({
   darkMode
 }: { 
   isOpen: boolean; 
-  onClose: () => void; 
-  onLogin: (user: User) => void;
+  onClose: () => void;
+  onLogin: (user: User) => Promise<void> | void;
   addToast: (message: string, type: Toast['type'], progress?: number) => number;
   updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
   removeToast: (id: number) => void;
@@ -7751,7 +8564,8 @@ const LoginModal = ({
           profilePicture: result.user.profilePictureURL
         };
         localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
-        onLogin(user);
+        updateToast(toastId, 'Preparing your data...', 'loading');
+        await onLogin(user);
         updateToast(toastId, `Welcome back, ${user.name}!`, 'success');
         setTimeout(() => removeToast(toastId), 3000);
         onClose();
@@ -8071,6 +8885,7 @@ export const App = ({ routeRole }: AppProps) => {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [categories, setCategories] = useState<Record<string, CategoryItem[]>>({});
   const [resources, setResources] = useState<Record<string, Resource[]>>({});
+  const [isResourcesRefreshing, setIsResourcesRefreshing] = useState(false);
   const [apiSubjects, setApiSubjects] = useState<string[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [isObligationsLoading, setIsObligationsLoading] = useState(false);
@@ -8087,10 +8902,11 @@ export const App = ({ routeRole }: AppProps) => {
   const [currentSemester, setCurrentSemester] = useState<'1st' | '2nd'>('1st');
   const [selectedSemesterView, setSelectedSemesterView] = useState<'1st' | '2nd' | null>(null); // Manual override
   const [academicYear, setAcademicYear] = useState<string>('');
-  const [semesterConfig, setSemesterConfig] = useState<Array<{ semester: string; startDate: string; endDate: string; academicYear: string; isActive: boolean }>>([]);
+  const [semesterConfig, setSemesterConfig] = useState<SemesterConfigItem[]>([]);
   const [semesterSubjects, setSemesterSubjects] = useState<string[]>([]); // Subjects filtered by semester
   const [semesterSchedules, setSemesterSchedules] = useState<ClassSchedule[]>([]);
   const [isSemesterSubjectsLoading, setIsSemesterSubjectsLoading] = useState(false);
+  const [isSemesterSubjectsRefreshing, setIsSemesterSubjectsRefreshing] = useState(false);
   const [homeResourceTab, setHomeResourceTab] = useState<'subjects' | 'resources'>('subjects'); // Tab for home resources card
   const [resourcePageTab, setResourcePageTab] = useState<'subjects' | 'resources'>('subjects'); // Tab for ALL_RESOURCES page
   
@@ -8252,6 +9068,10 @@ export const App = ({ routeRole }: AppProps) => {
   }, [activeTab]);
 
   useEffect(() => {
+    if (loading) {
+      return;
+    }
+
     const currentPage = normalizePageKey(syncedUrlPage);
 
     if (!user && AUTH_REQUIRED_PAGES.has(currentPage)) {
@@ -8276,7 +9096,7 @@ export const App = ({ routeRole }: AppProps) => {
         { replace: true }
       );
     }
-  }, [mapToPage, navigate, routeRole, syncedUrlPage, user]);
+  }, [loading, mapToPage, navigate, routeRole, syncedUrlPage, user]);
 
   useEffect(() => {
     const expectedRole = deriveRouteRoleForUser(user);
@@ -8334,23 +9154,49 @@ export const App = ({ routeRole }: AppProps) => {
   const [isFlipped, setIsFlipped] = useState(false);
   const [scores, setScores] = useState<Record<string, 'correct' | 'incorrect'>>({});
   const [sessionStartTime, setSessionStartTime] = useState<number>(0);
+  const [sessionStartedAtIso, setSessionStartedAtIso] = useState('');
+  const [currentCardStartedAt, setCurrentCardStartedAt] = useState<number>(0);
+  const [cardSessionSummaries, setCardSessionSummaries] = useState<Record<string, CardSessionSummary>>({});
+  const [sessionActionBusy, setSessionActionBusy] = useState(false);
+  const [clearProgressBusy, setClearProgressBusy] = useState(false);
   const [playMode, setPlayMode] = useState<'shuffle' | 'chronological'>('shuffle');
   const [showContinueModal, setShowContinueModal] = useState(false);
   const [savedProgress, setSavedProgress] = useState<DeckProgress | null>(null);
+  const [, setProgressVersion] = useState(0);
+  const lastSavedStudySessionIdRef = useRef('');
 
   // Analytics State
   const [userAnalytics, setUserAnalytics] = useState<any>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [refreshingAnalytics, setRefreshingAnalytics] = useState(false);
 
   // ALL_RESOURCES View Filter States (must be at top level for hooks rules)
   const [resourceSearchQuery, setResourceSearchQuery] = useState('');
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('');
+  const [selectedObligationFilter, setSelectedObligationFilter] = useState<string>('');
+  const [resourceLinks, setResourceLinks] = useState<ResourceLink[]>([]);
 
   // --- Initialization ---
 
+  const canUserDeleteResource = (submittedBy?: string) => {
+    if (!user) return false;
+    if (submittedBy && submittedBy === user.idNumber) return true;
+
+    const normalizedRole = String(user.role || '').trim().toLowerCase();
+    const normalizedPosition = String(user.position || '').trim().toLowerCase();
+
+    return normalizedRole === 'admin' ||
+      normalizedRole === 'superadmin' ||
+      normalizedPosition === 'mayor' ||
+      normalizedPosition === 'vice mayor' ||
+      normalizedPosition === 'internal public information officer';
+  };
+
   useEffect(() => {
     const initApp = async () => {
+      clearLegacyMetadataCache();
+
       // Load user from storage
       const savedUser = localStorage.getItem(STORAGE_KEY_USER);
       let parsedUser: User | null = null;
@@ -8392,6 +9238,11 @@ export const App = ({ routeRole }: AppProps) => {
       // Load cached data
       const cachedDecks = await db.decks.toArray();
       setDecks(cachedDecks);
+
+      // Legacy category cache duplicates derived deck metadata and is no longer used.
+      void db.categories.clear().catch((error) => {
+        console.warn('Failed to clear legacy category cache:', error);
+      });
       
       // Load cached subjects
       const cachedSubjects = await getSecureSessionItem<string[]>('subjects');
@@ -8406,7 +9257,7 @@ export const App = ({ routeRole }: AppProps) => {
       }
       
       // Load cached exams
-      const cachedExams = localStorage.getItem('cumlaude_obligations') || localStorage.getItem('cumlaude_exams');
+      const cachedExams = localStorage.getItem('cumlaude_obligations');
       if (cachedExams) {
         try {
           setExams(JSON.parse(cachedExams));
@@ -8424,22 +9275,35 @@ export const App = ({ routeRole }: AppProps) => {
       if (cachedAcademicYear) {
         setAcademicYear(cachedAcademicYear);
       }
-      const cachedSemesterConfig = await getSecureSessionItem<Array<{ semester: string; startDate: string; endDate: string; academicYear: string; isActive: boolean }>>('semesterConfig');
+      const cachedSemesterConfig = await getSecureSessionItem<SemesterConfigItem[]>('semesterConfig');
       if (cachedSemesterConfig) {
         setSemesterConfig(cachedSemesterConfig);
-      }
-      const cachedSemesterSubjects = await getSecureSessionItem<string[]>('semesterSubjects');
-      if (cachedSemesterSubjects) {
-        setSemesterSubjects(cachedSemesterSubjects);
-      }
-      const cachedSemesterSchedules = await getSecureSessionItem<ClassSchedule[]>('semesterSchedules');
-      if (cachedSemesterSchedules) {
-        setSemesterSchedules(cachedSemesterSchedules);
       }
       // Load cached semester view selection (manual override)
       const cachedSelectedSemesterView = localStorage.getItem('cumlaude_selectedSemesterView');
       if (cachedSelectedSemesterView) {
         setSelectedSemesterView(cachedSelectedSemesterView as '1st' | '2nd');
+      }
+      const initialSemesterView = (cachedSelectedSemesterView as '1st' | '2nd' | null) || cachedCurrentSemester || '1st';
+      const [cachedSemesterSubjects, cachedSemesterSchedules] = await Promise.all([
+        getSecureSessionItem<string[]>(getHomeSemesterSubjectsCacheKey(initialSemesterView)),
+        getSecureSessionItem<ClassSchedule[]>(getHomeSemesterSchedulesCacheKey(initialSemesterView))
+      ]);
+      if (cachedSemesterSubjects) {
+        setSemesterSubjects(cachedSemesterSubjects);
+      } else {
+        const legacySemesterSubjects = await getSecureSessionItem<string[]>('semesterSubjects');
+        if (legacySemesterSubjects) {
+          setSemesterSubjects(legacySemesterSubjects);
+        }
+      }
+      if (cachedSemesterSchedules) {
+        setSemesterSchedules(cachedSemesterSchedules);
+      } else {
+        const legacySemesterSchedules = await getSecureSessionItem<ClassSchedule[]>('semesterSchedules');
+        if (legacySemesterSchedules) {
+          setSemesterSchedules(legacySemesterSchedules);
+        }
       }
       
       // Load cached resources
@@ -8461,10 +9325,9 @@ export const App = ({ routeRole }: AppProps) => {
       
       setLoading(false);
 
-      // Note: Flashcard sync is disabled during migration to 1SF Directory
-      // The 1SF Directory API only supports authentication endpoints
-      // Flashcard functionality will be re-enabled when backend is ready
-      console.log('App initialized - 1SF Directory mode (flashcard sync disabled)');
+      if (navigator.onLine) {
+        void syncData(false);
+      }
     };
 
     initApp();
@@ -8530,7 +9393,7 @@ export const App = ({ routeRole }: AppProps) => {
     }
   };
 
-  const fetchBackendSemesterSubjects = async (semester: '1st' | '2nd') => {
+  const fetchBackendSemesterSubjects = async (semester: '1st' | '2nd', requestId?: number) => {
     try {
       const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
         method: 'POST',
@@ -8540,13 +9403,20 @@ export const App = ({ routeRole }: AppProps) => {
         })
       });
       const data = await response.json();
+      const isCurrentRequest = requestId === undefined || semesterLoadRequestRef.current === requestId;
 
       if (data.success && Array.isArray(data.subjects)) {
         const subjectCodes = data.subjects.map((s: any) => typeof s === 'string' ? s : s.code);
-        setSemesterSubjects(subjectCodes);
+        if (isCurrentRequest) {
+          setSemesterSubjects(subjectCodes);
+        }
+        void setSecureSessionItem(getHomeSemesterSubjectsCacheKey(semester), subjectCodes);
         void setSecureSessionItem('semesterSubjects', subjectCodes);
       } else {
-        setSemesterSubjects([]);
+        if (isCurrentRequest) {
+          setSemesterSubjects([]);
+        }
+        void setSecureSessionItem(getHomeSemesterSubjectsCacheKey(semester), []);
         void setSecureSessionItem('semesterSubjects', []);
       }
     } catch (error) {
@@ -8554,7 +9424,7 @@ export const App = ({ routeRole }: AppProps) => {
     }
   };
 
-  const fetchBackendSemesterSchedules = async (semester: '1st' | '2nd') => {
+  const fetchBackendSemesterSchedules = async (semester: '1st' | '2nd', requestId?: number) => {
     try {
       const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
         method: 'POST',
@@ -8564,12 +9434,19 @@ export const App = ({ routeRole }: AppProps) => {
         })
       });
       const data = await response.json();
+      const isCurrentRequest = requestId === undefined || semesterLoadRequestRef.current === requestId;
 
       if (data.success && Array.isArray(data.schedules)) {
-        setSemesterSchedules(data.schedules);
+        if (isCurrentRequest) {
+          setSemesterSchedules(data.schedules);
+        }
+        void setSecureSessionItem(getHomeSemesterSchedulesCacheKey(semester), data.schedules);
         void setSecureSessionItem('semesterSchedules', data.schedules);
       } else {
-        setSemesterSchedules([]);
+        if (isCurrentRequest) {
+          setSemesterSchedules([]);
+        }
+        void setSecureSessionItem(getHomeSemesterSchedulesCacheKey(semester), []);
         void setSecureSessionItem('semesterSchedules', []);
       }
     } catch (error) {
@@ -8616,23 +9493,44 @@ export const App = ({ routeRole }: AppProps) => {
 
   const loadSemesterSubjectsView = async (semester: '1st' | '2nd') => {
     const requestId = ++semesterLoadRequestRef.current;
+    const [cachedSubjects, cachedSchedules] = await Promise.all([
+      getSecureSessionItem<string[]>(getHomeSemesterSubjectsCacheKey(semester)),
+      getSecureSessionItem<ClassSchedule[]>(getHomeSemesterSchedulesCacheKey(semester))
+    ]);
+    const hasCachedSemesterData = Array.isArray(cachedSubjects) || Array.isArray(cachedSchedules);
+
+    if (requestId !== semesterLoadRequestRef.current) {
+      return;
+    }
+
+    if (Array.isArray(cachedSubjects)) {
+      setSemesterSubjects(cachedSubjects);
+    }
+    if (Array.isArray(cachedSchedules)) {
+      setSemesterSchedules(cachedSchedules);
+    }
+
     const startedAt = Date.now();
-    setIsSemesterSubjectsLoading(true);
+    setIsSemesterSubjectsLoading(!hasCachedSemesterData);
+    setIsSemesterSubjectsRefreshing(true);
 
     try {
       await Promise.all([
-        fetchBackendSemesterSubjects(semester),
-        fetchBackendSemesterSchedules(semester)
+        fetchBackendSemesterSubjects(semester, requestId),
+        fetchBackendSemesterSchedules(semester, requestId)
       ]);
     } finally {
-      const elapsed = Date.now() - startedAt;
-      const minSkeletonTime = 180;
-      if (elapsed < minSkeletonTime) {
-        await new Promise(resolve => setTimeout(resolve, minSkeletonTime - elapsed));
+      if (!hasCachedSemesterData) {
+        const elapsed = Date.now() - startedAt;
+        const minSkeletonTime = 180;
+        if (elapsed < minSkeletonTime) {
+          await new Promise(resolve => setTimeout(resolve, minSkeletonTime - elapsed));
+        }
       }
 
       if (semesterLoadRequestRef.current === requestId) {
         setIsSemesterSubjectsLoading(false);
+        setIsSemesterSubjectsRefreshing(false);
       }
     }
   };
@@ -8897,18 +9795,6 @@ export const App = ({ routeRole }: AppProps) => {
   };
 
   const syncData = async (showToast = true, userIdOverride?: string) => {
-    // DISABLED: Flashcard sync is disabled during migration to 1SF Directory
-    // The 1SF Directory API only supports authentication endpoints (login, register, OTP)
-    // This function will be re-implemented when flashcard backend is ready
-    console.log('syncData called but disabled - 1SF Directory mode');
-    
-    if (showToast) {
-      const toastId = addToast('1SF Directory mode - flashcard sync disabled', 'info');
-      setTimeout(() => removeToast(toastId), 3000);
-    }
-    return;
-    
-    /* ORIGINAL SYNC CODE - DISABLED
     let toastId: number | null = null;
     
     if (showToast) {
@@ -8921,19 +9807,21 @@ export const App = ({ routeRole }: AppProps) => {
       // Include userId to check server-side announcement dismissals
       // Use override if provided (for initial load when state isn't set yet)
       const userId = userIdOverride || user?.idNumber;
-      const userIdParam = userId ? `&userId=${encodeURIComponent(userId)}` : '';
-      const requestUrl = `${GAS_URL}?action=getAll${userIdParam}`;
-      
-      const response = await fetch(requestUrl, {
-        redirect: 'follow'
+      const response = await getJson(RESOURCE_GAS_URL, {
+        action: 'getAll',
+        userId
       });
       
       if (toastId) updateToast(toastId, 'Fetching flashcards...', 'loading', 40);
       
+      if (!response.ok) {
+        throw new Error(`Resource sync request failed with status ${response.status}`);
+      }
+
       const data = await response.json();
 
       if (data.error) {
-        console.error('Sync error:', data.error, '| Request URL:', requestUrl);
+        console.error('Sync error:', data.error, '| Resource URL:', RESOURCE_GAS_URL);
         if (toastId) {
           updateToast(toastId, `Sync error: ${data.error}`, 'error');
           setTimeout(() => removeToast(toastId!), 4000);
@@ -8941,30 +9829,21 @@ export const App = ({ routeRole }: AppProps) => {
         return;
       }
 
-      // Check cache version - if server version is higher, clear all cache
-      if (data.cacheVersion) {
-        const localVersion = parseInt(localStorage.getItem(STORAGE_KEY_CACHE_VERSION) || '0');
-        if (data.cacheVersion > localVersion) {
-          console.log(`Cache version changed: ${localVersion} -> ${data.cacheVersion}. Clearing cache...`);
-          if (toastId) updateToast(toastId, 'New version detected, updating cache...', 'loading', 45);
-          await clearAllLocalCache();
-          localStorage.setItem(STORAGE_KEY_CACHE_VERSION, String(data.cacheVersion));
-        }
-      }
-
       if (toastId) updateToast(toastId, 'Processing flashcards...', 'loading', 50);
 
       // Process decks - format: { displayName: { sheetName, subject, cards } }
       if (data.decks) {
+        await db.decks.clear();
         const parsedDecks: Deck[] = Object.entries(data.decks).map(([displayName, deckData]: [string, any]) => ({
           name: displayName,
+          fileId: deckData.fileId || displayName,
           sheetName: deckData.sheetName || displayName,
           subject: deckData.subject || 'Uncategorized',
-          cards: deckData.cards.map((c: any, idx: number) => ({
-            id: `${displayName}-${idx}`,
-            q: c.q || '',
-            a: c.a || ''
-          }))
+          url: deckData.url || '',
+          submittedBy: deckData.submittedBy || '',
+          submittedByName: deckData.submittedByName || '',
+          timestamp: deckData.timestamp || '',
+          cards: buildDeckCards(deckData.fileId || displayName, deckData.cards || [])
         }));
         await db.decks.bulkPut(parsedDecks);
         setDecks(parsedDecks);
@@ -8974,6 +9853,7 @@ export const App = ({ routeRole }: AppProps) => {
 
       // Process categories (auto-generated from deck subjects)
       if (data.categories) {
+        await db.categories.clear();
         setCategories(data.categories);
         for (const [subject, items] of Object.entries(data.categories)) {
           await db.categories.put({ subject, items: items as CategoryItem[] });
@@ -8984,79 +9864,32 @@ export const App = ({ routeRole }: AppProps) => {
 
       // Process resources
       if (data.resources) {
+        await db.resources.clear();
         setResources(data.resources);
         for (const [subject, items] of Object.entries(data.resources)) {
           await db.resources.put({ subject, items: items as Resource[] });
         }
       }
 
+      if (Array.isArray(data.resourceLinks)) {
+        setResourceLinks(data.resourceLinks as ResourceLink[]);
+      } else {
+        setResourceLinks([]);
+      }
+
       if (toastId) updateToast(toastId, 'Loading exam schedule...', 'loading', 90);
 
       // Process subjects from Category sheet (now with code and name)
       if (data.subjects && Array.isArray(data.subjects)) {
-        setApiSubjects(data.subjects.map((s: any) => typeof s === 'string' ? s : s.code));
-        localStorage.setItem('cumlaude_subjects', JSON.stringify(data.subjects.map((s: any) => typeof s === 'string' ? s : s.code)));
+        const subjects = data.subjects.map((s: any) => typeof s === 'string' ? s : s.code);
+        setApiSubjects(subjects);
+        void setSecureSessionItem('subjects', subjects);
       }
       
       // Process subject info (code to name mapping)
       if (data.subjectInfo && typeof data.subjectInfo === 'object') {
         setSubjectInfo(data.subjectInfo);
-        localStorage.setItem('cumlaude_subjectInfo', JSON.stringify(data.subjectInfo));
-      }
-      
-      // Process exams
-      if (data.exams && Array.isArray(data.exams)) {
-        setExams(data.exams);
-        localStorage.setItem('cumlaude_exams', JSON.stringify(data.exams));
-      }
-
-      // Process semester configuration
-      if (data.currentSemester) {
-        setCurrentSemester(data.currentSemester);
-        localStorage.setItem('cumlaude_currentSemester', data.currentSemester);
-      }
-      if (data.academicYear) {
-        setAcademicYear(data.academicYear);
-        localStorage.setItem('cumlaude_academicYear', data.academicYear);
-      }
-      if (data.semesterConfig && Array.isArray(data.semesterConfig)) {
-        setSemesterConfig(data.semesterConfig);
-        localStorage.setItem('cumlaude_semesterConfig', JSON.stringify(data.semesterConfig));
-      }
-      
-      // Fetch semester-specific subjects based on class schedules
-      try {
-        const semesterResponse = await fetch(CLASS_SCHEDULE_GAS_URL, {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'getSubjectsBySemester',
-            semester: data.currentSemester || '1st'
-          })
-        });
-        const semesterData = await semesterResponse.json();
-        if (semesterData.success && semesterData.subjects) {
-          // Extract subject codes - subjects could be objects {code, name} or strings
-          const subjectCodes = semesterData.subjects.map((s: any) => 
-            typeof s === 'string' ? s : s.code
-          );
-          setSemesterSubjects(subjectCodes);
-          localStorage.setItem('cumlaude_semesterSubjects', JSON.stringify(subjectCodes));
-        } else if (semesterData.error) {
-          console.warn('Semester subjects fetch returned error:', semesterData.error);
-        }
-      } catch (semErr) {
-        console.warn('Failed to load semester subjects:', semErr);
-      }
-
-      // Process active announcement from backend (dismissal is now tracked server-side)
-      if (data.activeAnnouncement) {
-        setActiveAnnouncement({
-          id: data.activeAnnouncement.id,
-          type: data.activeAnnouncement.type,
-          title: data.activeAnnouncement.title,
-          message: data.activeAnnouncement.message,
-          emoji: data.activeAnnouncement.emoji
-        });
+        void setSecureSessionItem('subjectInfo', data.subjectInfo);
       }
 
       if (toastId) updateToast(toastId, 'Finalizing...', 'loading', 95);
@@ -9072,16 +9905,108 @@ export const App = ({ routeRole }: AppProps) => {
         setTimeout(() => removeToast(toastId!), 4000);
       }
     }
-    */
+  };
+
+  const handleResourcesRefresh = async () => {
+    if (isResourcesRefreshing) return;
+
+    setIsResourcesRefreshing(true);
+    try {
+      await syncData(true);
+    } finally {
+      setIsResourcesRefreshing(false);
+    }
+  };
+
+  const handleClassroomRefresh = async () => {
+    if (isResourcesRefreshing) return;
+
+    setIsResourcesRefreshing(true);
+    try {
+      await syncData(true);
+    } finally {
+      setIsResourcesRefreshing(false);
+    }
+  };
+
+  const handleSubjectScheduleRefresh = async () => {
+    if (isSemesterSubjectsRefreshing) return;
+
+    setIsSemesterSubjectsRefreshing(true);
+    try {
+      await loadSemesterSubjectsView(activeSemester);
+    } finally {
+      setIsSemesterSubjectsRefreshing(false);
+    }
+  };
+
+  const handleObligationsRefresh = async () => {
+    if (isObligationsLoading) return;
+    await fetchObligationsFromBackend();
+  };
+
+  const handleAllResourcesRefresh = async () => {
+    if (isResourcesRefreshing || isSemesterSubjectsRefreshing) return;
+
+    setIsResourcesRefreshing(true);
+    setIsSemesterSubjectsRefreshing(true);
+    try {
+      await Promise.all([
+        syncData(true),
+        loadSemesterSubjectsView(activeSemester)
+      ]);
+    } finally {
+      setIsResourcesRefreshing(false);
+      setIsSemesterSubjectsRefreshing(false);
+    }
   };
 
   // --- Analytics Functions ---
 
-  const saveSessionAnalytics = async (correct: number, incorrect: number) => {
+  const saveSessionAnalytics = async (
+    correct: number,
+    incorrect: number,
+    sessionEndedAt: number,
+    sessionCardSummaries: Record<string, CardSessionSummary>
+  ) => {
     if (!user || !activeDeck || !activeSubject) return;
     
-    const timeSpent = Math.round((Date.now() - sessionStartTime) / 1000); // in seconds
+    const timeSpent = Math.round((sessionEndedAt - sessionStartTime) / 1000);
+    const cardsAnswered = correct + incorrect;
+    const sessionId = `${user.idNumber}-${activeDeck.fileId || activeDeck.name}-${sessionEndedAt}`;
+    if (lastSavedStudySessionIdRef.current === sessionId) {
+      return;
+    }
+    lastSavedStudySessionIdRef.current = sessionId;
+
+    const sessionPayload = {
+      action: 'saveStudySession',
+      sessionId,
+      userId: user.idNumber,
+      userName: user.name,
+      subject: activeSubject,
+      deckName: activeDeck.name,
+      deckFileId: activeDeck.fileId || '',
+      mode: playMode,
+      startedAt: sessionStartedAtIso || new Date(sessionStartTime).toISOString(),
+      endedAt: new Date(sessionEndedAt).toISOString(),
+      timeSpentSeconds: timeSpent,
+      cardsInSession: queue.length,
+      correct,
+      incorrect,
+      cardsAnswered,
+      cardSummaries: Object.values(sessionCardSummaries)
+    };
     
+    try {
+      await fetch(RESOURCE_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify(sessionPayload)
+      });
+    } catch (error) {
+      console.error('Failed to save session summary:', error);
+    }
+
     try {
       await fetch(GAS_URL, {
         method: 'POST',
@@ -9102,8 +10027,18 @@ export const App = ({ routeRole }: AppProps) => {
 
   const fetchUserAnalytics = async () => {
     if (!user) return;
-    
-    setLoadingAnalytics(true);
+
+    const cacheKey = getAnalyticsCacheKey(user.idNumber);
+    const cachedAnalytics = await getSecureSessionItem<any>(cacheKey);
+    const hasCachedAnalytics = cachedAnalytics !== null;
+
+    if (cachedAnalytics) {
+      setUserAnalytics(cachedAnalytics);
+    }
+
+    setLoadingAnalytics(!hasCachedAnalytics);
+    setRefreshingAnalytics(hasCachedAnalytics);
+
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
@@ -9117,22 +10052,48 @@ export const App = ({ routeRole }: AppProps) => {
       // Handle both success case and error case (no analytics sheet yet)
       if (data.success) {
         setUserAnalytics(data);
+        void setSecureSessionItem(cacheKey, data);
       } else if (data.error) {
         // If analytics sheet doesn't exist or other error, show empty state
         console.log('Analytics fetch result:', data.error);
-        setUserAnalytics({ success: true, analytics: [], summary: null });
+        const emptyAnalytics = { success: true, analytics: [], summary: null };
+        setUserAnalytics(emptyAnalytics);
+        void setSecureSessionItem(cacheKey, emptyAnalytics);
       } else {
         // Fallback - set with whatever data we got
         setUserAnalytics(data);
+        void setSecureSessionItem(cacheKey, data);
       }
     } catch (error) {
       console.error('Failed to fetch analytics:', error);
       // Set empty state on error so user sees "No Analytics Yet" instead of infinite loading
-      setUserAnalytics({ success: true, analytics: [], summary: null });
+      if (!hasCachedAnalytics) {
+        const emptyAnalytics = { success: true, analytics: [], summary: null };
+        setUserAnalytics(emptyAnalytics);
+        void setSecureSessionItem(cacheKey, emptyAnalytics);
+      }
     } finally {
       setLoadingAnalytics(false);
+      setRefreshingAnalytics(false);
     }
   };
+
+  const handleAnalyticsRefresh = () => {
+    if (!user || refreshingAnalytics) return;
+    void fetchUserAnalytics();
+  };
+
+  useEffect(() => {
+    setUserAnalytics(null);
+    setLoadingAnalytics(false);
+    setRefreshingAnalytics(false);
+  }, [user?.idNumber]);
+
+  useEffect(() => {
+    if (view === 'ANALYTICS' && user && !userAnalytics && !loadingAnalytics) {
+      void fetchUserAnalytics();
+    }
+  }, [view, user, userAnalytics, loadingAnalytics]);
 
   // --- Actions ---
 
@@ -9141,7 +10102,6 @@ export const App = ({ routeRole }: AppProps) => {
   // Semester Switch Function
   const handleSemesterSwitch = async (semester: '1st' | '2nd') => {
     if (activeSemester === semester) return;
-    setIsSemesterSubjectsLoading(true);
     setSelectedSemesterView(semester);
     localStorage.setItem('cumlaude_selectedSemesterView', semester);
   };
@@ -9149,7 +10109,6 @@ export const App = ({ routeRole }: AppProps) => {
   // Reset to current semester (auto-detect)
   const handleResetToCurrentSemester = async () => {
     if (!selectedSemesterView) return;
-    setIsSemesterSubjectsLoading(true);
     setSelectedSemesterView(null);
     localStorage.removeItem('cumlaude_selectedSemesterView');
   };
@@ -9157,9 +10116,34 @@ export const App = ({ routeRole }: AppProps) => {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem(STORAGE_KEY_USER);
+    clearSecureSessionCache();
   };
 
-  const handleLoginSuccess = (authenticatedUser: User) => {
+  const handleLoginSuccess = async (authenticatedUser: User) => {
+    const prefetchedData = await prefetchSessionBootstrapData(authenticatedUser);
+
+    if (prefetchedData.subjects) {
+      setApiSubjects(prefetchedData.subjects);
+    }
+    if (prefetchedData.subjectInfo) {
+      setSubjectInfo(prefetchedData.subjectInfo);
+    }
+    if (prefetchedData.currentSemester) {
+      setCurrentSemester(prefetchedData.currentSemester);
+    }
+    if (prefetchedData.academicYear !== undefined) {
+      setAcademicYear(prefetchedData.academicYear);
+    }
+    if (prefetchedData.semesterConfig) {
+      setSemesterConfig(prefetchedData.semesterConfig);
+    }
+    if (prefetchedData.semesterSubjects) {
+      setSemesterSubjects(prefetchedData.semesterSubjects);
+    }
+    if (prefetchedData.semesterSchedules) {
+      setSemesterSchedules(prefetchedData.semesterSchedules);
+    }
+
     mapToPage('home', () => {
       setUser(authenticatedUser);
       setShowLogin(false);
@@ -9412,29 +10396,7 @@ export const App = ({ routeRole }: AppProps) => {
     await new Promise(resolve => setTimeout(resolve, 100));
     
     setActiveDeck(deck);
-    
-    // Sync progress from backend if user is logged in
-    if (user && navigator.onLine) {
-      try {
-        const response = await fetch(GAS_URL, {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'getDeckProgress',
-            idNumber: user.idNumber,
-            deckName: deck.name
-          })
-        });
-        const data = await response.json();
-        
-        if (data.success && data.progress) {
-          // Use backend progress - save to local storage
-          const progress = data.progress as DeckProgress;
-          saveDeckProgressLocal(deck.name, progress);
-        }
-      } catch (e) {
-        console.error('Failed to fetch progress from backend:', e);
-      }
-    }
+    await syncDeckProgressForDeck(deck);
     
     removeToast(loadingToast);
     setDeckLoading(null);
@@ -9461,9 +10423,17 @@ export const App = ({ routeRole }: AppProps) => {
     });
   };
 
-  const getDeckProgress = (deckName: string): DeckProgress | null => {
-    const progressKey = PROGRESS_KEY_PREFIX + deckName;
-    const savedProgressStr = localStorage.getItem(progressKey);
+  const getDeckProgressStorageKey = (deckName: string, userId?: string | null): string => {
+    const normalizedDeckName = String(deckName || '').trim();
+    const normalizedUserId = String(userId || '').trim();
+    return normalizedUserId
+      ? `${PROGRESS_KEY_PREFIX}${normalizedUserId}_${normalizedDeckName}`
+      : `${PROGRESS_KEY_PREFIX}guest_${normalizedDeckName}`;
+  };
+
+  const getLegacyDeckProgressStorageKey = (deckName: string): string => `${PROGRESS_KEY_PREFIX}${deckName}`;
+
+  const parseDeckProgress = (savedProgressStr: string | null): DeckProgress | null => {
     if (savedProgressStr) {
       try {
         return JSON.parse(savedProgressStr);
@@ -9474,97 +10444,295 @@ export const App = ({ routeRole }: AppProps) => {
     return null;
   };
 
-  const saveDeckProgressLocal = (deckName: string, progress: DeckProgress) => {
-    const progressKey = PROGRESS_KEY_PREFIX + deckName;
+  const readDeckProgressLocal = (deckName: string, userId?: string | null): DeckProgress | null => {
+    const primaryKey = getDeckProgressStorageKey(deckName, userId);
+    const primaryProgress = parseDeckProgress(localStorage.getItem(primaryKey));
+    if (primaryProgress) {
+      return primaryProgress;
+    }
+
+    if (userId) {
+      return null;
+    }
+
+    return parseDeckProgress(localStorage.getItem(getLegacyDeckProgressStorageKey(deckName)));
+  };
+
+  const getLocalDeckProgressEntries = (userId: string): Record<string, DeckProgress> => {
+    const result: Record<string, DeckProgress> = {};
+    const prefix = `${PROGRESS_KEY_PREFIX}${userId}_`;
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(prefix)) continue;
+
+      const deckName = key.slice(prefix.length);
+      const progress = parseDeckProgress(localStorage.getItem(key));
+      if (deckName && progress) {
+        result[deckName] = progress;
+      }
+    }
+
+    return result;
+  };
+
+  const getProgressTimestamp = (progress: DeckProgress | null | undefined): number => {
+    if (!progress?.lastUpdated) return 0;
+    if (typeof progress.lastUpdated === 'number') return progress.lastUpdated;
+    const parsed = Date.parse(progress.lastUpdated);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const normalizeProgressMode = (mode: DeckProgress['mode'] | string | undefined): DeckProgress['mode'] => {
+    return mode === 'chronological' ? 'chronological' : 'shuffle';
+  };
+
+  const normalizeDeckProgressForDeck = (
+    deck: Deck | null | undefined,
+    progress: DeckProgress | null
+  ): { progress: DeckProgress | null; changed: boolean } => {
+    if (!deck || !progress) {
+      return { progress, changed: false };
+    }
+
+    const validCardIds = new Set(deck.cards.map(card => card.id));
+    const normalizedStatuses: DeckProgress['cardStatuses'] = {};
+    const sourceStatuses = progress.cardStatuses || {};
+    let changed = false;
+
+    for (const card of deck.cards) {
+      const status = sourceStatuses[card.id];
+      if (status === 'correct' || status === 'incorrect' || status === 'unanswered') {
+        normalizedStatuses[card.id] = status;
+      } else {
+        normalizedStatuses[card.id] = 'unanswered';
+        if (status !== 'unanswered') changed = true;
+      }
+    }
+
+    for (const storedId of Object.keys(sourceStatuses)) {
+      if (!validCardIds.has(storedId)) {
+        changed = true;
+        break;
+      }
+    }
+
+    const sourceOrder = Array.isArray(progress.shuffledOrder) ? progress.shuffledOrder : [];
+    const normalizedOrder: string[] = [];
+    for (const cardId of sourceOrder) {
+      if (validCardIds.has(cardId) && !normalizedOrder.includes(cardId)) {
+        normalizedOrder.push(cardId);
+      } else if (cardId) {
+        changed = true;
+      }
+    }
+    for (const card of deck.cards) {
+      if (!normalizedOrder.includes(card.id)) {
+        normalizedOrder.push(card.id);
+        if (sourceOrder.length > 0) changed = true;
+      }
+    }
+
+    const answeredCount = Object.values(normalizedStatuses).filter(status => status !== 'unanswered').length;
+    const normalizedCurrentIndex = Math.max(0, Math.min(
+      Number.isFinite(Number(progress.currentIndex)) ? Math.floor(Number(progress.currentIndex)) : answeredCount,
+      deck.cards.length
+    ));
+    if (normalizedCurrentIndex !== progress.currentIndex) {
+      changed = true;
+    }
+
+    const normalizedMode = normalizeProgressMode(progress.mode);
+    if (normalizedMode !== progress.mode) {
+      changed = true;
+    }
+
+    return {
+      progress: {
+        deckName: deck.name,
+        cardStatuses: normalizedStatuses,
+        currentIndex: normalizedCurrentIndex,
+        mode: normalizedMode,
+        shuffledOrder: normalizedOrder,
+        lastUpdated: progress.lastUpdated || Date.now()
+      },
+      changed
+    };
+  };
+
+  const getDeckProgressForDeck = (deck: Deck | null | undefined): DeckProgress | null => {
+    if (!deck) return null;
+    const rawProgress = readDeckProgressLocal(deck.name, user?.idNumber);
+    return normalizeDeckProgressForDeck(deck, rawProgress).progress;
+  };
+
+  const saveDeckProgressLocal = (deckName: string, progress: DeckProgress, userId?: string | null) => {
+    const progressKey = getDeckProgressStorageKey(deckName, userId);
     localStorage.setItem(progressKey, JSON.stringify(progress));
+    if (!userId) {
+      localStorage.setItem(getLegacyDeckProgressStorageKey(deckName), JSON.stringify(progress));
+    }
+    setProgressVersion(prev => prev + 1);
   };
 
   const saveDeckProgress = async (deckName: string, progress: DeckProgress) => {
-    // Save locally first
-    saveDeckProgressLocal(deckName, progress);
-    
-    // Sync to backend if user is logged in
-    if (user && navigator.onLine) {
-      try {
-        await fetch(GAS_URL, {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'saveDeckProgress',
-            idNumber: user.idNumber,
-            deckName: deckName,
-            cardStatuses: progress.cardStatuses,
-            currentIndex: progress.currentIndex,
-            mode: progress.mode,
-            shuffledOrder: progress.shuffledOrder
-          })
-        });
-      } catch (e) {
-        console.error('Failed to save progress to backend:', e);
-      }
+    const deck = decks.find(item => item.name === deckName) || (activeDeck?.name === deckName ? activeDeck : null);
+    const normalizedProgress = normalizeDeckProgressForDeck(deck, {
+      ...progress,
+      deckName,
+      mode: normalizeProgressMode(progress.mode),
+      lastUpdated: Date.now()
+    }).progress;
+
+    if (!normalizedProgress) return;
+
+    saveDeckProgressLocal(deckName, normalizedProgress, user?.idNumber);
+
+    if (!user || !navigator.onLine) return;
+
+    try {
+      await fetch(RESOURCE_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'saveDeckProgress',
+          userId: user.idNumber,
+          deckName,
+          cardStatuses: normalizedProgress.cardStatuses,
+          currentIndex: normalizedProgress.currentIndex,
+          mode: normalizedProgress.mode,
+          shuffledOrder: normalizedProgress.shuffledOrder,
+          lastUpdated: normalizedProgress.lastUpdated
+        })
+      });
+    } catch (error) {
+      console.warn('Failed to sync deck progress to backend:', error);
     }
   };
 
-  const clearDeckProgress = async (deckName: string) => {
-    const progressKey = PROGRESS_KEY_PREFIX + deckName;
-    localStorage.removeItem(progressKey);
-    
-    // Clear from backend if user is logged in
-    if (user && navigator.onLine) {
-      try {
-        await fetch(GAS_URL, {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'clearDeckProgress',
-            idNumber: user.idNumber,
-            deckName: deckName
-          })
-        });
-      } catch (e) {
-        console.error('Failed to clear progress from backend:', e);
-      }
+  const clearDeckProgress = async (deckName: string): Promise<boolean> => {
+    if (!user) {
+      localStorage.removeItem(getDeckProgressStorageKey(deckName, null));
+      localStorage.removeItem(getLegacyDeckProgressStorageKey(deckName));
+      setProgressVersion(prev => prev + 1);
+      return true;
     }
+
+    if (!navigator.onLine) {
+      console.warn('Cannot clear deck progress while offline.');
+      return false;
+    }
+
+    try {
+      const response = await fetch(RESOURCE_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'clearDeckProgress',
+          userId: user.idNumber,
+          deckName
+        })
+      });
+      const data = await response.json();
+      if (!data.success) {
+        console.warn('Failed to clear deck progress from backend:', data.error || data);
+        return false;
+      }
+
+      localStorage.removeItem(getDeckProgressStorageKey(deckName, user.idNumber));
+      localStorage.removeItem(getLegacyDeckProgressStorageKey(deckName));
+      setProgressVersion(prev => prev + 1);
+      return true;
+    } catch (error) {
+      console.warn('Failed to clear deck progress from backend:', error);
+      return false;
+    }
+  };
+
+  const fetchDeckProgressFromBackend = async (deckName: string): Promise<DeckProgress | null> => {
+    if (!user || !navigator.onLine || !deckName) return null;
+
+    try {
+      const response = await fetch(RESOURCE_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'getDeckProgress',
+          userId: user.idNumber,
+          deckName
+        })
+      });
+      const data = await response.json();
+      return data.success ? data.progress || null : null;
+    } catch (error) {
+      console.warn('Failed to fetch deck progress from backend:', error);
+      return null;
+    }
+  };
+
+  const syncDeckProgressForDeck = async (deck: Deck): Promise<DeckProgress | null> => {
+    const localProgress = normalizeDeckProgressForDeck(deck, readDeckProgressLocal(deck.name, user?.idNumber)).progress;
+    const remoteProgress = normalizeDeckProgressForDeck(deck, await fetchDeckProgressFromBackend(deck.name)).progress;
+
+    const winner = getProgressTimestamp(remoteProgress) > getProgressTimestamp(localProgress)
+      ? remoteProgress
+      : localProgress;
+
+    if (winner) {
+      saveDeckProgressLocal(deck.name, winner, user?.idNumber);
+    }
+
+    if (user && navigator.onLine && localProgress && getProgressTimestamp(localProgress) > getProgressTimestamp(remoteProgress)) {
+      void saveDeckProgress(deck.name, localProgress);
+    }
+
+    return winner;
   };
 
   // Sync all deck progress from backend on login
   const syncProgressFromBackend = async () => {
     if (!user || !navigator.onLine) return;
-    
+
     try {
-      const response = await fetch(GAS_URL, {
+      const response = await fetch(RESOURCE_GAS_URL, {
         method: 'POST',
         body: JSON.stringify({
           action: 'getAllDeckProgress',
-          idNumber: user.idNumber
+          userId: user.idNumber
         })
       });
       const data = await response.json();
-      
-      if (data.success && data.progress) {
-        // Merge backend progress with local progress
-        Object.entries(data.progress).forEach(([deckName, progress]) => {
-          const localProgress = getDeckProgress(deckName);
-          const backendProgress = progress as DeckProgress;
-          
-          // Use backend if it's newer or local doesn't exist
-          const backendTime = backendProgress.lastUpdated ? new Date(backendProgress.lastUpdated).getTime() : 0;
-          const localTime = localProgress?.lastUpdated ? new Date(localProgress.lastUpdated).getTime() : 0;
-          
-          if (!localProgress || backendTime > localTime) {
-            saveDeckProgressLocal(deckName, backendProgress);
+      if (!data.success || !data.progress) return;
+
+      const localEntries = getLocalDeckProgressEntries(user.idNumber);
+      const remoteEntries = data.progress as Record<string, DeckProgress>;
+      const deckMap = new Map(decks.map(deck => [deck.name, deck]));
+      const deckNames = new Set([...Object.keys(localEntries), ...Object.keys(remoteEntries)]);
+
+      for (const deckName of deckNames) {
+        const deck = deckMap.get(deckName) || null;
+        const localProgress = normalizeDeckProgressForDeck(deck, localEntries[deckName] || null).progress;
+        const remoteProgress = normalizeDeckProgressForDeck(deck, remoteEntries[deckName] || null).progress;
+        const localTime = getProgressTimestamp(localProgress);
+        const remoteTime = getProgressTimestamp(remoteProgress);
+
+        if (remoteTime > localTime && remoteProgress) {
+          saveDeckProgressLocal(deckName, remoteProgress, user.idNumber);
+        } else if (localProgress) {
+          saveDeckProgressLocal(deckName, localProgress, user.idNumber);
+          if (localTime > remoteTime) {
+            void saveDeckProgress(deckName, localProgress);
           }
-        });
+        }
       }
-    } catch (e) {
-      console.error('Failed to sync progress from backend:', e);
+    } catch (error) {
+      console.warn('Failed to sync deck progress from backend:', error);
     }
   };
 
   // Sync progress from backend when user logs in
   useEffect(() => {
     if (user) {
-      syncProgressFromBackend();
+      void syncProgressFromBackend();
     }
-  }, [user]);
+  }, [user, decks]);
 
   // --- Exam Functions ---
   
@@ -10029,13 +11197,11 @@ export const App = ({ routeRole }: AppProps) => {
         const items = result.obligations || result.exams;
         setExams(items);
         localStorage.setItem('cumlaude_obligations', JSON.stringify(items));
-        localStorage.setItem('cumlaude_exams', JSON.stringify(items));
         return items;
       }
 
       setExams([]);
       localStorage.setItem('cumlaude_obligations', JSON.stringify([]));
-      localStorage.setItem('cumlaude_exams', JSON.stringify([]));
       return [];
     } catch (error) {
       console.warn('Failed to load obligations:', error);
@@ -10048,6 +11214,56 @@ export const App = ({ routeRole }: AppProps) => {
       }
       setIsObligationsLoading(false);
     }
+  };
+
+  const getObligationLabel = (exam: Pick<Exam, 'examType' | 'courseCode' | 'date' | 'startTime'>) => {
+    const parts = [exam.examType, exam.courseCode, formatExamDate(exam.date)];
+    if (exam.startTime) {
+      parts.push(formatExamTime(exam.startTime));
+    }
+    return parts.filter(Boolean).join(' • ');
+  };
+
+  const syncLinkedResourcesForObligation = async (exam: Pick<Exam, 'examId' | 'examType' | 'courseCode' | 'date' | 'startTime'>) => {
+    if (!navigator.onLine || !exam.examId) return;
+    try {
+      await fetch(RESOURCE_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'syncObligationLinks',
+          obligationId: exam.examId,
+          obligationType: exam.examType,
+          obligationLabel: getObligationLabel(exam),
+          courseCode: exam.courseCode
+        })
+      });
+    } catch (error) {
+      console.warn('Failed to sync linked resources for obligation:', error);
+    }
+  };
+
+  const deleteLinkedResourcesForObligation = async (obligationId: string) => {
+    if (!navigator.onLine || !obligationId) return;
+    try {
+      await fetch(RESOURCE_GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'deleteObligationLinks',
+          obligationId
+        })
+      });
+    } catch (error) {
+      console.warn('Failed to delete linked resources for obligation:', error);
+    }
+  };
+
+  const getLinkedResourcesForObligation = (obligationId: string) => {
+    if (!obligationId) return [] as Resource[];
+    return Object.entries(resources).flatMap(([subjectCode, items]) =>
+      items
+        .filter(resource => resource.linkedObligations?.some(link => link.obligationId === obligationId))
+        .map(resource => ({ ...resource, subject: resource.subject || subjectCode }))
+    );
   };
 
   const addExamToBackend = async (exam: { courseCode: string; courseName: string; examType: string; date: string; startTime: string; endTime: string; room: string; proctor: string; notes: string }) => {
@@ -10074,6 +11290,15 @@ export const App = ({ routeRole }: AppProps) => {
         updateToast(toastId, 'Obligation added!', 'success');
         setTimeout(() => removeToast(toastId), 2000);
         await fetchObligationsFromBackend();
+        if (result.obligation?.examId || result.obligation?.obligationId) {
+          await syncLinkedResourcesForObligation({
+            examId: result.obligation.examId || result.obligation.obligationId,
+            examType: result.obligation.examType || exam.examType,
+            courseCode: result.obligation.courseCode || exam.courseCode,
+            date: result.obligation.date || exam.date,
+            startTime: result.obligation.startTime || exam.startTime
+          });
+        }
         return true;
       } else {
         updateToast(toastId, result.error || 'Failed to add obligation', 'error');
@@ -10110,6 +11335,7 @@ export const App = ({ routeRole }: AppProps) => {
         updateToast(toastId, 'Obligation deleted!', 'success');
         setTimeout(() => removeToast(toastId), 2000);
         setExamToDelete(null);
+        await deleteLinkedResourcesForObligation(examId);
         await fetchObligationsFromBackend();
         return true;
       } else {
@@ -10129,6 +11355,7 @@ export const App = ({ routeRole }: AppProps) => {
       addToast('Please login to edit obligations', 'error');
       return false;
     }
+    const currentExam = exams.find(exam => exam.examId === examId);
     
     const toastId = addToast('Updating obligation...', 'loading');
     
@@ -10147,6 +11374,13 @@ export const App = ({ routeRole }: AppProps) => {
       if (result.success) {
         updateToast(toastId, 'Obligation updated!', 'success');
         setTimeout(() => removeToast(toastId), 2000);
+        await syncLinkedResourcesForObligation({
+          examId,
+          examType: (updates.examType as string) || currentExam?.examType || '',
+          courseCode: (updates.courseCode as string) || currentExam?.courseCode || '',
+          date: (updates.date as string) || currentExam?.date || '',
+          startTime: (updates.startTime as string) || currentExam?.startTime || ''
+        });
         await fetchObligationsFromBackend();
         return true;
       } else {
@@ -10183,15 +11417,17 @@ export const App = ({ routeRole }: AppProps) => {
   };
 
   const startSession = (mode: 'new' | 'retry' | 'smart' | 'continue', selectedPlayMode?: 'shuffle' | 'chronological') => {
-    if (!activeDeck) return;
+    if (!activeDeck || sessionActionBusy) return;
+    setSessionActionBusy(true);
     let newQueue: Card[] = [];
     let startIndex = 0;
     let initialScores: Record<string, 'correct' | 'incorrect'> = {};
+    let baseCardStatuses: DeckProgress['cardStatuses'] | null = null;
     const currentPlayMode = selectedPlayMode || playMode;
+    const existingProgress = getDeckProgressForDeck(activeDeck);
 
     if (mode === 'continue') {
       // Get progress from storage
-      const existingProgress = getDeckProgress(activeDeck.name);
       if (!existingProgress) {
         // No progress found, start fresh
         if (currentPlayMode === 'shuffle') {
@@ -10221,6 +11457,7 @@ export const App = ({ routeRole }: AppProps) => {
           if (status === 'correct') initialScores[id] = 'correct';
           else if (status === 'incorrect') initialScores[id] = 'incorrect';
         });
+        baseCardStatuses = { ...existingProgress.cardStatuses };
         setPlayMode(existingProgress.mode);
       }
     } else if (mode === 'new') {
@@ -10231,15 +11468,15 @@ export const App = ({ routeRole }: AppProps) => {
       }
       setPlayMode(currentPlayMode);
     } else if (mode === 'retry') {
-      const progress = getDeckProgress(activeDeck.name);
-      const incorrectIds = progress ? Object.entries(progress.cardStatuses).filter(([_, s]) => s === 'incorrect').map(([id]) => id) : Object.keys(scores).filter(id => scores[id] === 'incorrect');
+      baseCardStatuses = existingProgress ? { ...existingProgress.cardStatuses } : null;
+      const incorrectIds = existingProgress ? Object.entries(existingProgress.cardStatuses).filter(([_, s]) => s === 'incorrect').map(([id]) => id) : Object.keys(scores).filter(id => scores[id] === 'incorrect');
       newQueue = activeDeck.cards.filter(c => incorrectIds.includes(c.id));
       if (currentPlayMode === 'shuffle') {
         newQueue = newQueue.sort(() => Math.random() - 0.5);
       }
     } else if (mode === 'smart') {
-      const progress = getDeckProgress(activeDeck.name);
-      const incorrectIds = progress ? Object.entries(progress.cardStatuses).filter(([_, s]) => s === 'incorrect').map(([id]) => id) : Object.keys(scores).filter(id => scores[id] === 'incorrect');
+      baseCardStatuses = existingProgress ? { ...existingProgress.cardStatuses } : null;
+      const incorrectIds = existingProgress ? Object.entries(existingProgress.cardStatuses).filter(([_, s]) => s === 'incorrect').map(([id]) => id) : Object.keys(scores).filter(id => scores[id] === 'incorrect');
       const incorrect = activeDeck.cards.filter(c => incorrectIds.includes(c.id));
       const others = activeDeck.cards.filter(c => !incorrectIds.includes(c.id));
       if (currentPlayMode === 'shuffle') {
@@ -10251,12 +11488,12 @@ export const App = ({ routeRole }: AppProps) => {
 
     if (newQueue.length === 0) {
       setAlertModal({ isOpen: true, title: 'No Cards', message: 'No cards available to play!', type: 'warning' });
+      setSessionActionBusy(false);
       return;
     }
 
     // For continue mode, preserve the existing progress, just update currentIndex
     if (mode === 'continue') {
-      const existingProgress = getDeckProgress(activeDeck.name);
       if (existingProgress) {
         // Keep existing progress, just mark we're continuing
         const updatedProgress = { ...existingProgress, lastUpdated: Date.now() };
@@ -10274,7 +11511,12 @@ export const App = ({ routeRole }: AppProps) => {
       };
       // Populate initial card statuses - include all deck cards
       activeDeck.cards.forEach(card => {
-        newProgress.cardStatuses[card.id] = initialScores[card.id] ? (initialScores[card.id] as 'correct' | 'incorrect') : 'unanswered';
+        const preservedStatus = baseCardStatuses?.[card.id];
+        if (preservedStatus === 'correct' || preservedStatus === 'incorrect' || preservedStatus === 'unanswered') {
+          newProgress.cardStatuses[card.id] = preservedStatus;
+        } else {
+          newProgress.cardStatuses[card.id] = 'unanswered';
+        }
       });
       saveDeckProgress(activeDeck.name, newProgress);
     }
@@ -10283,20 +11525,42 @@ export const App = ({ routeRole }: AppProps) => {
     setQueue(newQueue);
     setCurrentIndex(startIndex);
     setIsFlipped(false);
-    setSessionStartTime(Date.now());
+    const sessionStart = Date.now();
+    setSessionStartTime(sessionStart);
+    setSessionStartedAtIso(new Date(sessionStart).toISOString());
+    setCurrentCardStartedAt(sessionStart);
+    setCardSessionSummaries({});
+    lastSavedStudySessionIdRef.current = '';
     setSavedProgress(null);
     setShowContinueModal(false);
     setView('PLAY');
+    setSessionActionBusy(false);
   };
 
   const handleScore = (result: 'correct' | 'incorrect') => {
+    if (sessionActionBusy) return;
+    setSessionActionBusy(true);
     const card = queue[currentIndex];
     const newScores = { ...scores, [card.id]: result };
     setScores(newScores);
+    const scoredAt = Date.now();
+    const timeSpentMs = Math.max(0, scoredAt - (currentCardStartedAt || sessionStartTime || scoredAt));
+    const updatedCardSessionSummaries: Record<string, CardSessionSummary> = {
+      ...cardSessionSummaries,
+      [card.id]: {
+        cardId: card.id,
+        question: card.q,
+        answer: card.a,
+        finalStatus: result,
+        attemptCount: (cardSessionSummaries[card.id]?.attemptCount || 0) + 1,
+        timeSpentMs: (cardSessionSummaries[card.id]?.timeSpentMs || 0) + timeSpentMs
+      }
+    };
+    setCardSessionSummaries(updatedCardSessionSummaries);
     
     // Update saved progress
     if (activeDeck) {
-      const progress = getDeckProgress(activeDeck.name);
+      const progress = getDeckProgressForDeck(activeDeck);
       if (progress) {
         progress.cardStatuses[card.id] = result;
         progress.currentIndex = currentIndex + 1;
@@ -10308,13 +11572,16 @@ export const App = ({ routeRole }: AppProps) => {
     setIsFlipped(false);
     setTimeout(() => {
       if (currentIndex < queue.length - 1) {
+        setCurrentCardStartedAt(Date.now());
         setCurrentIndex(prev => prev + 1);
+        setSessionActionBusy(false);
       } else {
         // Session ended - calculate final scores and save analytics
         const correct = Object.values(newScores).filter(s => s === 'correct').length;
         const incorrect = Object.values(newScores).filter(s => s === 'incorrect').length;
-        saveSessionAnalytics(correct, incorrect);
+        void saveSessionAnalytics(correct, incorrect, scoredAt, updatedCardSessionSummaries);
         setView('SUMMARY');
+        setSessionActionBusy(false);
       }
     }, 200);
   };
@@ -10333,6 +11600,16 @@ export const App = ({ routeRole }: AppProps) => {
   
   // Subjects are sourced only from the class schedule backend.
   const displaySubjects = semesterSubjects;
+  const displaySubjectSet = new Set(displaySubjects);
+  const semesterUploadedResourcesCount = displaySubjects.reduce(
+    (sum, subject) => sum + (resources[subject]?.length || 0),
+    0
+  );
+  const semesterDeckResourcesCount = decks.reduce(
+    (sum, deck) => sum + ((deck.subject && displaySubjectSet.has(deck.subject)) ? 1 : 0),
+    0
+  );
+  const semesterResourcesCount = semesterUploadedResourcesCount + semesterDeckResourcesCount;
 
   // --- Views ---
 
@@ -10481,10 +11758,30 @@ export const App = ({ routeRole }: AppProps) => {
                   <h3 className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-stone-600'} mb-2`}>Custom Announcement</h3>
                   <div className="space-y-3">
                     <div className="flex gap-2">
+                      <div className="w-24">
+                        <CustomDropdown
+                          name="customAnnouncementEmoji"
+                          value={customAnnouncementEmoji}
+                          onChange={setCustomAnnouncementEmoji}
+                          options={[
+                            { value: '🎉', label: '🎉' },
+                            { value: '🎓', label: '🎓' },
+                            { value: '📢', label: '📢' },
+                            { value: '⚠️', label: '⚠️' },
+                            { value: '💪', label: '💪' },
+                            { value: '🌟', label: '🌟' },
+                            { value: '📚', label: '📚' },
+                            { value: '🔔', label: '🔔' }
+                          ]}
+                          theme={darkMode ? 'dark' : 'light'}
+                          size="compact"
+                        />
+                      </div>
                       <select
+                        disabled
                         value={customAnnouncementEmoji}
                         onChange={(e) => setCustomAnnouncementEmoji(e.target.value)}
-                        className={`w-16 p-2 border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-stone-200'} rounded-lg text-xl`}
+                        className="hidden"
                       >
                         <option value="🎉">🎉</option>
                         <option value="🎓">🎓</option>
@@ -11120,7 +12417,7 @@ export const App = ({ routeRole }: AppProps) => {
                   </div>
                   <h3 className="font-bold text-lg">Subjects</h3>
                   <p className="text-sm text-blue-100 mt-1">
-                    {displaySubjects.length} subjects • {Object.values(resources).reduce((sum, arr) => sum + arr.length, 0)} resources
+                    {displaySubjects.length} subjects • {semesterResourcesCount} resources
                   </p>
                 </button>
 
@@ -11299,6 +12596,8 @@ export const App = ({ routeRole }: AppProps) => {
           formatExamDate={formatExamDate}
           formatExamTime={formatExamTime}
           darkMode={darkMode}
+          linkedResources={selectedExam ? getLinkedResourcesForObligation(selectedExam.examId) : []}
+          onOpenResource={(resource) => openResource(resource)}
         />
       </div>
     );
@@ -11318,15 +12617,28 @@ export const App = ({ routeRole }: AppProps) => {
     
     // Get decks for this subject using the subject property
     const subjectDecks = decks.filter(d => d.subject === activeSubject);
+    const getLinkedObligationsForDeck = (deck: Deck) => {
+      const normalizedSubject = String(activeSubject || '').trim();
+      const normalizedDeckName = String(deck.name || '').trim();
+
+      return resourceLinks.filter(link =>
+        link.resourceCategory === 'Flipcard' &&
+        String(link.courseCode || '').trim() === normalizedSubject &&
+        (
+          String(link.resourceTitle || '').trim() === normalizedDeckName ||
+          (!!deck.fileId && String(link.resourceUrl || '').trim().includes(deck.fileId))
+        )
+      );
+    };
     
     // Organize resources by category
-    const lessonPPTResources = subjectResources.filter(r => r.category === 'Lesson PPT');
-    const lessonPDFResources = subjectResources.filter(r => r.category === 'Lesson PDF');
+    const lessonPPTResources = subjectResources.filter(r => r.category === 'Lesson PPT' || r.category === 'PPT');
+    const lessonPDFResources = subjectResources.filter(r => r.category === 'Lesson PDF' || r.category === 'PDF');
     const reviewerResources = subjectResources.filter(r => r.category === 'Reviewer');
     const videoResources = subjectResources.filter(r => r.category === 'Video');
     // Legacy categories
     const imageResources = subjectResources.filter(r => r.category === 'Image');
-    const fileResources = subjectResources.filter(r => r.category === 'Files' || !['Lesson PPT', 'Lesson PDF', 'Reviewer', 'Video', 'Image'].includes(r.category));
+    const fileResources = subjectResources.filter(r => r.category === 'Files' || !['Lesson PPT', 'Lesson PDF', 'PPT', 'PDF', 'Reviewer', 'Video', 'Image'].includes(r.category));
 
     const handleDeleteResource = async (resource: Resource) => {
       if (!user) {
@@ -11334,8 +12646,8 @@ export const App = ({ routeRole }: AppProps) => {
         return;
       }
       
-      if (resource.submittedBy !== user.idNumber) {
-        addToast('You can only delete your own submissions', 'error');
+      if (!canUserDeleteResource(resource.submittedBy)) {
+        addToast('Only the uploader, Mayor, Vice Mayor, Internal PIO, admin, or superadmin can delete this resource', 'error');
         return;
       }
       
@@ -11346,7 +12658,7 @@ export const App = ({ routeRole }: AppProps) => {
       const toastId = addToast('Deleting resource...', 'loading');
       
       try {
-        const response = await fetch(GAS_URL, {
+        const response = await fetch(RESOURCE_GAS_URL, {
           method: 'POST',
           body: JSON.stringify({
             action: 'deleteResource',
@@ -11389,6 +12701,15 @@ export const App = ({ routeRole }: AppProps) => {
             {r.submittedByName && (
               <p className="text-xs text-stone-400 mt-2">by {r.submittedByName}</p>
             )}
+            {r.linkedObligations && r.linkedObligations.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {r.linkedObligations.slice(0, 2).map(link => (
+                  <span key={`${r.url}-${link.obligationId}`} className="inline-flex items-center px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[11px] font-medium">
+                    {link.obligationType || 'Obligation'}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-stone-100">
@@ -11409,7 +12730,7 @@ export const App = ({ routeRole }: AppProps) => {
             <Icon name="open_in_new" className="text-sm" />
             <span>Open</span>
           </a>
-          {user && r.submittedBy === user.idNumber && (
+          {canUserDeleteResource(r.submittedBy) && (
             <button
               onClick={(e) => { e.stopPropagation(); handleDeleteResource(r); }}
               className="flex items-center gap-1 px-3 py-1.5 text-xs text-stone-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -11496,20 +12817,12 @@ export const App = ({ routeRole }: AppProps) => {
                   
                   <div>
                     <label className="block text-sm font-medium text-stone-700 mb-1">Category *</label>
-                    <select name="examType" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
-                      <option value="Activity">Activity</option>
-                      <option value="Special Event">Special Event</option>
-                      <option value="Meeting">Meeting</option>
-                      <option value="Workshop">Workshop</option>
-                      <option value="LE Deadline">LE Deadline</option>
-                      <option value="Quiz">Quiz</option>
-                      <option value="Midterm Exam">Midterm Exam</option>
-                      <option value="Final Exam">Final Exam</option>
-                      <option value="Reporting">Reporting</option>
-                      <option value="Performance">Performance</option>
-                      <option value="Presentation">Presentation</option>
-                      <option value="Submission">Submission</option>
-                    </select>
+                    <CustomDropdown
+                      name="examType"
+                      required
+                      defaultValue="Activity"
+                      options={EXAM_TYPE_OPTIONS}
+                    />
                   </div>
                   
                   <div>
@@ -11554,13 +12867,16 @@ export const App = ({ routeRole }: AppProps) => {
         <UploadModal 
           isOpen={showUpload} 
           onClose={() => setShowUpload(false)} 
-          subject={activeSubject || ''}
-          user={user}
+          subject={activeSubject || ''} 
+          user={user} 
           onUploadComplete={syncData}
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
           darkMode={darkMode}
+          obligations={exams}
+          formatExamDate={formatExamDate}
+          formatExamTime={formatExamTime}
         />
         <AddExamModal
           isOpen={showAddExam}
@@ -11589,6 +12905,12 @@ export const App = ({ routeRole }: AppProps) => {
             </div>
             {activeTab === 'Resources' && (
               <>
+                <RefreshIconButton
+                  onClick={() => void handleResourcesRefresh()}
+                  disabled={isResourcesRefreshing}
+                  spinning={isResourcesRefreshing}
+                  title="Refresh resources"
+                />
                 <button
                   onClick={() => user ? setShowUpload(true) : setShowLogin(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
@@ -11605,14 +12927,38 @@ export const App = ({ routeRole }: AppProps) => {
                 </button>
               </>
             )}
+            {activeTab === 'Classroom' && (
+              <RefreshIconButton
+                onClick={() => void handleClassroomRefresh()}
+                disabled={isResourcesRefreshing}
+                spinning={isResourcesRefreshing}
+                title="Refresh classroom"
+              />
+            )}
+            {activeTab === 'Schedule' && (
+              <RefreshIconButton
+                onClick={() => void handleSubjectScheduleRefresh()}
+                disabled={isSemesterSubjectsRefreshing}
+                spinning={isSemesterSubjectsRefreshing}
+                title="Refresh schedule"
+              />
+            )}
             {activeTab === 'Exams' && (
-              <button
-                onClick={() => user ? setShowAddExam(true) : setShowLogin(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
-              >
-                <Icon name="add" className="text-sm" />
-                Add
-              </button>
+              <>
+                <RefreshIconButton
+                  onClick={() => void handleObligationsRefresh()}
+                  disabled={isObligationsLoading}
+                  spinning={isObligationsLoading}
+                  title="Refresh obligations"
+                />
+                <button
+                  onClick={() => user ? setShowAddExam(true) : setShowLogin(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
+                >
+                  <Icon name="add" className="text-sm" />
+                  Add
+                </button>
+              </>
             )}
           </div>
           
@@ -11644,7 +12990,7 @@ export const App = ({ routeRole }: AppProps) => {
                 </div>
               ) : (
                 subjectDecks.map(deck => {
-                  const deckProgress = getDeckProgress(deck.name);
+                  const deckProgress = getDeckProgressForDeck(deck);
                   const totalCards = deck.cards.length;
                   const answeredCount = deckProgress 
                     ? Object.values(deckProgress.cardStatuses).filter(s => s !== 'unanswered').length 
@@ -11655,10 +13001,18 @@ export const App = ({ routeRole }: AppProps) => {
                   const progressPercent = totalCards > 0 ? Math.round((answeredCount / totalCards) * 100) : 0;
                   const isLoading = deckLoading === deck.name;
                   return (
-                    <button
+                    <div
                       key={deck.name}
                       onClick={() => openDeck(deck)}
-                      disabled={isLoading}
+                      onKeyDown={(e) => {
+                        if ((e.key === 'Enter' || e.key === ' ') && !isLoading) {
+                          e.preventDefault();
+                          openDeck(deck);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={isLoading ? -1 : 0}
+                      aria-disabled={isLoading}
                       className={`w-full bg-white p-4 rounded-xl border border-stone-200 text-left hover:border-stone-400 transition-all ${isLoading ? 'opacity-70' : ''}`}
                     >
                       <div className="flex items-center gap-3">
@@ -11672,6 +13026,9 @@ export const App = ({ routeRole }: AppProps) => {
                         <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-stone-800">{deck.name}</h3>
                            <p className="text-sm text-stone-400">{deck.cards.length} learning cards</p>
+                          {deck.submittedByName && (
+                            <p className="mt-1 text-xs text-stone-400">by {deck.submittedByName}</p>
+                          )}
                           {/* Progress indicator */}
                           {answeredCount > 0 ? (
                             <div className="mt-2">
@@ -11690,9 +13047,32 @@ export const App = ({ routeRole }: AppProps) => {
                               <p className="text-xs text-stone-400 mt-1 italic">No activity yet. Open this learning set to begin.</p>
                           )}
                         </div>
-                        <Icon name="chevron_right" className="text-stone-300 flex-shrink-0" />
+                        <div className="flex items-center gap-2">
+                          {canUserDeleteResource(deck.submittedBy) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setResourceToDelete({
+                                  name: deck.name,
+                                  title: deck.name,
+                                  category: 'Flipcard',
+                                  url: deck.url || '',
+                                  submittedBy: deck.submittedBy,
+                                  submittedByName: deck.submittedByName,
+                                  timestamp: deck.timestamp,
+                                  subject: deck.subject
+                                });
+                              }}
+                              className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs text-stone-500 transition-colors hover:bg-red-50 hover:text-red-600"
+                            >
+                              <Icon name="delete" className="text-sm" />
+                              <span>Delete</span>
+                            </button>
+                          )}
+                          <Icon name="chevron_right" className="text-stone-300 flex-shrink-0" />
+                        </div>
                       </div>
-                    </button>
+                    </div>
                   );
                 })
               )}
@@ -11777,7 +13157,179 @@ export const App = ({ routeRole }: AppProps) => {
                 darkMode={darkMode}
               />
               <div className="space-y-6">
-                {/* ...existing code for resources... */}
+                {subjectDecks.length === 0 &&
+                lessonPDFResources.length === 0 &&
+                lessonPPTResources.length === 0 &&
+                reviewerResources.length === 0 &&
+                videoResources.length === 0 &&
+                fileResources.length === 0 ? (
+                  <div className="rounded-2xl border border-stone-200 bg-white p-10 text-center">
+                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-stone-100 text-stone-400">
+                      <Icon name="folder_off" className="text-3xl" />
+                    </div>
+                    <p className="font-medium text-stone-700">No resources yet for {activeSubject}.</p>
+                    <p className="mt-1 text-sm text-stone-400">Upload a file or add a flipcard set to make it appear here.</p>
+                  </div>
+                ) : (
+                  <>
+                    {subjectDecks.length > 0 && (
+                      <section className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-lg font-semibold text-stone-800">Flipcards</h3>
+                            <p className="text-sm text-stone-500">{subjectDecks.length} learning set{subjectDecks.length === 1 ? '' : 's'}</p>
+                          </div>
+                        </div>
+                        <div className="grid gap-3">
+                          {subjectDecks.map(deck => (
+                            <div
+                              key={`resource-deck-${deck.name}`}
+                              onClick={() => openDeck(deck)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  openDeck(deck);
+                                }
+                              }}
+                              role="button"
+                              tabIndex={0}
+                              className="w-full rounded-xl border border-stone-200 bg-white p-4 text-left transition-all hover:border-amber-300 hover:shadow-md"
+                            >
+                              {(() => {
+                                const linkedDeckObligations = getLinkedObligationsForDeck(deck);
+                                return (
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                                  <Icon name="style" className="text-xl" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                 <h4 className="truncate font-semibold text-stone-800">{deck.name}</h4>
+                                 <p className="mt-1 text-sm text-stone-500">{deck.cards.length} learning cards</p>
+                                  {deck.submittedByName && (
+                                    <p className="mt-1 text-xs text-stone-400">by {deck.submittedByName}</p>
+                                  )}
+                                  {linkedDeckObligations.length > 0 && (
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                      {linkedDeckObligations.slice(0, 3).map(link => (
+                                        <span
+                                          key={`${deck.name}-${link.obligationId}`}
+                                          className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700"
+                                        >
+                                          {link.obligationType || link.obligationLabel || 'Obligation'}
+                                        </span>
+                                      ))}
+                                      {linkedDeckObligations.length > 3 && (
+                                        <span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-600">
+                                          +{linkedDeckObligations.length - 3} more
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                 </div>
+                                 <div className="flex items-center gap-2">
+                                   {canUserDeleteResource(deck.submittedBy) && (
+                                     <button
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         setResourceToDelete({
+                                           name: deck.name,
+                                           title: deck.name,
+                                           category: 'Flipcard',
+                                           url: deck.url || '',
+                                           submittedBy: deck.submittedBy,
+                                           submittedByName: deck.submittedByName,
+                                           timestamp: deck.timestamp,
+                                           subject: deck.subject
+                                         });
+                                       }}
+                                       className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs text-stone-500 transition-colors hover:bg-red-50 hover:text-red-600"
+                                     >
+                                       <Icon name="delete" className="text-sm" />
+                                       <span>Delete</span>
+                                     </button>
+                                   )}
+                                   <Icon name="chevron_right" className="text-stone-300" />
+                                 </div>
+                               </div>
+                                );
+                              })()}
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {lessonPDFResources.length > 0 && (
+                      <section className="space-y-3">
+                        <div>
+                          <h3 className="text-lg font-semibold text-stone-800">PDFs</h3>
+                          <p className="text-sm text-stone-500">{lessonPDFResources.length} file{lessonPDFResources.length === 1 ? '' : 's'}</p>
+                        </div>
+                        <div className="grid gap-3">
+                          {lessonPDFResources.map((resource, index) =>
+                            renderResourceCard(resource, index, 'picture_as_pdf', 'bg-red-100', 'text-red-600', 'border-red-300')
+                          )}
+                        </div>
+                      </section>
+                    )}
+
+                    {lessonPPTResources.length > 0 && (
+                      <section className="space-y-3">
+                        <div>
+                          <h3 className="text-lg font-semibold text-stone-800">Presentations</h3>
+                          <p className="text-sm text-stone-500">{lessonPPTResources.length} file{lessonPPTResources.length === 1 ? '' : 's'}</p>
+                        </div>
+                        <div className="grid gap-3">
+                          {lessonPPTResources.map((resource, index) =>
+                            renderResourceCard(resource, index, 'slideshow', 'bg-orange-100', 'text-orange-600', 'border-orange-300')
+                          )}
+                        </div>
+                      </section>
+                    )}
+
+                    {reviewerResources.length > 0 && (
+                      <section className="space-y-3">
+                        <div>
+                          <h3 className="text-lg font-semibold text-stone-800">Reviewers</h3>
+                          <p className="text-sm text-stone-500">{reviewerResources.length} item{reviewerResources.length === 1 ? '' : 's'}</p>
+                        </div>
+                        <div className="grid gap-3">
+                          {reviewerResources.map((resource, index) =>
+                            renderResourceCard(resource, index, 'quiz', 'bg-violet-100', 'text-violet-600', 'border-violet-300')
+                          )}
+                        </div>
+                      </section>
+                    )}
+
+                    {videoResources.length > 0 && (
+                      <section className="space-y-3">
+                        <div>
+                          <h3 className="text-lg font-semibold text-stone-800">Videos</h3>
+                          <p className="text-sm text-stone-500">{videoResources.length} item{videoResources.length === 1 ? '' : 's'}</p>
+                        </div>
+                        <div className="grid gap-3">
+                          {videoResources.map((resource, index) =>
+                            renderResourceCard(resource, index, 'play_circle', 'bg-pink-100', 'text-pink-600', 'border-pink-300')
+                          )}
+                        </div>
+                      </section>
+                    )}
+
+                    {fileResources.length > 0 && (
+                      <section className="space-y-3">
+                        <div>
+                          <h3 className="text-lg font-semibold text-stone-800">Other Files</h3>
+                          <p className="text-sm text-stone-500">{fileResources.length} item{fileResources.length === 1 ? '' : 's'}</p>
+                        </div>
+                        <div className="grid gap-3">
+                          {fileResources.map((resource, index) =>
+                            renderResourceCard(resource, index, 'description', 'bg-stone-100', 'text-stone-600', 'border-stone-300')
+                          )}
+                        </div>
+                      </section>
+                    )}
+                  </>
+                )}
               </div>
             </>
           ) : activeTab === 'Exams' ? (
@@ -11974,20 +13526,12 @@ export const App = ({ routeRole }: AppProps) => {
                   
                   <div>
                     <label className="block text-sm font-medium text-stone-700 mb-1">Category *</label>
-                    <select name="examType" required defaultValue={examToEdit.examType} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
-                      <option value="Activity">Activity</option>
-                      <option value="Special Event">Special Event</option>
-                      <option value="Meeting">Meeting</option>
-                      <option value="Workshop">Workshop</option>
-                      <option value="LE Deadline">LE Deadline</option>
-                      <option value="Quiz">Quiz</option>
-                      <option value="Midterm Exam">Midterm Exam</option>
-                      <option value="Final Exam">Final Exam</option>
-                      <option value="Reporting">Reporting</option>
-                      <option value="Performance">Performance</option>
-                      <option value="Presentation">Presentation</option>
-                      <option value="Submission">Submission</option>
-                    </select>
+                    <CustomDropdown
+                      name="examType"
+                      required
+                      defaultValue={examToEdit.examType}
+                      options={EXAM_TYPE_OPTIONS}
+                    />
                   </div>
                   
                   <div>
@@ -12075,6 +13619,8 @@ export const App = ({ routeRole }: AppProps) => {
           formatExamDate={formatExamDate}
           formatExamTime={formatExamTime}
           darkMode={darkMode}
+          linkedResources={selectedExam ? getLinkedResourcesForObligation(selectedExam.examId) : []}
+          onOpenResource={(resource) => openResource(resource)}
         />
       </div>
     );
@@ -12097,7 +13643,7 @@ export const App = ({ routeRole }: AppProps) => {
 
   // DECK_OVERVIEW View
   if (view === 'DECK_OVERVIEW' && activeDeck) {
-    const deckProgress = getDeckProgress(activeDeck.name);
+    const deckProgress = getDeckProgressForDeck(activeDeck);
     const answeredCount = deckProgress ? Object.values(deckProgress.cardStatuses).filter(s => s !== 'unanswered').length : 0;
     const correctCount = deckProgress ? Object.values(deckProgress.cardStatuses).filter(s => s === 'correct').length : 0;
     const incorrectCount = deckProgress ? Object.values(deckProgress.cardStatuses).filter(s => s === 'incorrect').length : 0;
@@ -12162,18 +13708,20 @@ export const App = ({ routeRole }: AppProps) => {
               {/* Mode Toggle */}
               <div className="flex gap-2 p-1 bg-stone-100 rounded-xl flex-shrink-0">
                 <button
-                  onClick={() => setPlayMode('shuffle')}
+                  onClick={() => !sessionActionBusy && setPlayMode('shuffle')}
+                  disabled={sessionActionBusy}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${
                     playMode === 'shuffle' ? 'bg-white shadow text-stone-800' : 'text-stone-500'
-                  }`}
+                  } ${sessionActionBusy ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   <Icon name="shuffle" className="text-base" /> Shuffle
                 </button>
                 <button
-                  onClick={() => setPlayMode('chronological')}
+                  onClick={() => !sessionActionBusy && setPlayMode('chronological')}
+                  disabled={sessionActionBusy}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${
                     playMode === 'chronological' ? 'bg-white shadow text-stone-800' : 'text-stone-500'
-                  }`}
+                  } ${sessionActionBusy ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   <Icon name="format_list_numbered" className="text-base" /> In Order
                 </button>
@@ -12184,21 +13732,24 @@ export const App = ({ routeRole }: AppProps) => {
                 {hasProgress && (activeDeck.cards.length - answeredCount) > 0 && (
                   <button 
                     onClick={() => startSession('continue')}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 min-w-[120px] order-1"
+                    disabled={sessionActionBusy || clearProgressBusy}
+                    className={`flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 min-w-[120px] order-1 ${(sessionActionBusy || clearProgressBusy) ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
                     <Icon name="play_arrow" /> Continue ({activeDeck.cards.length - answeredCount} left)
                   </button>
                 )}
                 <button 
                   onClick={() => startSession('new', playMode)}
-                  className={`${hasProgress && (activeDeck.cards.length - answeredCount) > 0 ? 'flex-1 min-w-[100px] order-2' : 'flex-1'} bg-stone-800 hover:bg-stone-900 text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2`}
+                  disabled={sessionActionBusy || clearProgressBusy}
+                  className={`${hasProgress && (activeDeck.cards.length - answeredCount) > 0 ? 'flex-1 min-w-[100px] order-2' : 'flex-1'} bg-stone-800 hover:bg-stone-900 text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 ${(sessionActionBusy || clearProgressBusy) ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   <Icon name={hasProgress ? 'restart_alt' : 'play_arrow'} /> {hasProgress ? 'Start Over' : 'Start'}
                 </button>
                 {hasProgress && incorrectCount > 0 && (
                   <button 
                     onClick={() => startSession('retry', playMode)}
-                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-sm font-semibold flex items-center gap-2 order-3"
+                    disabled={sessionActionBusy || clearProgressBusy}
+                    className={`px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-sm font-semibold flex items-center gap-2 order-3 ${(sessionActionBusy || clearProgressBusy) ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
                     <Icon name="refresh" /> Retry Missed ({incorrectCount})
                   </button>
@@ -12207,8 +13758,9 @@ export const App = ({ routeRole }: AppProps) => {
             </div>
             {hasProgress && (
               <button
-                onClick={() => setShowClearProgressConfirm(true)}
-                className="mt-2 text-xs text-stone-400 hover:text-red-500 flex items-center gap-1"
+                onClick={() => !clearProgressBusy && setShowClearProgressConfirm(true)}
+                disabled={sessionActionBusy || clearProgressBusy}
+                className={`mt-2 text-xs text-stone-400 hover:text-red-500 flex items-center gap-1 ${(sessionActionBusy || clearProgressBusy) ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 <Icon name="delete" className="text-sm" /> Clear Progress
               </button>
@@ -12258,10 +13810,16 @@ export const App = ({ routeRole }: AppProps) => {
           message="Are you sure you want to clear all progress for this deck? This will reset your correct/incorrect answers."
           confirmText="Clear Progress"
           confirmColor="red"
-          onConfirm={() => {
+          onConfirm={async () => {
             if (activeDeck) {
-              clearDeckProgress(activeDeck.name);
-              setScores({});
+              setClearProgressBusy(true);
+              const cleared = await clearDeckProgress(activeDeck.name);
+              if (cleared) {
+                setScores({});
+              } else {
+                addToast('Failed to clear progress. Please try again while online.', 'error');
+              }
+              setClearProgressBusy(false);
             }
             setShowClearProgressConfirm(false);
           }}
@@ -12360,14 +13918,15 @@ export const App = ({ routeRole }: AppProps) => {
               <div className="flex gap-3">
                 <button 
                   onClick={() => currentIndex > 0 && setCurrentIndex(c => c - 1)}
-                  disabled={currentIndex === 0}
-                  className={`w-14 h-14 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-stone-200'} flex items-center justify-center disabled:opacity-30`}
+                  disabled={currentIndex === 0 || sessionActionBusy}
+                  className={`w-14 h-14 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-stone-200'} flex items-center justify-center disabled:opacity-30 ${sessionActionBusy ? 'cursor-not-allowed' : ''}`}
                 >
                   <Icon name="arrow_back" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
                 </button>
                 <button 
                   onClick={() => setIsFlipped(true)}
-                  className={`flex-1 h-14 ${darkMode ? 'bg-blue-600' : 'bg-stone-800'} text-white rounded-xl font-semibold`}
+                  disabled={sessionActionBusy}
+                  className={`flex-1 h-14 ${darkMode ? 'bg-blue-600' : 'bg-stone-800'} text-white rounded-xl font-semibold ${sessionActionBusy ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   Reveal
                 </button>
@@ -12376,13 +13935,15 @@ export const App = ({ routeRole }: AppProps) => {
               <div className="grid grid-cols-2 gap-3">
                 <button 
                   onClick={() => handleScore('incorrect')}
-                  className={`h-14 ${darkMode ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-red-50 text-red-600 border-red-200'} border rounded-xl font-semibold flex items-center justify-center gap-2`}
+                  disabled={sessionActionBusy}
+                  className={`h-14 ${darkMode ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-red-50 text-red-600 border-red-200'} border rounded-xl font-semibold flex items-center justify-center gap-2 ${sessionActionBusy ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   <Icon name="close" /> Missed
                 </button>
                 <button 
                   onClick={() => handleScore('correct')}
-                  className={`h-14 ${darkMode ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800' : 'bg-emerald-50 text-emerald-600 border-emerald-200'} border rounded-xl font-semibold flex items-center justify-center gap-2`}
+                  disabled={sessionActionBusy}
+                  className={`h-14 ${darkMode ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800' : 'bg-emerald-50 text-emerald-600 border-emerald-200'} border rounded-xl font-semibold flex items-center justify-center gap-2 ${sessionActionBusy ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   <Icon name="check" /> Got it
                 </button>
@@ -12402,7 +13963,7 @@ export const App = ({ routeRole }: AppProps) => {
     const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
 
     // Get full deck progress
-    const fullProgress = activeDeck ? getDeckProgress(activeDeck.name) : null;
+    const fullProgress = getDeckProgressForDeck(activeDeck);
     const totalDeckCards = activeDeck?.cards.length || 0;
     const totalAnswered = fullProgress ? Object.values(fullProgress.cardStatuses).filter(s => s !== 'unanswered').length : 0;
     const totalCorrect = fullProgress ? Object.values(fullProgress.cardStatuses).filter(s => s === 'correct').length : 0;
@@ -12458,14 +14019,14 @@ export const App = ({ routeRole }: AppProps) => {
 
           <div className="space-y-2">
             {incorrect > 0 && (
-              <button onClick={() => startSession('retry', playMode)} className={`w-full py-3 ${darkMode ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-red-50 text-red-600 border-red-200'} border rounded-xl font-semibold flex items-center justify-center gap-2`}>
+              <button disabled={sessionActionBusy} onClick={() => startSession('retry', playMode)} className={`w-full py-3 ${darkMode ? 'bg-red-900/30 text-red-400 border-red-800' : 'bg-red-50 text-red-600 border-red-200'} border rounded-xl font-semibold flex items-center justify-center gap-2 ${sessionActionBusy ? 'opacity-60 cursor-not-allowed' : ''}`}>
                 <Icon name="refresh" /> Review Missed ({incorrect})
               </button>
             )}
-            <button onClick={() => startSession('new', playMode)} className={`w-full py-3 ${darkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-stone-800'} text-white rounded-xl font-semibold flex items-center justify-center gap-2`}>
+            <button disabled={sessionActionBusy} onClick={() => startSession('new', playMode)} className={`w-full py-3 ${darkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-stone-800'} text-white rounded-xl font-semibold flex items-center justify-center gap-2 ${sessionActionBusy ? 'opacity-60 cursor-not-allowed' : ''}`}>
               <Icon name="replay" /> Play Again
             </button>
-            <button onClick={() => startSession('smart', playMode)} className={`w-full py-3 ${darkMode ? 'bg-gray-700 text-white' : 'bg-stone-100 text-stone-800'} rounded-xl font-semibold flex items-center justify-center gap-2`}>
+            <button disabled={sessionActionBusy} onClick={() => startSession('smart', playMode)} className={`w-full py-3 ${darkMode ? 'bg-gray-700 text-white' : 'bg-stone-100 text-stone-800'} rounded-xl font-semibold flex items-center justify-center gap-2 ${sessionActionBusy ? 'opacity-60 cursor-not-allowed' : ''}`}>
               <Icon name="psychology" /> Smart Review
             </button>
             <button onClick={goBack} className={`w-full py-3 ${darkMode ? 'text-gray-400' : 'text-stone-500'} text-sm`}>
@@ -12479,11 +14040,6 @@ export const App = ({ routeRole }: AppProps) => {
 
   // ANALYTICS View
   if (view === 'ANALYTICS') {
-    // Fetch analytics if not loaded
-    if (!userAnalytics && !loadingAnalytics && user) {
-      fetchUserAnalytics();
-    }
-
     return (
       <div className={`min-h-screen ${darkMode ? 'bg-stone-900' : 'bg-[#F5F5F4]'}`}>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
@@ -12503,10 +14059,19 @@ export const App = ({ routeRole }: AppProps) => {
             <button onClick={goBack} className={`p-2 -ml-2 ${darkMode ? 'text-stone-300 hover:bg-stone-700' : 'text-stone-600 hover:bg-stone-100'} rounded-lg`}>
               <Icon name="arrow_back" />
             </button>
-            <div>
+            <div className="flex-1">
               <h1 className={`text-lg font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>My Analytics</h1>
-              <p className={`text-sm ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>Track your learning progress</p>
+              <p className={`text-sm ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>
+                {refreshingAnalytics ? 'Track your learning progress • syncing...' : 'Track your learning progress'}
+              </p>
             </div>
+            <RefreshIconButton
+              onClick={handleAnalyticsRefresh}
+              disabled={!user || refreshingAnalytics}
+              spinning={refreshingAnalytics}
+              darkMode={darkMode}
+              title="Refresh analytics"
+            />
           </div>
         </header>
 
@@ -12826,13 +14391,41 @@ export const App = ({ routeRole }: AppProps) => {
   // EXAMS View - All Exams Schedule
   // ALL_RESOURCES View
   if (view === 'ALL_RESOURCES') {
+    type AggregatedResource = Resource & {
+      subject: string;
+      sourceType: 'resource' | 'deck';
+      deckRef?: Deck;
+    };
+
     // Get all resources flattened with subject info
-    const allResourcesList = Object.entries(resources).flatMap(([subject, items]) => 
-      items.map(r => ({ ...r, subject }))
+    const allUploadedResources: AggregatedResource[] = Object.entries(resources).flatMap(([subject, items]) =>
+      displaySubjectSet.has(subject)
+        ? items.map(r => ({ ...r, subject, sourceType: 'resource' as const }))
+        : []
     );
+    const allDeckResources: AggregatedResource[] = decks
+      .filter(deck => !!deck.subject && displaySubjectSet.has(deck.subject))
+      .map(deck => ({
+        id: `deck-${deck.name}`,
+        name: deck.name,
+        title: deck.name,
+        description: `${deck.cards.length} learning cards`,
+        category: 'Flipcard',
+        url: '',
+        subject: deck.subject || 'Uncategorized',
+        sourceType: 'deck' as const,
+        deckRef: deck
+      }));
+    const allResourcesList: AggregatedResource[] = [...allUploadedResources, ...allDeckResources];
     
     // Get unique resource categories (types)
     const resourceCategories = Array.from(new Set(allResourcesList.map(r => r.category))).sort();
+    const obligationFilterOptions = exams
+      .filter(exam => displaySubjectSet.has(exam.courseCode))
+      .map(exam => ({
+        value: exam.examId,
+        label: `${exam.courseCode} • ${exam.examType} • ${formatExamDate(exam.date)}`
+      }));
     
     // Filter resources (using state from top level)
     const filteredResources = allResourcesList.filter(r => {
@@ -12843,14 +14436,17 @@ export const App = ({ routeRole }: AppProps) => {
         (subjectInfo[r.subject]?.name || '').toLowerCase().includes(resourceSearchQuery.toLowerCase());
       const matchesSubject = !selectedSubjectFilter || r.subject === selectedSubjectFilter;
       const matchesCategory = !selectedCategoryFilter || r.category === selectedCategoryFilter;
-      return matchesSearch && matchesSubject && matchesCategory;
+      const matchesObligation = !selectedObligationFilter || !!r.linkedObligations?.some(link => link.obligationId === selectedObligationFilter);
+      return matchesSearch && matchesSubject && matchesCategory && matchesObligation;
     });
 
     const getResourceIcon = (category: string) => {
-      switch (category.toLowerCase()) {
-        case 'lesson ppt':
-        case 'ppt':
-          return 'slideshow';
+        switch (category.toLowerCase()) {
+          case 'flipcard':
+            return 'style';
+          case 'lesson ppt':
+          case 'ppt':
+            return 'slideshow';
         case 'lesson pdf':
         case 'pdf':
           return 'picture_as_pdf';
@@ -12866,10 +14462,12 @@ export const App = ({ routeRole }: AppProps) => {
     };
 
     const getResourceColor = (category: string, isDark: boolean = false) => {
-      switch (category.toLowerCase()) {
-        case 'lesson ppt':
-        case 'ppt':
-          return isDark ? 'bg-orange-900/30 text-orange-400' : 'bg-orange-100 text-orange-600';
+        switch (category.toLowerCase()) {
+          case 'flipcard':
+            return isDark ? 'bg-amber-900/30 text-amber-300' : 'bg-amber-100 text-amber-700';
+          case 'lesson ppt':
+          case 'ppt':
+            return isDark ? 'bg-orange-900/30 text-orange-400' : 'bg-orange-100 text-orange-600';
         case 'lesson pdf':
         case 'pdf':
           return isDark ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-600';
@@ -12907,9 +14505,20 @@ export const App = ({ routeRole }: AppProps) => {
               <div className="flex-1 min-w-0">
                 <h1 className={`font-bold ${darkMode ? 'text-white' : 'text-stone-800'} text-lg`}>Subjects & Resources</h1>
                 <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>
-                  {isSemesterSubjectsLoading ? 'Loading courses...' : `${displaySubjects.length} subjects • ${allResourcesList.length} resources`}
+                  {isSemesterSubjectsLoading
+                    ? 'Loading courses...'
+                    : isSemesterSubjectsRefreshing
+                      ? `${displaySubjects.length} subjects • ${allResourcesList.length} resources • syncing...`
+                      : `${displaySubjects.length} subjects • ${allResourcesList.length} resources`}
                 </p>
               </div>
+              <RefreshIconButton
+                onClick={() => void handleAllResourcesRefresh()}
+                disabled={isSemesterSubjectsLoading || isSemesterSubjectsRefreshing || isResourcesRefreshing}
+                spinning={isSemesterSubjectsRefreshing || isResourcesRefreshing}
+                darkMode={darkMode}
+                title="Refresh subjects and resources"
+              />
               {/* Semester Toggle */}
               <div className={`hidden sm:flex items-center ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} rounded-lg p-0.5`}>
                 <button
@@ -13132,31 +14741,45 @@ export const App = ({ routeRole }: AppProps) => {
                 
                 {/* Filter Dropdowns - Stack on mobile */}
                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                  <select
+                  <CustomDropdown
+                    name="selectedSubjectFilter"
                     value={selectedSubjectFilter}
-                    onChange={(e) => setSelectedSubjectFilter(e.target.value)}
-                    className={`flex-1 px-3 py-2 ${darkMode ? 'border-gray-600 bg-gray-700 text-white' : 'border-stone-200 bg-white text-stone-800'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm`}
-                  >
-                    <option value="">All Subjects</option>
-                    {displaySubjects.map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
+                    onChange={setSelectedSubjectFilter}
+                    options={[
+                      { value: '', label: 'All Subjects' },
+                      ...displaySubjects.map(s => ({ value: s, label: s }))
+                    ]}
+                    theme={darkMode ? 'dark' : 'light'}
+                    size="compact"
+                  />
                   
-                  <select
+                  <CustomDropdown
+                    name="selectedCategoryFilter"
                     value={selectedCategoryFilter}
-                    onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-                    className={`flex-1 px-3 py-2 ${darkMode ? 'border-gray-600 bg-gray-700 text-white' : 'border-stone-200 bg-white text-stone-800'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm`}
-                  >
-                    <option value="">All Types</option>
-                    {resourceCategories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
+                    onChange={setSelectedCategoryFilter}
+                    options={[
+                      { value: '', label: 'All Types' },
+                      ...resourceCategories.map(cat => ({ value: cat, label: cat }))
+                    ]}
+                    theme={darkMode ? 'dark' : 'light'}
+                    size="compact"
+                  />
+
+                  <CustomDropdown
+                    name="selectedObligationFilter"
+                    value={selectedObligationFilter}
+                    onChange={setSelectedObligationFilter}
+                    options={[
+                      { value: '', label: 'All Obligations' },
+                      ...obligationFilterOptions
+                    ]}
+                    theme={darkMode ? 'dark' : 'light'}
+                    size="compact"
+                  />
                 </div>
                 
                 {/* Active Filters */}
-                {(selectedSubjectFilter || selectedCategoryFilter || resourceSearchQuery) && (
+                {(selectedSubjectFilter || selectedCategoryFilter || selectedObligationFilter || resourceSearchQuery) && (
                   <div className="flex items-center gap-2 flex-wrap">
                     {resourceSearchQuery && (
                       <span className={`inline-flex items-center gap-1 px-2 py-1 ${darkMode ? 'bg-blue-900/30 text-blue-300' : 'bg-blue-100 text-blue-700'} rounded-full text-xs`}>
@@ -13176,8 +14799,14 @@ export const App = ({ routeRole }: AppProps) => {
                         <button onClick={() => setSelectedCategoryFilter('')}><Icon name="close" className="text-xs" /></button>
                       </span>
                     )}
+                    {selectedObligationFilter && (
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 ${darkMode ? 'bg-amber-900/30 text-amber-300' : 'bg-amber-100 text-amber-700'} rounded-full text-xs`}>
+                        {obligationFilterOptions.find(option => option.value === selectedObligationFilter)?.label || selectedObligationFilter}
+                        <button onClick={() => setSelectedObligationFilter('')}><Icon name="close" className="text-xs" /></button>
+                      </span>
+                    )}
                     <button
-                      onClick={() => { setResourceSearchQuery(''); setSelectedSubjectFilter(''); setSelectedCategoryFilter(''); }}
+                      onClick={() => { setResourceSearchQuery(''); setSelectedSubjectFilter(''); setSelectedCategoryFilter(''); setSelectedObligationFilter(''); }}
                       className={`text-xs ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-stone-500 hover:text-stone-700'} underline`}
                     >
                       Clear
@@ -13204,6 +14833,10 @@ export const App = ({ routeRole }: AppProps) => {
                     <button
                       key={`${resource.subject}-${resource.name}-${idx}`}
                       onClick={() => {
+                        if (resource.sourceType === 'deck' && resource.deckRef) {
+                          void openDeck(resource.deckRef);
+                          return;
+                        }
                         setActiveSubject(resource.subject);
                         setActiveResource(resource);
                         setPreviousView('ALL_RESOURCES');
@@ -13225,6 +14858,11 @@ export const App = ({ routeRole }: AppProps) => {
                           <span className={`inline-block mt-1.5 px-2 py-0.5 ${getResourceColor(resource.category, darkMode)} rounded-full text-xs font-medium`}>
                             {resource.category}
                           </span>
+                          {resource.linkedObligations && resource.linkedObligations.length > 0 && (
+                            <span className={`inline-block mt-1.5 ml-2 px-2 py-0.5 ${darkMode ? 'bg-amber-900/30 text-amber-300' : 'bg-amber-100 text-amber-700'} rounded-full text-xs font-medium`}>
+                              {resource.linkedObligations.length === 1 ? (resource.linkedObligations[0].obligationType || 'Linked') : `${resource.linkedObligations.length} linked`}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </button>
@@ -13380,6 +15018,13 @@ export const App = ({ routeRole }: AppProps) => {
               <h1 className={`font-bold ${darkMode ? 'text-white' : 'text-stone-800'} text-lg`}>Obligations</h1>
               <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{exams.length} total obligations</p>
             </div>
+            <RefreshIconButton
+              onClick={() => void handleObligationsRefresh()}
+              disabled={isObligationsLoading}
+              spinning={isObligationsLoading}
+              darkMode={darkMode}
+              title="Refresh deadlines"
+            />
             <button
               onClick={() => navigateTo('EXAMS')}
               className={`flex items-center gap-2 px-4 py-2 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200 hover:border-gray-500' : 'bg-white border border-stone-200 text-stone-700 hover:border-stone-400'} border rounded-xl text-sm font-medium transition-colors`}
@@ -13892,20 +15537,12 @@ export const App = ({ routeRole }: AppProps) => {
                   
                   <div>
                     <label className="block text-sm font-medium text-stone-700 mb-1">Category *</label>
-                    <select name="examType" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
-                      <option value="Activity">Activity</option>
-                      <option value="Special Event">Special Event</option>
-                      <option value="Meeting">Meeting</option>
-                      <option value="Workshop">Workshop</option>
-                      <option value="LE Deadline">LE Deadline</option>
-                      <option value="Quiz">Quiz</option>
-                      <option value="Midterm Exam">Midterm Exam</option>
-                      <option value="Final Exam">Final Exam</option>
-                      <option value="Reporting">Reporting</option>
-                      <option value="Performance">Performance</option>
-                      <option value="Presentation">Presentation</option>
-                      <option value="Submission">Submission</option>
-                    </select>
+                    <CustomDropdown
+                      name="examType"
+                      required
+                      defaultValue="Activity"
+                      options={EXAM_TYPE_OPTIONS}
+                    />
                   </div>
                   
                   <div>
@@ -14230,20 +15867,12 @@ export const App = ({ routeRole }: AppProps) => {
                   
                   <div>
                     <label className="block text-sm font-medium text-stone-700 mb-1">Category *</label>
-                    <select name="examType" required defaultValue={examToEdit.examType} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
-                      <option value="Activity">Activity</option>
-                      <option value="Special Event">Special Event</option>
-                      <option value="Meeting">Meeting</option>
-                      <option value="Workshop">Workshop</option>
-                      <option value="LE Deadline">LE Deadline</option>
-                      <option value="Quiz">Quiz</option>
-                      <option value="Midterm Exam">Midterm Exam</option>
-                      <option value="Final Exam">Final Exam</option>
-                      <option value="Reporting">Reporting</option>
-                      <option value="Performance">Performance</option>
-                      <option value="Presentation">Presentation</option>
-                      <option value="Submission">Submission</option>
-                    </select>
+                    <CustomDropdown
+                      name="examType"
+                      required
+                      defaultValue={examToEdit.examType}
+                      options={EXAM_TYPE_OPTIONS}
+                    />
                   </div>
                   
                   <div>
@@ -14348,20 +15977,12 @@ export const App = ({ routeRole }: AppProps) => {
                   
                   <div>
                     <label className="block text-sm font-medium text-stone-700 mb-1">Category *</label>
-                    <select name="examType" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500">
-                      <option value="Activity">Activity</option>
-                      <option value="Special Event">Special Event</option>
-                      <option value="Meeting">Meeting</option>
-                      <option value="Workshop">Workshop</option>
-                      <option value="LE Deadline">LE Deadline</option>
-                      <option value="Quiz">Quiz</option>
-                      <option value="Midterm Exam">Midterm Exam</option>
-                      <option value="Final Exam">Final Exam</option>
-                      <option value="Reporting">Reporting</option>
-                      <option value="Performance">Performance</option>
-                      <option value="Presentation">Presentation</option>
-                      <option value="Submission">Submission</option>
-                    </select>
+                    <CustomDropdown
+                      name="examType"
+                      required
+                      defaultValue="Activity"
+                      options={EXAM_TYPE_OPTIONS}
+                    />
                   </div>
                   
                   <div>
@@ -14416,6 +16037,8 @@ export const App = ({ routeRole }: AppProps) => {
           formatExamDate={formatExamDate}
           formatExamTime={formatExamTime}
           darkMode={darkMode}
+          linkedResources={selectedExam ? getLinkedResourcesForObligation(selectedExam.examId) : []}
+          onOpenResource={(resource) => openResource(resource)}
         />
       </div>
     );

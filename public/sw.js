@@ -1,11 +1,30 @@
 // CumLaude! Service Worker
-const CACHE_NAME = 'cumlaude-v1';
+const CACHE_NAME = 'cumlaude-v2';
 
 // Assets to cache on install
 const STATIC_ASSETS = [
   '/',
-  '/index.html'
+  '/index.html',
+  '/manifest.json',
+  '/icon-192.svg',
+  '/icon-512.svg'
 ];
+
+function isCacheableAppRequest(requestUrl) {
+  if (requestUrl.origin !== self.location.origin) {
+    return false;
+  }
+
+  const { pathname } = requestUrl;
+  return (
+    pathname === '/' ||
+    pathname === '/index.html' ||
+    pathname === '/manifest.json' ||
+    pathname === '/icon-192.svg' ||
+    pathname === '/icon-512.svg' ||
+    pathname.startsWith('/assets/')
+  );
+}
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
@@ -37,13 +56,21 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') return;
-  
-  // Skip API calls (Google Apps Script)
-  if (event.request.url.includes('script.google.com')) return;
-  
+
+  const requestUrl = new URL(event.request.url);
+
+  // Skip API calls and non-app assets
+  if (event.request.url.includes('script.google.com') || !isCacheableAppRequest(requestUrl)) {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
+        if (!response || response.status !== 200 || response.type !== 'basic') {
+          return response;
+        }
+
         // Clone the response before caching
         const responseClone = response.clone();
         caches.open(CACHE_NAME).then((cache) => {
