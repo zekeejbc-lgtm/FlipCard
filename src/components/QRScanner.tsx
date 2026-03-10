@@ -1,15 +1,29 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { Camera, Upload, X, Check } from 'lucide-react';
 import jsQR from 'jsqr';
 
 // API URL - should match the one in index.tsx
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx7gVOloTlgAZ5NJalR5QRrEo8iRdc-rJWZiaiStu2KMU7hAXvicAJXUm2Jm5iCLZZn/exec';
 
 interface QRScannerProps {
-  userId: string;
+  userId?: string;
   onSuccess: (qrText: string) => void;
   onError: (error: string) => void;
   onClose?: () => void;
+  mode?: 'profile' | 'attendance';
+  title?: string;
+  successActionLabel?: string;
+  continuousScan?: boolean;
+  pauseDetection?: boolean;
+  onDetect?: (qrText: string) => void | Promise<void>;
+  autoSubmitOnDetect?: boolean;
+}
+
+function ScannerIcon({ name, className = '' }: { name: string; className?: string }) {
+  return (
+    <span className={`material-symbols-rounded select-none leading-none ${className}`} aria-hidden="true">
+      {name}
+    </span>
+  );
 }
 
 /**
@@ -18,11 +32,25 @@ interface QRScannerProps {
  * - Upload QR code image and extract text
  * - Save extracted text to backend
  */
-export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError, onClose }) => {
+export const QRScanner: React.FC<QRScannerProps> = ({
+  userId,
+  onSuccess,
+  onError,
+  onClose,
+  mode = 'profile',
+  title,
+  successActionLabel,
+  continuousScan = false,
+  pauseDetection = false,
+  onDetect,
+  autoSubmitOnDetect = false
+}) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const lastDetectedTextRef = useRef('');
+  const lastDetectedAtRef = useRef(0);
   
   const [scanMode, setScanMode] = useState<'instructions' | 'camera' | 'upload' | null>('instructions');
   const [isScanning, setIsScanning] = useState(false);
@@ -97,9 +125,26 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
         });
 
         if (qrCode && qrCode.data) {
-          setScannedText(qrCode.data);
-          stopCamera();
-          return; // Stop scanning once QR is found
+          const nextText = qrCode.data.trim();
+          const now = Date.now();
+          const isDuplicate = nextText === lastDetectedTextRef.current && now - lastDetectedAtRef.current < 1800;
+
+          if (!isDuplicate && !pauseDetection) {
+            lastDetectedTextRef.current = nextText;
+            lastDetectedAtRef.current = now;
+            setScannedText(nextText);
+
+            if (mode === 'attendance' && continuousScan && onDetect) {
+              void onDetect(nextText);
+            } else if (mode === 'attendance' && autoSubmitOnDetect) {
+              stopCamera();
+              onSuccess(nextText);
+              return;
+            } else {
+              stopCamera();
+              return;
+            }
+          }
         }
       }
 
@@ -113,7 +158,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isScanning, scanMode, stopCamera]);
+  }, [autoSubmitOnDetect, continuousScan, isScanning, mode, onDetect, onSuccess, pauseDetection, scanMode, stopCamera]);
 
   // Handle image upload and extract QR using jsQR
   const handleImageUpload = useCallback(async (file: File) => {
@@ -145,7 +190,15 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
           });
 
           if (qrCode && qrCode.data) {
-            setScannedText(qrCode.data);
+            const nextText = qrCode.data.trim();
+            if (mode === 'attendance' && autoSubmitOnDetect) {
+              onSuccess(nextText);
+              setScannedText('');
+              setScanMode(null);
+              setUploadPreview(null);
+              return;
+            }
+            setScannedText(nextText);
           } else {
             onError('No QR code found in image. You can manually enter the text below.');
           }
@@ -158,12 +211,26 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
     } catch (err) {
       onError('Failed to process file');
     }
-  }, [onError]);
+  }, [autoSubmitOnDetect, mode, onError, onSuccess]);
 
-  // Save scanned QR text to backend
+  // Save scanned QR text to backend or hand it to the caller directly.
   const saveQRText = useCallback(async () => {
     if (!scannedText.trim()) {
       onError('QR text cannot be empty');
+      return;
+    }
+
+    if (mode === 'attendance') {
+      onSuccess(scannedText.trim());
+      setScannedText('');
+      setScanMode(null);
+      setUploadPreview(null);
+      setIsLoading(false);
+      return;
+    }
+
+    if (!userId) {
+      onError('Missing user ID');
       return;
     }
 
@@ -173,7 +240,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
         method: 'POST',
         body: JSON.stringify({
           action: 'saveScannedQRCode',
-          userId,
+          idNumber: userId,
           qrCodeText: scannedText
         })
       });
@@ -192,7 +259,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
     } finally {
       setIsLoading(false);
     }
-  }, [scannedText, userId, onSuccess, onError]);
+  }, [mode, onError, onSuccess, scannedText, userId]);
 
   const handleClose = () => {
     stopCamera();
@@ -205,15 +272,15 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6 max-w-md mx-auto">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-stone-800">Scan School QR Code</h2>
+        <h2 className="text-xl font-bold text-stone-800">{title || (mode === 'attendance' ? 'Scan Attendance QR' : 'Scan School QR Code')}</h2>
         {onClose && (
           <button onClick={handleClose} className="p-1 hover:bg-stone-100 rounded-full">
-            <X size={20} className="text-stone-500" />
+            <ScannerIcon name="close" className="text-stone-500 text-[20px]" />
           </button>
         )}
       </div>
 
-      {scanMode === 'instructions' && (
+      {scanMode === 'instructions' && mode === 'profile' && (
         <div className="space-y-4">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
             <div className="flex gap-3">
@@ -266,23 +333,27 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
         </div>
       )}
 
-      {!scanMode && scanMode !== 'instructions' && (
+      {(!scanMode || (scanMode === 'instructions' && mode === 'attendance')) && (
         <div className="space-y-4">
           <p className="text-sm text-stone-600">
-            Ready to scan your school ID QR code from the USEP Attendance System?
+            {mode === 'attendance'
+              ? continuousScan
+                ? 'Scan student USeP QR codes continuously. Each valid code is processed immediately.'
+                : 'Scan the student USeP QR code using the camera or an uploaded screenshot.'
+              : 'Ready to scan your school ID QR code from the USEP Attendance System?'}
           </p>
           <div className="flex gap-3">
             <button
               onClick={() => { setScanMode('camera'); startCamera(); }}
               className="flex-1 bg-stone-800 text-white py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-stone-900 transition font-medium"
             >
-              <Camera size={20} /> Use Camera
+              <ScannerIcon name="photo_camera" className="text-[20px]" /> Use Camera
             </button>
             <button
               onClick={() => { setScanMode('upload'); fileInputRef.current?.click(); }}
               className="flex-1 bg-emerald-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 transition font-medium"
             >
-              <Upload size={20} /> Upload Image
+              <ScannerIcon name="upload" className="text-[20px]" /> Upload Image
             </button>
           </div>
         </div>
@@ -315,7 +386,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
           {isScanning && !scannedText && (
             <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-sm text-amber-700 flex items-center gap-2">
               <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-              <span>Scanning... Point camera at QR code</span>
+              <span>{pauseDetection ? 'Processing latest scan...' : 'Scanning... Point camera at QR code'}</span>
             </div>
           )}
 
@@ -327,7 +398,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
           )}
 
           <div className="flex gap-2">
-            {scannedText && (
+            {scannedText && !(continuousScan && mode === 'attendance' && scanMode === 'camera') && (
               <button
                 onClick={saveQRText}
                 disabled={isLoading}
@@ -336,7 +407,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
                 {isLoading ? (
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <><Check size={18} /> Save QR Code</>
+                  <><ScannerIcon name="check" className="text-[18px]" /> {successActionLabel || (mode === 'attendance' ? 'Use QR' : 'Save QR Code')}</>
                 )}
               </button>
             )}
@@ -344,7 +415,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
               onClick={handleClose}
               className="flex-1 bg-stone-200 text-stone-700 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-stone-300 transition font-medium"
             >
-              <X size={18} /> Cancel
+              <ScannerIcon name="close" className="text-[18px]" /> Cancel
             </button>
           </div>
         </div>
@@ -369,7 +440,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
               onClick={() => fileInputRef.current?.click()}
               className="border-2 border-dashed border-stone-300 rounded-xl p-8 text-center cursor-pointer hover:border-stone-400 transition"
             >
-              <Upload size={32} className="mx-auto text-stone-400 mb-2" />
+              <ScannerIcon name="upload" className="mx-auto block text-stone-400 text-[32px] mb-2" />
               <p className="text-sm text-stone-600">Click to select QR code image</p>
             </div>
           )}
@@ -410,7 +481,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
                 {isLoading ? (
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <><Check size={18} /> Save QR Code</>
+                  <><ScannerIcon name="check" className="text-[18px]" /> {successActionLabel || (mode === 'attendance' ? 'Use QR' : 'Save QR Code')}</>
                 )}
               </button>
             )}
@@ -418,7 +489,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ userId, onSuccess, onError
               onClick={handleClose}
               className="flex-1 bg-stone-200 text-stone-700 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-stone-300 transition font-medium"
             >
-              <X size={18} /> Cancel
+              <ScannerIcon name="close" className="text-[18px]" /> Cancel
             </button>
           </div>
         </div>

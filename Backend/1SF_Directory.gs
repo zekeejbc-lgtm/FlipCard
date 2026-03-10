@@ -187,6 +187,8 @@ function doPost(e) {
         return jsonResponse(updateUserProfile(data));
       case 'getUserProfile':
         return jsonResponse(getUserProfile(data.idNumber));
+      case 'findUserByQRCode':
+        return jsonResponse(findUserByQRCode(data.qrCodeText));
       case 'getClassmates':
         return jsonResponse(getClassmates(data.idNumber, data.section));
       case 'updateUserRole':
@@ -1518,6 +1520,56 @@ function getUserProfile(idNumber) {
     
     return { error: 'User not found' };
     
+  } catch (error) {
+    return { error: error.message, stack: error.stack };
+  }
+}
+
+/**
+ * Find user profile by the saved QR code text.
+ */
+function findUserByQRCode(qrCodeText) {
+  try {
+    const targetQrCode = String(qrCodeText || '').trim();
+    if (!targetQrCode) {
+      return { error: 'QR code text is required' };
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const userSheet = ss.getSheetByName('UserAccounts');
+
+    if (!userSheet) {
+      return { error: 'User sheet not found' };
+    }
+
+    const data = userSheet.getDataRange().getValues();
+
+    for (let i = 1; i < data.length; i++) {
+      const savedQrCode = data[i][COL.QR_CODE_VALUE] ? decryptQRValue(data[i][COL.QR_CODE_VALUE]) : '';
+      if (String(savedQrCode || '').trim() !== targetQrCode) {
+        continue;
+      }
+
+      return {
+        success: true,
+        user: {
+          idNumber: data[i][COL.ID_NUMBER],
+          firstName: data[i][COL.FIRST_NAME],
+          lastName: data[i][COL.LAST_NAME],
+          fullName: `${data[i][COL.FIRST_NAME] || ''} ${data[i][COL.LAST_NAME] || ''}`.trim(),
+          school: data[i][COL.SCHOOL],
+          college: data[i][COL.COLLEGE],
+          program: data[i][COL.PROGRAM],
+          major: data[i][COL.MAJOR],
+          year: data[i][COL.YEAR],
+          section: data[i][COL.SECTION],
+          role: data[i][COL.ROLE],
+          position: data[i][COL.POSITION]
+        }
+      };
+    }
+
+    return { error: 'User not found for the provided QR code' };
   } catch (error) {
     return { error: error.message, stack: error.stack };
   }

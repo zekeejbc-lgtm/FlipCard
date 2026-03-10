@@ -4,6 +4,7 @@ import Dexie from 'dexie';
 import jsQR from 'jsqr';
 import { useNavigate } from 'react-router-dom';
 import { useUrlState } from './hooks/useUrlState';
+import AttendanceFeaturePage from './components/AttendancePage';
 
 // Global Error Boundary for debugging
 export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: any }> {
@@ -668,6 +669,7 @@ type User = {
   firstName: string;
   lastName: string;
   fullName: string;
+  qrCodeValue?: string;
   profilePictureURL?: string;
   profilePictureFileId?: string;
   digitalSignatureURL?: string;
@@ -932,6 +934,105 @@ type ClassSchedule = {
   status: 'today' | 'upcoming' | 'completed' | 'scheduled';
 };
 
+type AttendanceRecordStatus = 'present' | 'absent' | 'late' | 'excused' | string;
+
+type AttendanceSchedule = {
+  scheduleId: string;
+  type: 'semestral' | 'makeup' | 'activity' | 'special' | string;
+  semester: string;
+  courseCode: string;
+  courseName: string;
+  teacher: string;
+  classroom: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  specificDate: string;
+  details: string;
+  status: string;
+  occurrenceDate: string;
+  occurrenceLabel: string;
+  section?: string;
+};
+
+type AttendanceSession = {
+  sessionId: string;
+  scheduleId: string;
+  courseCode: string;
+  courseName: string;
+  scheduleType: string;
+  semester: string;
+  sessionDate: string;
+  startTime: string;
+  endTime: string;
+  section: string;
+  recordMode: string;
+  recordedBy: string;
+  recordedByName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type AttendanceRecord = {
+  sessionId: string;
+  studentId: string;
+  studentName: string;
+  section: string;
+  status: AttendanceRecordStatus;
+  recordedVia: string;
+  qrCodeValue: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  session?: AttendanceSession | null;
+};
+
+type AttendanceRosterMember = {
+  idNumber: string;
+  name: string;
+  section?: string;
+  role?: string;
+  position?: string;
+  profilePicture?: string;
+};
+
+type AttendanceAnalyticsFilters = {
+  filterType: 'all' | 'specific-date' | 'class' | 'date-range' | 'activity';
+  specificDate?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  courseCode?: string;
+  scheduleType?: string;
+};
+
+type AttendanceAnalyticsSummary = {
+  totalRecords: number;
+  uniqueStudents: number;
+  totalSessions: number;
+  presentCount: number;
+  absentCount: number;
+  lateCount: number;
+  excusedCount: number;
+  attendanceRate: number;
+  byStatus: Array<{ label: string; value: number }>;
+  byDate: Array<{ label: string; value: number }>;
+  byCourse: Array<{ label: string; value: number }>;
+};
+
+type AttendancePageContext = {
+  success: boolean;
+  userProfile?: User;
+  currentSemester?: string;
+  academicYear?: string;
+  schedules?: AttendanceSchedule[];
+  myRecords?: AttendanceRecord[];
+  memberOptions?: AttendanceRosterMember[];
+  canViewSchedules?: boolean;
+  canViewAnalytics?: boolean;
+  canLookupMembers?: boolean;
+  error?: string;
+};
+
 type AdditionalSemestralMeeting = {
   id: string;
   dayOfWeek: string;
@@ -966,6 +1067,7 @@ type ClassPosition =
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx7gVOloTlgAZ5NJalR5QRrEo8iRdc-rJWZiaiStu2KMU7hAXvicAJXUm2Jm5iCLZZn/exec';
 const RESOURCE_GAS_URL = 'https://script.google.com/macros/s/AKfycbxIeozV9nVhvOY0WfayX1L7AyFZFhKKT3Rptr2x8ThOrLtl3ev7xyOHXlSeKw6HanDu/exec';
 const CLASS_SCHEDULE_GAS_URL = 'https://script.google.com/macros/s/AKfycbxJoCpVWKo1cWku1ErvwGRuVhvPaqoT2hL51mJMS_8KyjSfmCCTngZt7nZ9T6Yq7Q8oNw/exec';
+const ATTENDANCE_GAS_URL = 'https://script.google.com/macros/s/AKfycbzOTNqxLJYNneKIP6iAHqYleARxcySuNntdygZWq1eXM1EYB-HqkplUz053VSA3iK_-eg/exec';
 const STORAGE_KEY_USER = 'cumlaude_user';
 const STORAGE_KEY_STATE = 'flashcard_session_state';
 const STORAGE_KEY_CACHE_VERSION = 'cumlaude_cache_version';
@@ -1728,19 +1830,19 @@ const UploadModal = ({
 
           <div>
             <label className="block text-sm font-medium text-stone-600 mb-1">Link to Obligation</label>
-            <select
+            <CustomDropdown
+              name="linkedObligation"
               value={selectedObligationId}
-              onChange={(e) => setSelectedObligationId(e.target.value)}
-              disabled={uploading}
-              className="w-full p-3 border border-stone-200 rounded-xl bg-white focus:ring-2 focus:ring-stone-400 outline-none"
-            >
-              <option value="">None</option>
-              {subjectObligations.map(obligation => (
-                <option key={obligation.examId} value={obligation.examId}>
-                  {obligation.examType} - {formatExamDate(obligation.date)} - {formatExamTime(obligation.startTime)}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedObligationId}
+              options={[
+                { value: '', label: 'None' },
+                ...subjectObligations.map(obligation => ({
+                  value: obligation.examId,
+                  label: obligation.examType,
+                  description: `${formatExamDate(obligation.date)} - ${formatExamTime(obligation.startTime)}`
+                }))
+              ]}
+            />
             <p className="text-xs text-stone-400 mt-1">Optional. Link this resource to a specific quiz, exam, deadline, or other obligation.</p>
           </div>
 
@@ -14908,13 +15010,19 @@ export const App = ({ routeRole }: AppProps) => {
 
   // ATTENDANCE View
   if (view === 'ATTENDANCE') {
-    return (
-      <>
-        <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <AttendancePage onBack={goBack} darkMode={darkMode} />
-      </>
-    );
-  }
+      return (
+        <>
+          <ToastContainer toasts={toasts} removeToast={removeToast} />
+          <AttendanceFeaturePage
+            onBack={goBack}
+            darkMode={darkMode}
+            user={user}
+            addToast={addToast}
+            removeToast={removeToast}
+          />
+        </>
+      );
+    }
 
   // SCHEDULE View
   if (view === 'SCHEDULE') {
