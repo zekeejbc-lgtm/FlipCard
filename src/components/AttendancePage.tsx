@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'react-qr-code';
 import { QRScanner } from './QRScanner';
 import { ProfileImage } from './DriveImage';
 import { getSecureLocalItem, getSecureSessionItem, setSecureLocalItem, setSecureSessionItem } from '../utils/secureStorage';
+import CustomDropdown, { type DropdownOption } from './ui/CustomDropdown';
 
 const ATTENDANCE_GAS_URL = 'https://script.google.com/macros/s/AKfycbzOTNqxLJYNneKIP6iAHqYleARxcySuNntdygZWq1eXM1EYB-HqkplUz053VSA3iK_-eg/exec';
 const ATTENDANCE_DIRECTORY_GAS_URL = 'https://script.google.com/macros/s/AKfycbx7gVOloTlgAZ5NJalR5QRrEo8iRdc-rJWZiaiStu2KMU7hAXvicAJXUm2Jm5iCLZZn/exec';
@@ -187,12 +188,6 @@ const RECORD_MODE_OPTIONS: Array<{ key: AttendanceRecordMode; label: string }> =
 function AttendanceIcon({ name, className = '' }: { name: string; className?: string }) {
   return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>;
 }
-
-type DropdownOption = {
-  value: string;
-  label: string;
-  description?: string;
-};
 
 function Skeleton({ className = '', darkMode = false }: { className?: string; darkMode?: boolean }) {
   return <div className={`rounded-lg skeleton-shimmer ${darkMode ? 'brightness-75' : ''} ${className}`} />;
@@ -626,153 +621,28 @@ function AnalyticsStatusModal({
   );
 }
 
-function CustomDropdown({
-  name,
-  options,
-  value,
-  placeholder = 'Select an option',
-  onChange,
-  darkMode = false,
-  renderSelected,
-  renderOption
-}: {
-  name: string;
-  options: DropdownOption[];
-  value: string;
-  placeholder?: string;
-  onChange?: (value: string) => void;
-  darkMode?: boolean;
-  renderSelected?: (option: DropdownOption) => React.ReactNode;
-  renderOption?: (option: DropdownOption, selected: boolean) => React.ReactNode;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+async function getAttendanceCache<T>(key: string): Promise<T | null> {
+  if (!key) return null;
 
-  useEffect(() => {
-    if (!isOpen) return;
+  const sessionValue = await getSecureSessionItem<T>(key);
+  if (sessionValue !== null) {
+    return sessionValue;
+  }
 
-    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
+  const localValue = await getSecureLocalItem<T>(key);
+  if (localValue !== null) {
+    await setSecureSessionItem(key, localValue);
+  }
 
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('touchstart', handlePointerDown);
-    document.addEventListener('keydown', handleEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('touchstart', handlePointerDown);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [isOpen]);
-
-  const selectedOption = options.find((option) => option.value === value);
-
-  return (
-    <div className="relative" ref={containerRef}>
-      <select
-        name={name}
-        value={value}
-        onChange={(event) => onChange?.(event.target.value)}
-        tabIndex={-1}
-        aria-hidden="true"
-        className="sr-only"
-      >
-        {options.map((option) => (
-          <option key={`${name}-${option.value || 'empty'}`} value={option.value}>
-            {option.description ? `${option.label} - ${option.description}` : option.label}
-          </option>
-        ))}
-      </select>
-
-      <button
-        type="button"
-        onClick={() => setIsOpen((open) => !open)}
-        className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left shadow-sm transition ${
-          darkMode
-            ? `border-gray-600 bg-gray-700 text-white ${isOpen ? 'ring-2 ring-gray-400' : 'hover:border-gray-500'}`
-            : `border-stone-300 bg-white text-stone-900 ${isOpen ? 'ring-2 ring-stone-500' : 'hover:border-stone-400'}`
-        }`}
-      >
-        <div className="min-w-0 flex-1">
-          {selectedOption ? (
-            renderSelected ? renderSelected(selectedOption) : <span className="block truncate">{selectedOption.label}</span>
-          ) : (
-            <span className={`block truncate ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{placeholder}</span>
-          )}
-        </div>
-        <AttendanceIcon
-          name="expand_more"
-          className={`shrink-0 transition-transform ${darkMode ? 'text-gray-300' : 'text-stone-500'} ${isOpen ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      {isOpen && (
-        <div className={`absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border shadow-2xl ${darkMode ? 'border-gray-600 bg-gray-800' : 'border-stone-200 bg-white'}`}>
-          <div className="max-h-[min(18rem,40vh)] overflow-y-auto py-2">
-            {options.map((option) => {
-              const isSelected = option.value === value;
-              return (
-                <button
-                  key={`${name}-option-${option.value || 'empty'}`}
-                  type="button"
-                  onClick={() => {
-                    onChange?.(option.value);
-                    setIsOpen(false);
-                  }}
-                  className={`flex w-full items-center gap-2 px-4 py-3 text-left transition ${
-                    darkMode
-                      ? isSelected ? 'bg-gray-700' : 'hover:bg-gray-700/70'
-                      : isSelected ? 'bg-stone-100' : 'hover:bg-stone-50'
-                  }`}
-                  title={option.description ? `${option.label} - ${option.description}` : option.label}
-                >
-                  <div className="min-w-0 flex-1">
-                    {renderOption ? renderOption(option, isSelected) : (
-                      <>
-                        <div className={`truncate ${darkMode ? 'text-white' : 'text-stone-900'}`}>{option.label}</div>
-                        {option.description ? (
-                          <div className={`truncate text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{option.description}</div>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                  {isSelected ? <AttendanceIcon name="check" className={darkMode ? 'text-gray-200' : 'text-stone-700'} /> : null}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return localValue;
 }
 
-function getCache<T>(key: string): T | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = sessionStorage.getItem(key);
-    return raw ? JSON.parse(raw) as T : null;
-  } catch {
-    return null;
-  }
-}
-
-function setCache(key: string, value: unknown) {
-  if (typeof window === 'undefined') return;
-  try {
-    sessionStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Ignore cache failures.
-  }
+async function setAttendanceCache(key: string, value: unknown) {
+  if (!key) return;
+  await Promise.all([
+    setSecureSessionItem(key, value),
+    setSecureLocalItem(key, value)
+  ]);
 }
 
 async function getAttendanceConfig(userId: string) {
@@ -1245,7 +1115,10 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
   const persistDirectoryCache = useCallback(async (nextCache: AttendanceDirectoryCache) => {
     setDirectoryCache(nextCache);
     if (lookupCacheKey) {
-      await setSecureSessionItem(lookupCacheKey, nextCache);
+      await Promise.all([
+        setSecureSessionItem(lookupCacheKey, nextCache),
+        setSecureLocalItem(lookupCacheKey, nextCache)
+      ]);
     }
   }, [lookupCacheKey]);
 
@@ -1262,16 +1135,18 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
       return;
     }
 
-    if (!force && cacheKey) {
-      const cached = getCache<AttendancePageContext>(cacheKey);
-      if (cached?.success) {
-        setContext(cached);
-        setLoading(false);
-      }
+    const cached = !force && cacheKey
+      ? await getAttendanceCache<AttendancePageContext>(cacheKey)
+      : null;
+    const hasCachedContext = Boolean(cached?.success);
+
+    if (hasCachedContext && cached) {
+      setContext(cached);
+      setLoading(false);
     }
 
     if (!navigator.onLine) {
-      if (!cacheKey || !getCache<AttendancePageContext>(cacheKey)?.success) {
+      if (!hasCachedContext) {
         showToast('You are offline. Attendance is using cached data only.', 'info');
       }
       setLoading(false);
@@ -1279,14 +1154,14 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
       return;
     }
 
-    if (force) setRefreshing(true);
+    if (force || hasCachedContext) setRefreshing(true);
     else setLoading(true);
 
     try {
       const result = await getAttendanceConfig(user.idNumber);
       if (!result.success) throw new Error(result.error || 'Failed to load attendance data');
       setContext(result);
-      if (cacheKey) setCache(cacheKey, result);
+      if (cacheKey) await setAttendanceCache(cacheKey, result);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Failed to load attendance data', 'error');
     } finally {
@@ -1310,9 +1185,9 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
           profilePictureURL: prev?.userProfile?.profilePictureURL || user?.profilePictureURL,
           qrCodeValue: normalizedQrText
         }
-      };
+        };
 
-      if (cacheKey) setCache(cacheKey, next);
+      if (cacheKey) void setAttendanceCache(cacheKey, next);
       return next;
     });
 
@@ -1342,7 +1217,7 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
       }
 
       const [cachedDirectory, cachedQueue] = await Promise.all([
-        getSecureSessionItem<AttendanceDirectoryCache>(lookupCacheKey),
+        getAttendanceCache<AttendanceDirectoryCache>(lookupCacheKey),
         getSecureLocalItem<AttendanceOfflineQueueItem[]>(offlineQueueKey)
       ]);
 
@@ -1756,7 +1631,7 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
                         value={recordMode}
                         options={recordModeOptions}
                         onChange={(value) => setRecordMode(value as AttendanceRecordMode)}
-                        darkMode={darkMode}
+                        theme={darkMode ? 'dark' : 'light'}
                       />
                     </div>
 
@@ -1769,7 +1644,7 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
                           options={sessionDropdownOptions}
                           placeholder="Select session"
                           onChange={(value) => setSelectedSessionKey(value as 'morning' | 'afternoon')}
-                          darkMode={darkMode}
+                          theme={darkMode ? 'dark' : 'light'}
                         />
                       </div>
                     )}
@@ -1783,7 +1658,7 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
                           options={courseDropdownOptions}
                           placeholder="Select course"
                           onChange={setSelectedCourseCode}
-                          darkMode={darkMode}
+                          theme={darkMode ? 'dark' : 'light'}
                           renderSelected={(option) => (
                             <div className="flex min-w-0 items-center gap-2">
                               <span className={`shrink-0 font-semibold ${darkMode ? 'text-white' : 'text-stone-900'}`}>{option.label}</span>
@@ -2106,7 +1981,7 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
                         options={analyticsFilterOptions}
                         value={analyticsFilterType}
                         onChange={(value) => setAnalyticsFilterType(value as AnalyticsFilterType)}
-                        darkMode={darkMode}
+                        theme={darkMode ? 'dark' : 'light'}
                       />
                     </div>
 
@@ -2118,7 +1993,7 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
                           options={analyticsDateOptions}
                           value={analyticsSelectedDate}
                           onChange={setAnalyticsSelectedDate}
-                          darkMode={darkMode}
+                          theme={darkMode ? 'dark' : 'light'}
                         />
                       </div>
                     )}
@@ -2131,7 +2006,7 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
                           options={analyticsClassOptions}
                           value={analyticsSelectedClass}
                           onChange={setAnalyticsSelectedClass}
-                          darkMode={darkMode}
+                          theme={darkMode ? 'dark' : 'light'}
                         />
                       </div>
                     )}
@@ -2144,7 +2019,7 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
                           options={analyticsEventOptions}
                           value={analyticsSelectedEventId}
                           onChange={setAnalyticsSelectedEventId}
-                          darkMode={darkMode}
+                          theme={darkMode ? 'dark' : 'light'}
                         />
                       </div>
                     )}
@@ -2319,3 +2194,4 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
     </div>
   );
 }
+

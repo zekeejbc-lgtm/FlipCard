@@ -5,6 +5,10 @@ import jsQR from 'jsqr';
 import { useNavigate } from 'react-router-dom';
 import { useUrlState } from './hooks/useUrlState';
 import AttendanceFeaturePage from './components/AttendancePage';
+import FinanceFeaturePage from './components/FinancePage';
+import CourseGroupsPanel from './components/CourseGroupsPanel';
+import ClassGroupRandomizerPanel from './components/ClassGroupRandomizerPanel';
+import CustomDropdown, { type DropdownOption } from './components/ui/CustomDropdown';
 
 // Global Error Boundary for debugging
 export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: any }> {
@@ -63,179 +67,6 @@ type ResourceRequest = {
   createdAt?: string;
   fulfilledAt?: string;
 };
-
-type DropdownOption = {
-  value: string;
-  label: string;
-  description?: string;
-};
-
-function CustomDropdown({
-  name,
-  options,
-  value,
-  defaultValue = '',
-  placeholder = 'Select an option',
-  required = false,
-  onChange,
-  theme = 'light',
-  size = 'default',
-  renderSelected,
-  renderOption
-}: {
-  name: string;
-  options: DropdownOption[];
-  value?: string;
-  defaultValue?: string;
-  placeholder?: string;
-  required?: boolean;
-  onChange?: (value: string) => void;
-  theme?: 'light' | 'dark';
-  size?: 'default' | 'compact';
-  renderSelected?: (option: DropdownOption) => React.ReactNode;
-  renderOption?: (option: DropdownOption, selected: boolean) => React.ReactNode;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [selectedValue, setSelectedValue] = useState(value ?? defaultValue);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setSelectedValue(value ?? defaultValue);
-  }, [value, defaultValue]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('touchstart', handlePointerDown);
-    document.addEventListener('keydown', handleEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('touchstart', handlePointerDown);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [isOpen]);
-
-  const selectedOption = options.find(option => option.value === selectedValue);
-  const isDark = theme === 'dark';
-  const isCompact = size === 'compact';
-  const triggerClassName = isDark
-    ? `flex w-full items-center gap-3 rounded-xl border border-gray-600 bg-gray-700 ${isCompact ? 'px-3 py-2' : 'px-4 py-3'} text-left text-white shadow-sm transition ${isOpen ? 'ring-2 ring-gray-400' : 'hover:border-gray-500'}`
-    : `flex w-full items-center gap-3 rounded-xl border border-stone-300 bg-white ${isCompact ? 'px-3 py-2' : 'px-4 py-3'} text-left shadow-sm transition ${isOpen ? 'ring-2 ring-stone-500' : 'hover:border-stone-400'}`;
-  const menuClassName = isDark
-    ? 'absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-gray-600 bg-gray-800 shadow-2xl'
-    : 'absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl';
-
-  return (
-    <div className="relative" ref={containerRef}>
-      <select
-        name={name}
-        value={selectedValue}
-        onChange={(e) => {
-          setSelectedValue(e.target.value);
-          onChange?.(e.target.value);
-        }}
-        required={required}
-        tabIndex={-1}
-        aria-hidden="true"
-        className="sr-only"
-      >
-        {options.map(option => (
-          <option key={`${name}-${option.value || 'empty'}`} value={option.value}>
-            {option.description ? `${option.label} - ${option.description}` : option.label}
-          </option>
-        ))}
-      </select>
-
-      <button
-        type="button"
-        onClick={() => setIsOpen(open => !open)}
-        className={triggerClassName}
-      >
-        <div className="min-w-0 flex-1">
-          {selectedOption ? (
-            renderSelected ? (
-              renderSelected(selectedOption)
-            ) : (
-              <span className={`block truncate ${isDark ? 'text-white' : 'text-stone-900'} ${isCompact ? 'text-sm' : ''}`}>
-                {selectedOption.label}
-              </span>
-            )
-          ) : (
-            <span className={`block truncate ${isDark ? 'text-gray-400' : 'text-stone-500'} ${isCompact ? 'text-sm' : ''}`}>
-              {placeholder}
-            </span>
-          )}
-        </div>
-        <Icon name="expand_more" className={`shrink-0 transition-transform ${isDark ? 'text-gray-300' : 'text-stone-500'} ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      {isOpen && (
-        <div className={menuClassName}>
-          <div className="max-h-[min(18rem,40vh)] overflow-y-auto py-2">
-            {options.map(option => {
-              const isSelected = selectedValue === option.value;
-              return (
-                <button
-                  key={`${name}-option-${option.value || 'empty'}`}
-                  type="button"
-                  onClick={() => {
-                    setSelectedValue(option.value);
-                    onChange?.(option.value);
-                    setIsOpen(false);
-                  }}
-                  className={`flex w-full items-center gap-2 px-4 ${isCompact ? 'py-2.5' : 'py-3'} text-left transition ${
-                    isDark
-                      ? isSelected
-                        ? 'bg-gray-700'
-                        : 'hover:bg-gray-700/70'
-                      : isSelected
-                        ? 'bg-stone-100'
-                        : 'hover:bg-stone-50'
-                  }`}
-                  title={option.description ? `${option.label} - ${option.description}` : option.label}
-                >
-                  <div className="min-w-0 flex-1">
-                    {renderOption ? (
-                      renderOption(option, isSelected)
-                    ) : (
-                      <>
-                        <div className={`truncate ${isDark ? 'text-white' : 'text-stone-900'} ${isCompact ? 'text-sm' : ''}`}>
-                          {option.label}
-                        </div>
-                        {option.description ? (
-                          <div className={`truncate text-sm ${isDark ? 'text-gray-400' : 'text-stone-500'}`}>
-                            {option.description}
-                          </div>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                  {isSelected ? (
-                    <Icon name="check" className={`shrink-0 ${isDark ? 'text-gray-200' : 'text-stone-700'}`} />
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function RefreshIconButton({
   onClick,
@@ -477,13 +308,24 @@ const ResourceRequestList = ({ subject, user, onFulfill, onMarkFulfilled, addToa
   const [fulfilling, setFulfilling] = useState(false);
 
   const fetchRequests = async () => {
-    setLoading(true);
+    const cacheKey = getResourceRequestsCacheKey(subject);
+    const cachedRequests = getPersistentCacheItem<ResourceRequest[]>(cacheKey);
+    const hasCachedRequests = Array.isArray(cachedRequests);
+
+    if (cachedRequests) {
+      setRequests(cachedRequests);
+    }
+
+    setLoading(!hasCachedRequests);
+    setRefreshing(hasCachedRequests);
     setError('');
     try {
       const response = await fetch(`${GAS_URL}?action=listResourceRequests&subject=${encodeURIComponent(subject)}&status=open`);
       const result = await response.json();
       if (result.success) {
-        setRequests(result.requests || []);
+        const nextRequests = result.requests || [];
+        setRequests(nextRequests);
+        setPersistentCacheItem(cacheKey, nextRequests);
       } else {
         setError(result.error || 'Failed to load requests');
       }
@@ -491,6 +333,7 @@ const ResourceRequestList = ({ subject, user, onFulfill, onMarkFulfilled, addToa
       setError(err.message || 'Network error');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -624,6 +467,12 @@ type Deck = {
   submittedByName?: string;
   timestamp?: string;
   cards: Card[];
+};
+
+type DeckSessionCacheEntry = {
+  deck: Deck;
+  subject: string | null;
+  cachedAt: number;
 };
 
 type Resource = {
@@ -765,7 +614,6 @@ const AUTH_REQUIRED_PAGES = new Set<string>([
   'resources',
   'calendar',
   'class',
-  'finance',
   'attendance',
   'schedule',
   'profile',
@@ -1075,8 +923,12 @@ const STORAGE_KEY_CACHE_VERSION = 'cumlaude_cache_version';
 const getHomeSemesterSubjectsCacheKey = (semester: '1st' | '2nd') => `home_semesterSubjects_${semester}`;
 const getHomeSemesterSchedulesCacheKey = (semester: '1st' | '2nd') => `home_semesterSchedules_${semester}`;
 const getAnalyticsCacheKey = (userId: string) => `analytics_${userId}`;
+const getDeckSessionCacheKey = (deckName: string) => `deckInfo_${encodeURIComponent(String(deckName || '').trim())}`;
+const getResourceRequestsCacheKey = (subject: string) => `resourceRequests_${encodeURIComponent(String(subject || '').trim())}`;
+const getObligationsCacheKey = (subject?: string | null) => `obligations_${encodeURIComponent(String(subject || 'all').trim())}`;
 const SECURE_SESSION_KEY = 'cumlaude_secure_session_key';
 const SECURE_SESSION_PREFIX = 'cumlaude_secure_';
+const PERSISTENT_CACHE_PREFIX = 'cumlaude_persistent_';
 
 type SecureSessionEnvelope = {
   v: 1;
@@ -1172,6 +1024,55 @@ async function getSecureSessionItem<T>(key: string): Promise<T | null> {
     sessionStorage.removeItem(`${SECURE_SESSION_PREFIX}${key}`);
     return null;
   }
+}
+
+function setPersistentCacheItem(key: string, value: unknown) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(`${PERSISTENT_CACHE_PREFIX}${key}`, JSON.stringify(value));
+  } catch (error) {
+    console.warn('Failed to write persistent cache:', error);
+  }
+}
+
+function getPersistentCacheItem<T>(key: string): T | null {
+  if (typeof window === 'undefined') return null;
+
+  const raw = localStorage.getItem(`${PERSISTENT_CACHE_PREFIX}${key}`);
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    console.warn('Failed to read persistent cache:', error);
+    localStorage.removeItem(`${PERSISTENT_CACHE_PREFIX}${key}`);
+    return null;
+  }
+}
+
+async function getSessionOrPersistentCacheItem<T>(key: string): Promise<T | null> {
+  const sessionValue = await getSecureSessionItem<T>(key);
+  if (sessionValue !== null) {
+    return sessionValue;
+  }
+
+  const persistentValue = getPersistentCacheItem<T>(key);
+  if (persistentValue !== null) {
+    void setSecureSessionItem(key, persistentValue);
+  }
+
+  return persistentValue;
+}
+
+function setSessionAndPersistentCacheItem(key: string, value: unknown) {
+  void setSecureSessionItem(key, value);
+  setPersistentCacheItem(key, value);
+}
+
+async function persistSessionAndPersistentCacheItem(key: string, value: unknown) {
+  await setSecureSessionItem(key, value);
+  setPersistentCacheItem(key, value);
 }
 
 async function postToAppsScript(payload: unknown) {
@@ -5390,42 +5291,42 @@ async function prefetchSessionBootstrapData(user: User): Promise<SessionBootstra
 
     const writeTasks: Array<Promise<void>> = [];
 
-    if (currentSemesterResult?.success && currentSemesterResult.currentSemester) {
-      bootstrap.currentSemester = currentSemesterResult.currentSemester;
-      writeTasks.push(setSecureSessionItem('currentSemester', currentSemesterResult.currentSemester));
-    }
+      if (currentSemesterResult?.success && currentSemesterResult.currentSemester) {
+        bootstrap.currentSemester = currentSemesterResult.currentSemester;
+        writeTasks.push(persistSessionAndPersistentCacheItem('currentSemester', currentSemesterResult.currentSemester));
+      }
 
-    if (currentSemesterResult?.success && currentSemesterResult.academicYear !== undefined) {
-      bootstrap.academicYear = currentSemesterResult.academicYear || '';
-      writeTasks.push(setSecureSessionItem('academicYear', bootstrap.academicYear));
-    }
+      if (currentSemesterResult?.success && currentSemesterResult.academicYear !== undefined) {
+        bootstrap.academicYear = currentSemesterResult.academicYear || '';
+        writeTasks.push(persistSessionAndPersistentCacheItem('academicYear', bootstrap.academicYear));
+      }
 
-    if (semesterConfigResult?.success && Array.isArray(semesterConfigResult.semesters)) {
-      bootstrap.semesterConfig = semesterConfigResult.semesters;
-      writeTasks.push(setSecureSessionItem('semesterConfig', semesterConfigResult.semesters));
-    }
+      if (semesterConfigResult?.success && Array.isArray(semesterConfigResult.semesters)) {
+        bootstrap.semesterConfig = semesterConfigResult.semesters;
+        writeTasks.push(persistSessionAndPersistentCacheItem('semesterConfig', semesterConfigResult.semesters));
+      }
 
-    if (allSubjectsResult?.success && Array.isArray(allSubjectsResult.subjects)) {
-      const { subjects, info } = normalizeSubjectsPayload(allSubjectsResult.subjects);
-      bootstrap.subjects = subjects;
-      bootstrap.subjectInfo = info;
-      writeTasks.push(setSecureSessionItem('subjects', subjects));
-      writeTasks.push(setSecureSessionItem('subjectInfo', info));
-      writeTasks.push(setSecureSessionItem('schedulePage_subjects_all', subjects));
-      writeTasks.push(setSecureSessionItem('schedulePage_subjectInfo_all', info));
-    }
+      if (allSubjectsResult?.success && Array.isArray(allSubjectsResult.subjects)) {
+        const { subjects, info } = normalizeSubjectsPayload(allSubjectsResult.subjects);
+        bootstrap.subjects = subjects;
+        bootstrap.subjectInfo = info;
+        writeTasks.push(persistSessionAndPersistentCacheItem('subjects', subjects));
+        writeTasks.push(persistSessionAndPersistentCacheItem('subjectInfo', info));
+        writeTasks.push(persistSessionAndPersistentCacheItem('schedulePage_subjects_all', subjects));
+        writeTasks.push(persistSessionAndPersistentCacheItem('schedulePage_subjectInfo_all', info));
+      }
 
     if (courseCatalogResult?.success && Array.isArray(courseCatalogResult.courses)) {
       const courseCatalog = normalizeCourseCatalogPayload(courseCatalogResult.courses);
       bootstrap.courseCatalog = courseCatalog;
-      writeTasks.push(setSecureSessionItem('schedulePage_courseCatalog', courseCatalog));
+      writeTasks.push(persistSessionAndPersistentCacheItem('schedulePage_courseCatalog', courseCatalog));
     }
 
     if (classmatesResult?.success && Array.isArray(classmatesResult.classmates)) {
       bootstrap.classmates = classmatesResult.classmates;
-      writeTasks.push(setSecureSessionItem(getClassmatesCacheKey(user.idNumber), classmatesResult.classmates));
+      writeTasks.push(persistSessionAndPersistentCacheItem(getClassmatesCacheKey(user.idNumber), classmatesResult.classmates));
     } else if (user.section) {
-      writeTasks.push(setSecureSessionItem(getClassmatesCacheKey(user.idNumber), []));
+      writeTasks.push(persistSessionAndPersistentCacheItem(getClassmatesCacheKey(user.idNumber), []));
     }
 
     await Promise.all(writeTasks);
@@ -5455,15 +5356,15 @@ async function prefetchSessionBootstrapData(user: User): Promise<SessionBootstra
     if (semesterSubjectsResult?.success && Array.isArray(semesterSubjectsResult.subjects)) {
       const { subjects, info } = normalizeSubjectsPayload(semesterSubjectsResult.subjects);
       bootstrap.semesterSubjects = subjects;
-      semesterWriteTasks.push(setSecureSessionItem('semesterSubjects', subjects));
-      semesterWriteTasks.push(setSecureSessionItem(`schedulePage_subjects_${semesterToLoad}`, subjects));
-      semesterWriteTasks.push(setSecureSessionItem(`schedulePage_subjectInfo_${semesterToLoad}`, info));
+      semesterWriteTasks.push(persistSessionAndPersistentCacheItem('semesterSubjects', subjects));
+      semesterWriteTasks.push(persistSessionAndPersistentCacheItem(`schedulePage_subjects_${semesterToLoad}`, subjects));
+      semesterWriteTasks.push(persistSessionAndPersistentCacheItem(`schedulePage_subjectInfo_${semesterToLoad}`, info));
     }
 
     if (semesterSchedulesResult?.success && Array.isArray(semesterSchedulesResult.schedules)) {
       bootstrap.semesterSchedules = semesterSchedulesResult.schedules;
-      semesterWriteTasks.push(setSecureSessionItem('semesterSchedules', semesterSchedulesResult.schedules));
-      semesterWriteTasks.push(setSecureSessionItem(`schedulePage_schedules_${semesterToLoad}`, semesterSchedulesResult.schedules));
+      semesterWriteTasks.push(persistSessionAndPersistentCacheItem('semesterSchedules', semesterSchedulesResult.schedules));
+      semesterWriteTasks.push(persistSessionAndPersistentCacheItem(`schedulePage_schedules_${semesterToLoad}`, semesterSchedulesResult.schedules));
     }
 
     await Promise.all(semesterWriteTasks);
@@ -5507,6 +5408,7 @@ const ClassPage = ({
   addToast,
   updateToast,
   removeToast,
+  courseOptions,
   darkMode = false
 }: {
   user: User;
@@ -5514,12 +5416,14 @@ const ClassPage = ({
   addToast: (message: string, type: Toast['type'], progress?: number) => number;
   updateToast: (id: number, message: string, type: Toast['type'], progress?: number) => void;
   removeToast: (id: number) => void;
+  courseOptions: Array<{ code: string; name?: string }>;
   darkMode?: boolean;
 }) => {
   const [classmates, setClassmates] = useState<Classmate[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+  const [classPageTab, setClassPageTab] = useState<'classmates' | 'randomizer'>('classmates');
   const [selectedClassmate, setSelectedClassmate] = useState<Classmate | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showRoleModal, setShowRoleModal] = useState(false);
@@ -5537,12 +5441,12 @@ const ClassPage = ({
 
     if (!user.section) {
       setClassmates([]);
-      void setSecureSessionItem(cacheKey, []);
+      setSessionAndPersistentCacheItem(cacheKey, []);
       setLoading(false);
       return;
     }
 
-    const cachedClassmates = await getSecureSessionItem<Classmate[]>(cacheKey);
+    const cachedClassmates = await getSessionOrPersistentCacheItem<Classmate[]>(cacheKey);
     const hasCachedClassmates = Array.isArray(cachedClassmates);
 
     if (cachedClassmates) {
@@ -5557,7 +5461,7 @@ const ClassPage = ({
       const result = await response.json();
       if (result.success) {
         setClassmates(result.classmates || []);
-        void setSecureSessionItem(cacheKey, result.classmates || []);
+        setSessionAndPersistentCacheItem(cacheKey, result.classmates || []);
       }
     } catch (err) {
       console.error('Failed to load classmates:', err);
@@ -5768,20 +5672,58 @@ const ClassPage = ({
           </div>
           
           {/* Search Bar */}
-          <div className="mt-4 relative">
-            <Icon name="search" className={`absolute left-3 top-1/2 -translate-y-1/2 ${darkMode ? 'text-gray-500' : 'text-stone-400'}`} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search classmates..."
-              className={`w-full pl-10 pr-4 py-3 ${darkMode ? 'bg-gray-700 text-white placeholder-gray-500' : 'bg-stone-100'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none`}
-            />
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              onClick={() => setClassPageTab('classmates')}
+              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                classPageTab === 'classmates'
+                  ? (darkMode ? 'bg-gray-600 text-white' : 'bg-stone-800 text-white')
+                  : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-stone-100 text-stone-700 hover:bg-stone-200')
+              }`}
+            >
+              Classmates
+            </button>
+            <button
+              onClick={() => setClassPageTab('randomizer')}
+              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                classPageTab === 'randomizer'
+                  ? (darkMode ? 'bg-gray-600 text-white' : 'bg-stone-800 text-white')
+                  : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-stone-100 text-stone-700 hover:bg-stone-200')
+              }`}
+            >
+              Group Randomizer
+            </button>
           </div>
+
+          {classPageTab === 'classmates' && (
+            <div className="mt-4 relative">
+              <Icon name="search" className={`absolute left-3 top-1/2 -translate-y-1/2 ${darkMode ? 'text-gray-500' : 'text-stone-400'}`} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search classmates..."
+                className={`w-full pl-10 pr-4 py-3 ${darkMode ? 'bg-gray-700 text-white placeholder-gray-500' : 'bg-stone-100'} rounded-xl focus:ring-2 focus:ring-stone-400 outline-none`}
+              />
+            </div>
+          )}
         </div>
       </header>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
+        {classPageTab === 'randomizer' ? (
+          <ClassGroupRandomizerPanel
+            gasUrl={GAS_URL}
+            user={user}
+            classmates={classmates}
+            courseOptions={courseOptions}
+            darkMode={darkMode}
+            addToast={addToast}
+            updateToast={updateToast}
+            removeToast={removeToast}
+          />
+        ) : (
+          <>
         {!user.section ? (
           <div className="text-center py-16">
             <div className={`w-20 h-20 ${darkMode ? 'bg-gray-800' : 'bg-stone-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
@@ -5950,6 +5892,8 @@ const ClassPage = ({
               </div>
             ))}
           </div>
+        )}
+          </>
         )}
       </div>
 
@@ -6165,48 +6109,6 @@ const ClassPage = ({
 };
 
 // Finance Page Component (Under Development)
-const FinancePage = ({ onBack, darkMode }: { onBack: () => void; darkMode: boolean }) => {
-  return (
-    <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-stone-50'}`}>
-      {/* Header */}
-      <header className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border-b sticky top-0 z-40`}>
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button onClick={onBack} className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-xl transition-colors`}>
-            <Icon name="arrow_back" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
-          </button>
-          <div>
-            <h1 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Finance</h1>
-            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>Track payments & dues</p>
-          </div>
-        </div>
-      </header>
-
-      {/* Under Development Notice */}
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className={`${darkMode ? 'bg-amber-900/20 border-amber-700' : 'bg-amber-50 border-amber-300'} border-2 border-dashed rounded-2xl p-8 text-center`}>
-          <div className={`w-20 h-20 ${darkMode ? 'bg-amber-900/30' : 'bg-amber-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
-            <Icon name="engineering" className={`text-4xl ${darkMode ? 'text-amber-400' : 'text-amber-600'}`} />
-          </div>
-          <h2 className={`text-2xl font-bold ${darkMode ? 'text-amber-300' : 'text-amber-800'} mb-2`}>Under Development</h2>
-          <p className={`${darkMode ? 'text-amber-400' : 'text-amber-700'} mb-4`}>The Finance module is currently being built. Check back soon!</p>
-          <div className={`flex flex-wrap gap-3 justify-center text-sm ${darkMode ? 'text-amber-400' : 'text-amber-600'}`}>
-            <span className={`px-3 py-1.5 ${darkMode ? 'bg-amber-900/30' : 'bg-amber-100'} rounded-full flex items-center gap-1.5`}>
-              <Icon name="payments" className="text-base" /> Payment Tracking
-            </span>
-            <span className={`px-3 py-1.5 ${darkMode ? 'bg-amber-900/30' : 'bg-amber-100'} rounded-full flex items-center gap-1.5`}>
-              <Icon name="receipt_long" className="text-base" /> Dues Management
-            </span>
-            <span className={`px-3 py-1.5 ${darkMode ? 'bg-amber-900/30' : 'bg-amber-100'} rounded-full flex items-center gap-1.5`}>
-              <Icon name="account_balance" className="text-base" /> Balance History
-            </span>
-          </div>
-          <p className={`text-xs ${darkMode ? 'text-amber-500' : 'text-amber-500'} mt-6`}>Expected features coming in future updates</p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // Attendance Page Component (Under Development)
 const AttendancePage = ({ onBack, darkMode }: { onBack: () => void; darkMode: boolean }) => {
   return (
@@ -6426,10 +6328,10 @@ const SchedulePage = ({
           }
         ];
         setSemesterConfig(newConfig);
-        void setSecureSessionItem('semesterConfig', newConfig);
-        void setSecureSessionItem('academicYear', editingSemesterConfig.academicYear);
+        setSessionAndPersistentCacheItem('semesterConfig', newConfig);
+        setSessionAndPersistentCacheItem('academicYear', editingSemesterConfig.academicYear);
         if (result.currentSemester) {
-          void setSecureSessionItem('currentSemester', result.currentSemester);
+          setSessionAndPersistentCacheItem('currentSemester', result.currentSemester);
         }
         setShowSemesterConfig(false);
       } else {
@@ -6446,7 +6348,7 @@ const SchedulePage = ({
   const fetchSchedules = async () => {
     const cacheKey = `schedulePage_schedules_${selectedSemester || 'all'}`;
 
-    const cachedSchedules = await getSecureSessionItem<ClassSchedule[]>(cacheKey);
+    const cachedSchedules = await getSessionOrPersistentCacheItem<ClassSchedule[]>(cacheKey);
     const hasCachedSchedules = Array.isArray(cachedSchedules);
 
     if (cachedSchedules) {
@@ -6464,7 +6366,7 @@ const SchedulePage = ({
       const result = await response.json();
       if (result.success) {
         setSchedules(result.schedules || []);
-        void setSecureSessionItem(cacheKey, result.schedules || []);
+        setSessionAndPersistentCacheItem(cacheKey, result.schedules || []);
       } else {
         console.error('Failed to fetch schedules:', result.error);
       }
@@ -6493,8 +6395,8 @@ const SchedulePage = ({
     const cacheInfoKey = `schedulePage_subjectInfo_${semester || 'all'}`;
 
     const [cachedSubjects, cachedInfo] = await Promise.all([
-      getSecureSessionItem<string[]>(cacheKey),
-      getSecureSessionItem<Record<string, SubjectInfo>>(cacheInfoKey)
+      getSessionOrPersistentCacheItem<string[]>(cacheKey),
+      getSessionOrPersistentCacheItem<Record<string, SubjectInfo>>(cacheInfoKey)
     ]);
 
     if (cachedSubjects) {
@@ -6517,8 +6419,8 @@ const SchedulePage = ({
       if (!result.success || !Array.isArray(result.subjects)) {
         setScheduleSubjects([]);
         setScheduleSubjectInfo({});
-        void setSecureSessionItem(cacheKey, []);
-        void setSecureSessionItem(cacheInfoKey, {});
+        setSessionAndPersistentCacheItem(cacheKey, []);
+        setSessionAndPersistentCacheItem(cacheInfoKey, {});
         return;
       }
 
@@ -6544,8 +6446,8 @@ const SchedulePage = ({
 
       setScheduleSubjects(subjects);
       setScheduleSubjectInfo(info);
-      void setSecureSessionItem(cacheKey, subjects);
-      void setSecureSessionItem(cacheInfoKey, info);
+      setSessionAndPersistentCacheItem(cacheKey, subjects);
+      setSessionAndPersistentCacheItem(cacheInfoKey, info);
     } catch (error) {
       console.error('Failed to fetch schedule subjects:', error);
       setScheduleSubjects([]);
@@ -6555,7 +6457,7 @@ const SchedulePage = ({
 
   const fetchCourseCatalog = async () => {
     const cacheKey = 'schedulePage_courseCatalog';
-    const cachedCourseCatalog = await getSecureSessionItem<Subject[]>(cacheKey);
+    const cachedCourseCatalog = await getSessionOrPersistentCacheItem<Subject[]>(cacheKey);
     if (cachedCourseCatalog) {
       setCourseCatalog(cachedCourseCatalog);
     }
@@ -6574,10 +6476,10 @@ const SchedulePage = ({
           name: String(course.name || '').trim()
         }));
         setCourseCatalog(nextCourseCatalog);
-        void setSecureSessionItem(cacheKey, nextCourseCatalog);
+        setSessionAndPersistentCacheItem(cacheKey, nextCourseCatalog);
       } else {
         setCourseCatalog([]);
-        void setSecureSessionItem(cacheKey, []);
+        setSessionAndPersistentCacheItem(cacheKey, []);
       }
     } catch (error) {
       console.error('Failed to fetch course catalog:', error);
@@ -8951,6 +8853,7 @@ export const App = ({ routeRole }: AppProps) => {
   const [resources, setResources] = useState<Record<string, Resource[]>>({});
   const [isResourcesRefreshing, setIsResourcesRefreshing] = useState(false);
   const [apiSubjects, setApiSubjects] = useState<string[]>([]);
+  const [classmates, setClassmates] = useState<Classmate[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [isObligationsLoading, setIsObligationsLoading] = useState(false);
   const [subjectInfo, setSubjectInfo] = useState<Record<string, SubjectInfo>>({});
@@ -9006,14 +8909,15 @@ export const App = ({ routeRole }: AppProps) => {
   const [activeSubject, setActiveSubject] = useState<string | null>(() => {
     return getInitialUrlParam('subject') || getInitialUrlParam('course') || localStorage.getItem('cumlaude_lastSubject');
   });
-  const [activeTab, setActiveTab] = useState<'Classroom' | 'Schedule' | 'Resources' | 'Exams'>(() => {
+  const [activeTab, setActiveTab] = useState<'Classroom' | 'Schedule' | 'Resources' | 'Exams' | 'Groups'>(() => {
     const tabFromUrl = getInitialUrlParam('tab');
     if (tabFromUrl === 'classroom' || tabFromUrl === 'flashcards') return 'Classroom';
     if (tabFromUrl === 'schedule') return 'Schedule';
     if (tabFromUrl === 'resources') return 'Resources';
     if (tabFromUrl === 'exams') return 'Exams';
+    if (tabFromUrl === 'groups') return 'Groups';
     const saved = localStorage.getItem('cumlaude_lastTab');
-    return (saved as 'Classroom' | 'Schedule' | 'Resources' | 'Exams') || 'Classroom';
+    return (saved as 'Classroom' | 'Schedule' | 'Resources' | 'Exams' | 'Groups') || 'Classroom';
   });
   const [activeDeck, setActiveDeck] = useState<Deck | null>(null);
   const [deckLoading, setDeckLoading] = useState<string | null>(null); // Track which deck is loading
@@ -9130,6 +9034,15 @@ export const App = ({ routeRole }: AppProps) => {
   useEffect(() => {
     localStorage.setItem('cumlaude_lastTab', activeTab);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!activeDeck) return;
+    void setSecureSessionItem(getDeckSessionCacheKey(activeDeck.name), {
+      deck: activeDeck,
+      subject: activeSubject || activeDeck.subject || null,
+      cachedAt: Date.now()
+    } satisfies DeckSessionCacheEntry);
+  }, [activeDeck, activeSubject]);
 
   useEffect(() => {
     if (loading) {
@@ -9275,6 +9188,11 @@ export const App = ({ routeRole }: AppProps) => {
         try {
           parsedUser = JSON.parse(savedUser);
           setUser(parsedUser);
+
+          const cachedClassmates = await getSessionOrPersistentCacheItem<Classmate[]>(getClassmatesCacheKey(parsedUser.idNumber));
+          if (cachedClassmates) {
+            setClassmates(cachedClassmates);
+          }
           
           // Refresh user profile from backend if online (to get updated section, role, etc.)
           if (navigator.onLine) {
@@ -9316,13 +9234,13 @@ export const App = ({ routeRole }: AppProps) => {
       });
       
       // Load cached subjects
-      const cachedSubjects = await getSecureSessionItem<string[]>('subjects');
+      const cachedSubjects = await getSessionOrPersistentCacheItem<string[]>('subjects');
       if (cachedSubjects) {
         setApiSubjects(cachedSubjects);
       }
       
       // Load cached subject info (code to name mapping)
-      const cachedSubjectInfo = await getSecureSessionItem<Record<string, SubjectInfo>>('subjectInfo');
+      const cachedSubjectInfo = await getSessionOrPersistentCacheItem<Record<string, SubjectInfo>>('subjectInfo');
       if (cachedSubjectInfo) {
         setSubjectInfo(cachedSubjectInfo);
       }
@@ -9338,15 +9256,15 @@ export const App = ({ routeRole }: AppProps) => {
       }
       
       // Load cached semester configuration
-      const cachedCurrentSemester = await getSecureSessionItem<'1st' | '2nd'>('currentSemester');
+      const cachedCurrentSemester = await getSessionOrPersistentCacheItem<'1st' | '2nd'>('currentSemester');
       if (cachedCurrentSemester) {
         setCurrentSemester(cachedCurrentSemester);
       }
-      const cachedAcademicYear = await getSecureSessionItem<string>('academicYear');
+      const cachedAcademicYear = await getSessionOrPersistentCacheItem<string>('academicYear');
       if (cachedAcademicYear) {
         setAcademicYear(cachedAcademicYear);
       }
-      const cachedSemesterConfig = await getSecureSessionItem<SemesterConfigItem[]>('semesterConfig');
+      const cachedSemesterConfig = await getSessionOrPersistentCacheItem<SemesterConfigItem[]>('semesterConfig');
       if (cachedSemesterConfig) {
         setSemesterConfig(cachedSemesterConfig);
       }
@@ -9357,13 +9275,13 @@ export const App = ({ routeRole }: AppProps) => {
       }
       const initialSemesterView = (cachedSelectedSemesterView as '1st' | '2nd' | null) || cachedCurrentSemester || '1st';
       const [cachedSemesterSubjects, cachedSemesterSchedules] = await Promise.all([
-        getSecureSessionItem<string[]>(getHomeSemesterSubjectsCacheKey(initialSemesterView)),
-        getSecureSessionItem<ClassSchedule[]>(getHomeSemesterSchedulesCacheKey(initialSemesterView))
+        getSessionOrPersistentCacheItem<string[]>(getHomeSemesterSubjectsCacheKey(initialSemesterView)),
+        getSessionOrPersistentCacheItem<ClassSchedule[]>(getHomeSemesterSchedulesCacheKey(initialSemesterView))
       ]);
       if (cachedSemesterSubjects) {
         setSemesterSubjects(cachedSemesterSubjects);
       } else {
-        const legacySemesterSubjects = await getSecureSessionItem<string[]>('semesterSubjects');
+        const legacySemesterSubjects = await getSessionOrPersistentCacheItem<string[]>('semesterSubjects');
         if (legacySemesterSubjects) {
           setSemesterSubjects(legacySemesterSubjects);
         }
@@ -9371,7 +9289,7 @@ export const App = ({ routeRole }: AppProps) => {
       if (cachedSemesterSchedules) {
         setSemesterSchedules(cachedSemesterSchedules);
       } else {
-        const legacySemesterSchedules = await getSecureSessionItem<ClassSchedule[]>('semesterSchedules');
+        const legacySemesterSchedules = await getSessionOrPersistentCacheItem<ClassSchedule[]>('semesterSchedules');
         if (legacySemesterSchedules) {
           setSemesterSchedules(legacySemesterSchedules);
         }
@@ -9437,8 +9355,8 @@ export const App = ({ routeRole }: AppProps) => {
 
     setApiSubjects(subjects);
     setSubjectInfo(info);
-    void setSecureSessionItem('subjects', subjects);
-    void setSecureSessionItem('subjectInfo', info);
+    setSessionAndPersistentCacheItem('subjects', subjects);
+    setSessionAndPersistentCacheItem('subjectInfo', info);
   };
 
   const fetchAllBackendSubjects = async () => {
@@ -9456,8 +9374,8 @@ export const App = ({ routeRole }: AppProps) => {
       } else {
         setApiSubjects([]);
         setSubjectInfo({});
-        void setSecureSessionItem('subjects', []);
-        void setSecureSessionItem('subjectInfo', {});
+        setSessionAndPersistentCacheItem('subjects', []);
+        setSessionAndPersistentCacheItem('subjectInfo', {});
       }
     } catch (error) {
       console.warn('Failed to load backend subjects:', error);
@@ -9481,14 +9399,14 @@ export const App = ({ routeRole }: AppProps) => {
         if (isCurrentRequest) {
           setSemesterSubjects(subjectCodes);
         }
-        void setSecureSessionItem(getHomeSemesterSubjectsCacheKey(semester), subjectCodes);
-        void setSecureSessionItem('semesterSubjects', subjectCodes);
+        setSessionAndPersistentCacheItem(getHomeSemesterSubjectsCacheKey(semester), subjectCodes);
+        setSessionAndPersistentCacheItem('semesterSubjects', subjectCodes);
       } else {
         if (isCurrentRequest) {
           setSemesterSubjects([]);
         }
-        void setSecureSessionItem(getHomeSemesterSubjectsCacheKey(semester), []);
-        void setSecureSessionItem('semesterSubjects', []);
+        setSessionAndPersistentCacheItem(getHomeSemesterSubjectsCacheKey(semester), []);
+        setSessionAndPersistentCacheItem('semesterSubjects', []);
       }
     } catch (error) {
       console.warn('Failed to load backend semester subjects:', error);
@@ -9511,14 +9429,14 @@ export const App = ({ routeRole }: AppProps) => {
         if (isCurrentRequest) {
           setSemesterSchedules(data.schedules);
         }
-        void setSecureSessionItem(getHomeSemesterSchedulesCacheKey(semester), data.schedules);
-        void setSecureSessionItem('semesterSchedules', data.schedules);
+        setSessionAndPersistentCacheItem(getHomeSemesterSchedulesCacheKey(semester), data.schedules);
+        setSessionAndPersistentCacheItem('semesterSchedules', data.schedules);
       } else {
         if (isCurrentRequest) {
           setSemesterSchedules([]);
         }
-        void setSecureSessionItem(getHomeSemesterSchedulesCacheKey(semester), []);
-        void setSecureSessionItem('semesterSchedules', []);
+        setSessionAndPersistentCacheItem(getHomeSemesterSchedulesCacheKey(semester), []);
+        setSessionAndPersistentCacheItem('semesterSchedules', []);
       }
     } catch (error) {
       console.warn('Failed to load backend semester schedules:', error);
@@ -9545,17 +9463,17 @@ export const App = ({ routeRole }: AppProps) => {
 
       if (currentSemesterData.success && currentSemesterData.currentSemester) {
         setCurrentSemester(currentSemesterData.currentSemester);
-        void setSecureSessionItem('currentSemester', currentSemesterData.currentSemester);
+        setSessionAndPersistentCacheItem('currentSemester', currentSemesterData.currentSemester);
       }
 
       if (currentSemesterData.success && currentSemesterData.academicYear !== undefined) {
         setAcademicYear(currentSemesterData.academicYear || '');
-        void setSecureSessionItem('academicYear', currentSemesterData.academicYear || '');
+        setSessionAndPersistentCacheItem('academicYear', currentSemesterData.academicYear || '');
       }
 
       if (semesterConfigData.success && Array.isArray(semesterConfigData.semesters)) {
         setSemesterConfig(semesterConfigData.semesters);
-        void setSecureSessionItem('semesterConfig', semesterConfigData.semesters);
+        setSessionAndPersistentCacheItem('semesterConfig', semesterConfigData.semesters);
       }
     } catch (error) {
       console.warn('Failed to load schedule context:', error);
@@ -9565,8 +9483,8 @@ export const App = ({ routeRole }: AppProps) => {
   const loadSemesterSubjectsView = async (semester: '1st' | '2nd') => {
     const requestId = ++semesterLoadRequestRef.current;
     const [cachedSubjects, cachedSchedules] = await Promise.all([
-      getSecureSessionItem<string[]>(getHomeSemesterSubjectsCacheKey(semester)),
-      getSecureSessionItem<ClassSchedule[]>(getHomeSemesterSchedulesCacheKey(semester))
+      getSessionOrPersistentCacheItem<string[]>(getHomeSemesterSubjectsCacheKey(semester)),
+      getSessionOrPersistentCacheItem<ClassSchedule[]>(getHomeSemesterSchedulesCacheKey(semester))
     ]);
     const hasCachedSemesterData = Array.isArray(cachedSubjects) || Array.isArray(cachedSchedules);
 
@@ -10044,13 +9962,13 @@ export const App = ({ routeRole }: AppProps) => {
       if (data.subjects && Array.isArray(data.subjects)) {
         const subjects = data.subjects.map((s: any) => typeof s === 'string' ? s : s.code);
         setApiSubjects(subjects);
-        void setSecureSessionItem('subjects', subjects);
+        setSessionAndPersistentCacheItem('subjects', subjects);
       }
       
       // Process subject info (code to name mapping)
       if (data.subjectInfo && typeof data.subjectInfo === 'object') {
         setSubjectInfo(data.subjectInfo);
-        void setSecureSessionItem('subjectInfo', data.subjectInfo);
+        setSessionAndPersistentCacheItem('subjectInfo', data.subjectInfo);
       }
 
       if (toastId) updateToast(toastId, 'Finalizing...', 'loading', 95);
@@ -10245,6 +10163,7 @@ export const App = ({ routeRole }: AppProps) => {
   const handleLogout = () => {
     sessionBootstrapRequestRef.current += 1;
     setUser(null);
+    setClassmates([]);
     localStorage.removeItem(STORAGE_KEY_USER);
     clearSecureSessionCache();
   };
@@ -10313,6 +10232,11 @@ export const App = ({ routeRole }: AppProps) => {
       if (prefetchedData.semesterSchedules) {
         setSemesterSchedules(prefetchedData.semesterSchedules);
       }
+      if (prefetchedData.classmates) {
+        setClassmates(prefetchedData.classmates);
+      } else if (!authenticatedUser.section) {
+        setClassmates([]);
+      }
     }).catch(error => {
       console.warn('Failed to hydrate post-login session data:', error);
     });
@@ -10328,6 +10252,60 @@ export const App = ({ routeRole }: AppProps) => {
       setShowRequestResource(false);
       setView(newView);
     });
+  };
+
+  const openDeckOverviewView = (deck: Deck, subjectOverride?: string | null) => {
+    const subjectForDeck = subjectOverride || deck.subject || activeSubject || null;
+    mapToPage('deck', () => {
+      setViewHistory(prev => [...prev, view]);
+      setShowLogin(false);
+      setShowProfile(false);
+      setShowUpload(false);
+      setShowRequestResource(false);
+      if (subjectForDeck) {
+        setActiveSubject(subjectForDeck);
+      }
+      setActiveTab('Classroom');
+      setActiveResource(null);
+      setActiveDeck(deck);
+      setView('DECK_OVERVIEW');
+    }, {
+      subject: subjectForDeck,
+      course: subjectForDeck,
+      tab: 'classroom',
+      deck: deck.name,
+      resource: null
+    });
+  };
+
+  const exitSessionToDeckOverview = () => {
+    if (!activeDeck) {
+      goBack();
+      return;
+    }
+
+    const subjectForDeck = activeSubject || activeDeck.subject || null;
+    mapToPage('deck', () => {
+      setShowLogin(false);
+      setShowProfile(false);
+      setShowUpload(false);
+      setShowRequestResource(false);
+      if (subjectForDeck) {
+        setActiveSubject(subjectForDeck);
+      }
+      setActiveTab('Classroom');
+      setActiveResource(null);
+      setView('DECK_OVERVIEW');
+      setIsFlipped(false);
+      setSessionActionBusy(false);
+      setShowContinueModal(false);
+    }, {
+      subject: subjectForDeck,
+      course: subjectForDeck,
+      tab: 'classroom',
+      deck: activeDeck.name,
+      resource: null
+    }, { replace: true });
   };
   
   const goBack = () => {
@@ -10533,39 +10511,24 @@ export const App = ({ routeRole }: AppProps) => {
   };
 
   const openDeck = async (deck: Deck) => {
-    // Show loading state
     setDeckLoading(deck.name);
-    const loadingToast = addToast(`Loading ${deck.name}...`, 'loading');
-    
-    // Small delay to show loading state (prevents flash)
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    setActiveDeck(deck);
-    await syncDeckProgressForDeck(deck);
-    
-    removeToast(loadingToast);
-    setDeckLoading(null);
-    const subjectForDeck = deck.subject || activeSubject;
-    mapToPage('deck', () => {
-      setViewHistory(prev => [...prev, view]);
-      setShowLogin(false);
-      setShowProfile(false);
-      setShowUpload(false);
-      setShowRequestResource(false);
-      if (subjectForDeck) {
-        setActiveSubject(subjectForDeck);
-      }
-      setActiveTab('Classroom');
-      setActiveResource(null);
-      setActiveDeck(deck);
-      setView('DECK_OVERVIEW');
-    }, {
-      subject: subjectForDeck || null,
-      course: subjectForDeck || null,
-      tab: 'classroom',
-      deck: deck.name,
-      resource: null
-    });
+    const cachedDeckEntry = await getSecureSessionItem<DeckSessionCacheEntry>(getDeckSessionCacheKey(deck.name));
+    const cachedDeck = cachedDeckEntry?.deck;
+    const subjectForDeck = deck.subject || cachedDeckEntry?.subject || activeSubject || null;
+    const deckToOpen = cachedDeck && cachedDeck.name === deck.name ? cachedDeck : deck;
+
+    openDeckOverviewView(deckToOpen, subjectForDeck);
+    void setSecureSessionItem(getDeckSessionCacheKey(deck.name), {
+      deck,
+      subject: subjectForDeck,
+      cachedAt: Date.now()
+    } satisfies DeckSessionCacheEntry);
+
+    try {
+      await syncDeckProgressForDeck(deck);
+    } finally {
+      setDeckLoading(null);
+    }
   };
 
   const getDeckProgressStorageKey = (deckName: string, userId?: string | null): string => {
@@ -11446,8 +11409,15 @@ export const App = ({ routeRole }: AppProps) => {
   }, [user]);
   
   const fetchObligationsFromBackend = async (subject?: string | null) => {
+    const cacheKey = getObligationsCacheKey(subject);
+    const cachedObligations = getPersistentCacheItem<Exam[]>(cacheKey);
+    const hasCachedObligations = Array.isArray(cachedObligations);
+    if (cachedObligations) {
+      setExams(cachedObligations);
+    }
+
     const startedAt = Date.now();
-    setIsObligationsLoading(true);
+    setIsObligationsLoading(!hasCachedObligations);
     try {
       const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
         method: 'POST',
@@ -11462,11 +11432,13 @@ export const App = ({ routeRole }: AppProps) => {
         const items = result.obligations || result.exams;
         setExams(items);
         localStorage.setItem('cumlaude_obligations', JSON.stringify(items));
+        setPersistentCacheItem(cacheKey, items);
         return items;
       }
 
       setExams([]);
       localStorage.setItem('cumlaude_obligations', JSON.stringify([]));
+      setPersistentCacheItem(cacheKey, []);
       return [];
     } catch (error) {
       console.warn('Failed to load obligations:', error);
@@ -12453,10 +12425,10 @@ export const App = ({ routeRole }: AppProps) => {
                   <button
                     onClick={() => { navigateTo('ALL_RESOURCES'); setShowMobileMenu(false); }}
                     className={`w-full flex items-center gap-3 p-3 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors text-left`}
-                  >
-                    <Icon name="folder_open" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
-                    <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>All Resources</span>
-                  </button>
+                    >
+                      <Icon name="folder_open" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
+                      <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>All Resources</span>
+                    </button>
                 )}
 
                 {/* Coming Soon Items - only show when logged in */}
@@ -12469,8 +12441,7 @@ export const App = ({ routeRole }: AppProps) => {
                       className={`w-full flex items-center gap-3 p-3 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors text-left`}
                     >
                       <Icon name="payments" className="text-amber-500" />
-                      <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>Finance</span>
-                      <span className={`ml-auto px-1.5 py-0.5 ${darkMode ? 'bg-amber-900/30 text-amber-400' : 'bg-amber-100 text-amber-600'} text-[10px] font-bold rounded`}>SOON</span>
+                      <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>Finance and Audit</span>
                     </button>
                     
                     <button
@@ -12731,17 +12702,16 @@ export const App = ({ routeRole }: AppProps) => {
                   </button>
                 )}
 
-                {/* Finance - Coming Soon */}
+                {/* Finance and Audit */}
                 <button
                   onClick={() => navigateTo('FINANCE')}
                   className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} p-4 rounded-2xl border text-left hover:border-amber-300 hover:shadow-lg hover:scale-[1.02] transition-all group relative`}
                 >
-                  <span className={`absolute top-2 right-2 px-1.5 py-0.5 ${darkMode ? 'bg-amber-900/30 text-amber-400' : 'bg-amber-100 text-amber-600'} text-[10px] font-bold rounded`}>SOON</span>
                   <div className={`w-10 h-10 ${darkMode ? 'bg-amber-900/30' : 'bg-amber-100'} rounded-xl flex items-center justify-center mb-3 text-amber-600 group-hover:scale-110 transition-transform`}>
                     <Icon name="payments" />
                   </div>
-                  <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Finance</h3>
-                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-400'} mt-1`}>Track payments</p>
+                  <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Finance and Audit</h3>
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-400'} mt-1`}>Payments, transparency, and audit</p>
                 </button>
 
                 {/* Attendance - Coming Soon */}
@@ -12756,6 +12726,7 @@ export const App = ({ routeRole }: AppProps) => {
                   <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Attendance</h3>
                   <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-400'} mt-1`}>Track attendance</p>
                 </button>
+
               </div>
             </>
           ) : (
@@ -12773,6 +12744,15 @@ export const App = ({ routeRole }: AppProps) => {
                 <Icon name="login" />
                 Sign In
               </button>
+              <div className="mt-3">
+                <button
+                  onClick={() => navigateTo('FINANCE')}
+                  className={`px-6 py-3 ${darkMode ? 'bg-stone-700 hover:bg-stone-600 text-stone-100' : 'bg-white hover:bg-stone-200 text-stone-800'} rounded-xl font-semibold transition-colors inline-flex items-center gap-2`}
+                >
+                  <Icon name="policy" />
+                  View Audit
+                </button>
+              </div>
             </div>
           )}
 
@@ -13228,16 +13208,24 @@ export const App = ({ routeRole }: AppProps) => {
                   </button>
                 </>
               )}
+              {activeTab === 'Groups' && (
+                <RefreshIconButton
+                  onClick={() => setActiveTab('Groups')}
+                  disabled={false}
+                  spinning={false}
+                  title="Groups"
+                />
+              )}
             </div>
           </div>
           
           {/* Tabs */}
-          <div className="max-w-5xl mx-auto px-4 flex gap-4">
-            {['Classroom', 'Schedule', 'Resources', 'Exams'].map(tab => (
+          <div className="max-w-5xl mx-auto px-4 flex flex-wrap gap-x-4 gap-y-1">
+            {['Classroom', 'Schedule', 'Resources', 'Exams', 'Groups'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab as any)}
-                className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+                className={`py-3 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${
                   activeTab === tab 
                     ? 'border-stone-800 text-stone-800' 
                     : 'border-transparent text-stone-400 hover:text-stone-600'
@@ -13716,6 +13704,18 @@ export const App = ({ routeRole }: AppProps) => {
                 </div>
               )}
             </div>
+          ) : activeTab === 'Groups' ? (
+            <CourseGroupsPanel
+              gasUrl={GAS_URL}
+              user={user}
+              courseCode={activeSubject}
+              courseName={subjectInfo[activeSubject || '']?.name || ''}
+              classmates={classmates}
+              darkMode={darkMode}
+              addToast={addToast}
+              updateToast={updateToast}
+              removeToast={removeToast}
+            />
           ) : null}
         </main>
 
@@ -14110,7 +14110,7 @@ export const App = ({ routeRole }: AppProps) => {
       <div className={`h-[100dvh] ${darkMode ? 'bg-gray-900' : 'bg-[#E7E5E4]'} flex flex-col overflow-hidden`}>
         <header className={`flex-shrink-0 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#F5F5F4] border-stone-200/50'} px-4 py-3 border-b`}>
           <div className="flex justify-between items-center">
-            <button onClick={goBack} className="p-2 -ml-2">
+            <button onClick={exitSessionToDeckOverview} className="p-2 -ml-2">
               <Icon name="close" className={darkMode ? 'text-gray-400' : 'text-stone-500'} />
             </button>
             <div className="text-center flex-1">
@@ -14298,7 +14298,7 @@ export const App = ({ routeRole }: AppProps) => {
             <button disabled={sessionActionBusy} onClick={() => startSession('smart', playMode)} className={`w-full py-3 ${darkMode ? 'bg-gray-700 text-white' : 'bg-stone-100 text-stone-800'} rounded-xl font-semibold flex items-center justify-center gap-2 ${sessionActionBusy ? 'opacity-60 cursor-not-allowed' : ''}`}>
               <Icon name="psychology" /> Smart Review
             </button>
-            <button onClick={goBack} className={`w-full py-3 ${darkMode ? 'text-gray-400' : 'text-stone-500'} text-sm`}>
+            <button onClick={exitSessionToDeckOverview} className={`w-full py-3 ${darkMode ? 'text-gray-400' : 'text-stone-500'} text-sm`}>
               Back to Deck
             </button>
           </div>
@@ -15070,6 +15070,9 @@ export const App = ({ routeRole }: AppProps) => {
           addToast={addToast}
           updateToast={updateToast}
           removeToast={removeToast}
+          courseOptions={Object.keys(subjectInfo || {})
+            .sort((a, b) => a.localeCompare(b))
+            .map((code) => ({ code, name: subjectInfo[code]?.name || '' }))}
           darkMode={darkMode}
         />
       </>
@@ -15081,7 +15084,7 @@ export const App = ({ routeRole }: AppProps) => {
     return (
       <>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <FinancePage onBack={goBack} darkMode={darkMode} />
+        <FinanceFeaturePage onBack={goBack} darkMode={darkMode} user={user} />
       </>
     );
   }
