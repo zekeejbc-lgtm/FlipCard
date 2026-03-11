@@ -1,5 +1,5 @@
 
-import React, { Component, ErrorInfo, ReactNode, useState, useEffect, useRef } from 'react';
+import React, { Component, ErrorInfo, ReactNode, useState, useEffect, useRef, useMemo } from 'react';
 import Dexie from 'dexie';
 import jsQR from 'jsqr';
 import { useNavigate } from 'react-router-dom';
@@ -3597,7 +3597,6 @@ const RegistrationForm = ({
     major: '',
     year: 1,
     section: '',
-    qrCodeText: '',
     digitalSignature: '',
     username: '',
     password: '',
@@ -3841,18 +3840,12 @@ const RegistrationForm = ({
         }
         return true;
       case 4:
-        if (!formData.qrCodeText) {
-          setError('Please scan your QR code from USEP Attendance System');
-          return false;
-        }
-        return true;
-      case 5:
         if (!formData.digitalSignature) {
           setError('Please provide your digital signature');
           return false;
         }
         return true;
-      case 6:
+      case 5:
         if (!formData.username || formData.username.length < 4) {
           setError('Username must be at least 4 characters');
           return false;
@@ -3895,7 +3888,7 @@ const RegistrationForm = ({
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(6)) return;
+    if (!validateStep(5)) return;
 
     setLoading(true);
     const toastId = addToast('Creating your account...', 'loading');
@@ -3919,7 +3912,6 @@ const RegistrationForm = ({
           major: formData.major,
           year: formData.year,
           section: formData.section,
-          qrCodeValue: formData.qrCodeText,
           digitalSignatureURL: formData.digitalSignature,
           profilePictureURL: formData.profilePicture,
           profilePictureFileId: formData.profilePictureFileId,
@@ -4277,39 +4269,6 @@ const RegistrationForm = ({
       case 4:
         return (
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-stone-700 mb-4">QR Code Verification</h3>
-            <p className="text-sm text-stone-500 mb-4">
-              Scan or upload your QR code from the USEP Attendance System to link your account.
-            </p>
-            
-            <QRScanner
-              onScan={(text) => {
-                updateField('qrCodeText', text);
-              }}
-              onError={(err) => setError(err)}
-            />
-            
-            {formData.qrCodeText && (
-              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
-                <div className="flex items-center gap-2 text-emerald-700">
-                  <Icon name="check_circle" className="text-xl" />
-                  <span className="font-medium">QR Code Scanned Successfully</span>
-                </div>
-                <p className="text-xs text-emerald-600 mt-1 break-all">
-                  {formData.qrCodeText.substring(0, 50)}{formData.qrCodeText.length > 50 ? '...' : ''}
-                </p>
-              </div>
-            )}
-            
-            {!formData.qrCodeText && (
-              <p className="text-xs text-amber-600">* QR code verification is required to continue</p>
-            )}
-          </div>
-        );
-
-      case 5:
-        return (
-          <div className="space-y-4">
             <h3 className="text-lg font-semibold text-stone-700 mb-4">Digital Signature</h3>
             <p className="text-sm text-stone-500 mb-4">
               Draw or upload your digital signature for official documents.
@@ -4336,7 +4295,7 @@ const RegistrationForm = ({
           </div>
         );
 
-      case 6:
+      case 5:
         return (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-stone-700 mb-4">Account Credentials</h3>
@@ -4459,7 +4418,7 @@ const RegistrationForm = ({
     <div className="flex flex-col h-full min-h-0">
       {/* Fixed Header - Progress indicator */}
       <div className="flex-shrink-0 flex items-center justify-center gap-1 pb-4 border-b border-stone-200">
-        {[1, 2, 3, 4, 5, 6].map(s => (
+        {[1, 2, 3, 4, 5].map(s => (
           <div key={s} className="flex items-center">
             <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
               s < step ? 'bg-emerald-500 text-white' : 
@@ -4468,7 +4427,7 @@ const RegistrationForm = ({
             }`}>
               {s < step ? <Icon name="check" className="text-sm" /> : s}
             </div>
-            {s < 6 && <div className={`w-4 h-0.5 ${s < step ? 'bg-emerald-500' : 'bg-stone-200'}`} />}
+            {s < 5 && <div className={`w-4 h-0.5 ${s < step ? 'bg-emerald-500' : 'bg-stone-200'}`} />}
           </div>
         ))}
       </div>
@@ -4493,7 +4452,7 @@ const RegistrationForm = ({
         >
           {step === 1 ? 'Back to Login' : 'Previous'}
         </button>
-        {step < 6 ? (
+        {step < 5 ? (
           <button
             onClick={handleNext}
             disabled={step === 2 && (!personalVerified || (formData.schoolEmail && !schoolVerified))}
@@ -5895,7 +5854,7 @@ const ClassPage = ({
                     </div>
                   )}
                 </div>
-                <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'} text-sm text-center truncate`}>{classmate.name}</h3>
+                <h3 className={`mobile-safe-heading font-semibold ${darkMode ? 'text-white' : 'text-stone-800'} text-sm text-center sm:text-base`}>{classmate.name}</h3>
                 {classmate.username && (
                   <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'} text-center truncate`}>@{classmate.username}</p>
                 )}
@@ -5961,7 +5920,7 @@ const ClassPage = ({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                    <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'} truncate text-sm sm:text-base`}>{classmate.name}</h3>
+                    <h3 className={`mobile-safe-heading font-semibold ${darkMode ? 'text-white' : 'text-stone-800'} text-sm sm:text-base`}>{classmate.name}</h3>
                     {classmate.position && (
                       <span className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full ${getPositionColor(classmate.position)}`}>
                         {formatPosition(classmate.position)}
@@ -6139,7 +6098,7 @@ const ClassPage = ({
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'} truncate`}>{editingRole.classmate.name}</h3>
+                  <h3 className={`mobile-safe-heading font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{editingRole.classmate.name}</h3>
                   <p className={`text-xs sm:text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{editingRole.classmate.idNumber}</p>
                 </div>
               </div>
@@ -7254,7 +7213,7 @@ const SchedulePage = ({
                 <Icon name="arrow_back" className={`${darkMode ? 'text-stone-300' : 'text-stone-600'} text-xl`} />
               </button>
               <div className="min-w-0">
-                <h1 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'} text-base truncate`}>Class Schedule</h1>
+                <h1 className={`mobile-safe-heading font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'} text-base sm:text-lg`}>Class Schedule</h1>
                 <p className={`text-xs ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>
                   {refreshing ? `${schedules.length} schedules • syncing...` : `${schedules.length} schedules`}
                 </p>
@@ -7666,7 +7625,7 @@ const SchedulePage = ({
                   <div className="flex items-center justify-between gap-3 mb-3">
                     <div className="min-w-0">
                       <p className="text-xs text-stone-400">Schedules</p>
-                      <h4 className="font-semibold text-stone-800 truncate">{selectedLabel}</h4>
+                      <h4 className="mobile-safe-heading font-semibold text-stone-800">{selectedLabel}</h4>
                     </div>
                     <span className="text-xs text-stone-500">{selectedDaySchedules.length} items</span>
                   </div>
@@ -8900,7 +8859,7 @@ const ResourceViewer = ({
   return (
     <div className="fixed inset-0 bg-black/90 flex flex-col z-50">
       <div className="flex justify-between items-center p-4 bg-stone-900">
-        <h2 className="text-white font-semibold truncate flex-1 mr-4">{resource.name}</h2>
+        <h2 className="mobile-safe-heading text-white font-semibold flex-1 mr-4">{resource.name}</h2>
         <div className="flex items-center gap-2">
           <a
             href={resource.url}
@@ -8952,6 +8911,8 @@ export const App = ({ routeRole }: AppProps) => {
   // Toast State
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastIdRef = useRef(0);
+  const sessionBootstrapRequestRef = useRef(0);
+  const cacheResetInProgressRef = useRef(false);
 
   // ... (The rest of your App code follows normally from here)
 
@@ -9264,7 +9225,7 @@ export const App = ({ routeRole }: AppProps) => {
   const [playMode, setPlayMode] = useState<'shuffle' | 'chronological'>('shuffle');
   const [showContinueModal, setShowContinueModal] = useState(false);
   const [savedProgress, setSavedProgress] = useState<DeckProgress | null>(null);
-  const [, setProgressVersion] = useState(0);
+  const [progressVersion, setProgressVersion] = useState(0);
   const lastSavedStudySessionIdRef = useRef('');
 
   // Analytics State
@@ -9293,6 +9254,13 @@ export const App = ({ routeRole }: AppProps) => {
       normalizedPosition === 'mayor' ||
       normalizedPosition === 'vice mayor' ||
       normalizedPosition === 'internal public information officer';
+  };
+
+  const canUserBumpGlobalCache = () => {
+    if (!user) return false;
+
+    const normalizedRole = String(user.role || '').trim().toLowerCase();
+    return normalizedRole === 'admin' || normalizedRole === 'superadmin';
   };
 
   useEffect(() => {
@@ -9758,6 +9726,72 @@ export const App = ({ routeRole }: AppProps) => {
     }
   };
 
+  useEffect(() => {
+    const checkCacheVersion = async () => {
+      if (cacheResetInProgressRef.current || !navigator.onLine) return;
+
+      try {
+        const response = await postToAppsScript({
+          action: 'getCacheVersion'
+        });
+        const result = await response.json();
+
+        if (!response.ok || result.error) {
+          return;
+        }
+
+        const serverVersion = Number(result.version);
+        if (!Number.isFinite(serverVersion) || serverVersion < 1) {
+          return;
+        }
+
+        const storedVersionRaw = localStorage.getItem(STORAGE_KEY_CACHE_VERSION);
+        if (!storedVersionRaw) {
+          localStorage.setItem(STORAGE_KEY_CACHE_VERSION, String(serverVersion));
+          return;
+        }
+
+        const storedVersion = Number(storedVersionRaw);
+        if (!Number.isFinite(storedVersion)) {
+          localStorage.setItem(STORAGE_KEY_CACHE_VERSION, String(serverVersion));
+          return;
+        }
+
+        if (serverVersion > storedVersion) {
+          await forceHardReset('App cache was reset by an administrator. Reloading fresh data...');
+          return;
+        }
+
+        if (serverVersion !== storedVersion) {
+          localStorage.setItem(STORAGE_KEY_CACHE_VERSION, String(serverVersion));
+        }
+      } catch (error) {
+        console.warn('Cache version check failed:', error);
+      }
+    };
+
+    void checkCacheVersion();
+
+    const intervalId = window.setInterval(checkCacheVersion, 5 * 60 * 1000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void checkCacheVersion();
+      }
+    };
+    const handleOnline = () => {
+      void checkCacheVersion();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
+
   // --- Periodic Data Refresh (every hour) ---
   
   useEffect(() => {
@@ -9812,7 +9846,7 @@ export const App = ({ routeRole }: AppProps) => {
         
         if (outcome === 'accepted') {
           setShowInstallToast(false);
-          addToast('Installing CumLaude!... 📲', 'success');
+          addToast('Installing Classroom Virtual Environment... 📲', 'success');
           localStorage.setItem('cumlaude_installed', 'true');
         } else {
           addToast('Installation cancelled', 'info');
@@ -9863,9 +9897,9 @@ export const App = ({ routeRole }: AppProps) => {
   // --- Data Sync ---
 
   // Function to clear all local cache
-  const clearAllLocalCache = async () => {
-    // Clear localStorage (except user)
-    const savedUser = localStorage.getItem(STORAGE_KEY_USER);
+  const clearAllLocalCache = async (preserveUser = false) => {
+    // Clear localStorage
+    const savedUser = preserveUser ? localStorage.getItem(STORAGE_KEY_USER) : null;
     localStorage.clear();
     if (savedUser) {
       localStorage.setItem(STORAGE_KEY_USER, savedUser);
@@ -9878,6 +9912,11 @@ export const App = ({ routeRole }: AppProps) => {
     await db.decks.clear();
     await db.categories.clear();
     await db.resources.clear();
+    try {
+      await db.delete();
+    } catch (error) {
+      console.warn('Failed to delete IndexedDB database:', error);
+    }
     
     // Unregister service workers
     if ('serviceWorker' in navigator) {
@@ -9893,6 +9932,25 @@ export const App = ({ routeRole }: AppProps) => {
       for (const name of names) {
         await caches.delete(name);
       }
+    }
+  };
+
+  const forceHardReset = async (reason: string) => {
+    if (cacheResetInProgressRef.current) return;
+    cacheResetInProgressRef.current = true;
+
+    const toastId = addToast(reason, 'loading');
+
+    try {
+      setUser(null);
+      await clearAllLocalCache(false);
+    } catch (error) {
+      console.error('Failed to fully clear local cache before reload:', error);
+    } finally {
+      removeToast(toastId);
+      const resetUrl = new URL(window.location.href);
+      resetUrl.searchParams.set('cacheReset', Date.now().toString());
+      window.location.replace(resetUrl.toString());
     }
   };
 
@@ -10129,51 +10187,19 @@ export const App = ({ routeRole }: AppProps) => {
 
   const fetchUserAnalytics = async () => {
     if (!user) return;
-
-    const cacheKey = getAnalyticsCacheKey(user.idNumber);
-    const cachedAnalytics = await getSecureSessionItem<any>(cacheKey);
-    const hasCachedAnalytics = cachedAnalytics !== null;
-
-    if (cachedAnalytics) {
-      setUserAnalytics(cachedAnalytics);
-    }
-
-    setLoadingAnalytics(!hasCachedAnalytics);
-    setRefreshingAnalytics(hasCachedAnalytics);
+    const hasSnapshot = startedStudyProgressRows.length > 0;
+    setLoadingAnalytics(!hasSnapshot);
+    setRefreshingAnalytics(hasSnapshot);
 
     try {
-      const response = await fetch(GAS_URL, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'getAnalytics',
-          idNumber: user.idNumber
-        })
+      await syncProgressFromBackend();
+      setUserAnalytics({
+        success: true,
+        studyProgress: true,
+        refreshedAt: Date.now()
       });
-      const data = await response.json();
-      
-      // Handle both success case and error case (no analytics sheet yet)
-      if (data.success) {
-        setUserAnalytics(data);
-        void setSecureSessionItem(cacheKey, data);
-      } else if (data.error) {
-        // If analytics sheet doesn't exist or other error, show empty state
-        console.log('Analytics fetch result:', data.error);
-        const emptyAnalytics = { success: true, analytics: [], summary: null };
-        setUserAnalytics(emptyAnalytics);
-        void setSecureSessionItem(cacheKey, emptyAnalytics);
-      } else {
-        // Fallback - set with whatever data we got
-        setUserAnalytics(data);
-        void setSecureSessionItem(cacheKey, data);
-      }
     } catch (error) {
-      console.error('Failed to fetch analytics:', error);
-      // Set empty state on error so user sees "No Analytics Yet" instead of infinite loading
-      if (!hasCachedAnalytics) {
-        const emptyAnalytics = { success: true, analytics: [], summary: null };
-        setUserAnalytics(emptyAnalytics);
-        void setSecureSessionItem(cacheKey, emptyAnalytics);
-      }
+      console.error('Failed to sync study progress:', error);
     } finally {
       setLoadingAnalytics(false);
       setRefreshingAnalytics(false);
@@ -10199,7 +10225,7 @@ export const App = ({ routeRole }: AppProps) => {
 
   // --- Actions ---
 
-  const ADMIN_USER_ID = '2025-00046';
+  const ANNOUNCEMENT_ADMIN_USER_ID = '2025-00046';
 
   // Semester Switch Function
   const handleSemesterSwitch = async (semester: '1st' | '2nd') => {
@@ -10216,35 +10242,14 @@ export const App = ({ routeRole }: AppProps) => {
   };
 
   const handleLogout = () => {
+    sessionBootstrapRequestRef.current += 1;
     setUser(null);
     localStorage.removeItem(STORAGE_KEY_USER);
     clearSecureSessionCache();
   };
 
   const handleLoginSuccess = async (authenticatedUser: User) => {
-    const prefetchedData = await prefetchSessionBootstrapData(authenticatedUser);
-
-    if (prefetchedData.subjects) {
-      setApiSubjects(prefetchedData.subjects);
-    }
-    if (prefetchedData.subjectInfo) {
-      setSubjectInfo(prefetchedData.subjectInfo);
-    }
-    if (prefetchedData.currentSemester) {
-      setCurrentSemester(prefetchedData.currentSemester);
-    }
-    if (prefetchedData.academicYear !== undefined) {
-      setAcademicYear(prefetchedData.academicYear);
-    }
-    if (prefetchedData.semesterConfig) {
-      setSemesterConfig(prefetchedData.semesterConfig);
-    }
-    if (prefetchedData.semesterSubjects) {
-      setSemesterSubjects(prefetchedData.semesterSubjects);
-    }
-    if (prefetchedData.semesterSchedules) {
-      setSemesterSchedules(prefetchedData.semesterSchedules);
-    }
+    const bootstrapRequestId = ++sessionBootstrapRequestRef.current;
 
     mapToPage('home', () => {
       setUser(authenticatedUser);
@@ -10267,6 +10272,49 @@ export const App = ({ routeRole }: AppProps) => {
       resource: null,
       tab: null
     }, { replace: true });
+
+    void prefetchSessionBootstrapData(authenticatedUser).then(prefetchedData => {
+      const activeUserRaw = localStorage.getItem(STORAGE_KEY_USER);
+      let activeUserId: string | null = null;
+      if (activeUserRaw) {
+        try {
+          activeUserId = JSON.parse(activeUserRaw)?.idNumber || null;
+        } catch (error) {
+          console.warn('Failed to parse cached user during session bootstrap:', error);
+        }
+      }
+      const isStaleRequest =
+        sessionBootstrapRequestRef.current !== bootstrapRequestId ||
+        activeUserId !== authenticatedUser.idNumber;
+
+      if (isStaleRequest) {
+        return;
+      }
+
+      if (prefetchedData.subjects) {
+        setApiSubjects(prefetchedData.subjects);
+      }
+      if (prefetchedData.subjectInfo) {
+        setSubjectInfo(prefetchedData.subjectInfo);
+      }
+      if (prefetchedData.currentSemester) {
+        setCurrentSemester(prefetchedData.currentSemester);
+      }
+      if (prefetchedData.academicYear !== undefined) {
+        setAcademicYear(prefetchedData.academicYear);
+      }
+      if (prefetchedData.semesterConfig) {
+        setSemesterConfig(prefetchedData.semesterConfig);
+      }
+      if (prefetchedData.semesterSubjects) {
+        setSemesterSubjects(prefetchedData.semesterSubjects);
+      }
+      if (prefetchedData.semesterSchedules) {
+        setSemesterSchedules(prefetchedData.semesterSchedules);
+      }
+    }).catch(error => {
+      console.warn('Failed to hydrate post-login session data:', error);
+    });
   };
 
   // Navigation helpers
@@ -10304,18 +10352,16 @@ export const App = ({ routeRole }: AppProps) => {
   };
 
   const handleAdminClearAllCache = async () => {
-    if (!user || user.idNumber !== ADMIN_USER_ID) return;
+    if (!user || !canUserBumpGlobalCache()) return;
     
     const toastId = addToast('Admin: Bumping cache version...', 'loading');
     
     try {
       // Call backend to bump cache version
-      const response = await fetch(GAS_URL, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'bumpCacheVersion',
-          userId: user.idNumber
-        })
+      const response = await postToAppsScript({
+        action: 'bumpCacheVersion',
+        userId: user.idNumber,
+        sessionToken: user.sessionToken
       });
       
       const result = await response.json();
@@ -10326,16 +10372,12 @@ export const App = ({ routeRole }: AppProps) => {
         return;
       }
       
-      updateToast(toastId, `Cache version bumped to v${result.newVersion}! All users will refresh on next load.`, 'success');
-      setTimeout(() => removeToast(toastId), 5000);
-      
-      // Also clear local cache and reload
-      await clearAllLocalCache();
-      localStorage.setItem(STORAGE_KEY_CACHE_VERSION, String(result.newVersion));
-      
+      updateToast(toastId, `Cache version bumped to v${result.newVersion}. All users will be forced to reset on their next check.`, 'success');
+      setTimeout(() => removeToast(toastId), 2500);
+
       setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+        void forceHardReset('Global cache reset triggered. Reloading this device...');
+      }, 600);
     } catch (error: any) {
       updateToast(toastId, `Failed: ${error.message}`, 'error');
       setTimeout(() => removeToast(toastId), 4000);
@@ -10667,6 +10709,126 @@ export const App = ({ routeRole }: AppProps) => {
     const rawProgress = readDeckProgressLocal(deck.name, user?.idNumber);
     return normalizeDeckProgressForDeck(deck, rawProgress).progress;
   };
+
+  const studyProgressRows = useMemo(() => {
+    return decks
+      .map(deck => {
+        const progress = getDeckProgressForDeck(deck);
+        const statuses = progress?.cardStatuses || {};
+        const totalCards = deck.cards.length;
+        const answeredCount = Object.values(statuses).filter(status => status !== 'unanswered').length;
+        const correctCount = Object.values(statuses).filter(status => status === 'correct').length;
+        const incorrectCount = Object.values(statuses).filter(status => status === 'incorrect').length;
+        const progressPercent = totalCards > 0 ? Math.round((answeredCount / totalCards) * 100) : 0;
+        const accuracyPercent = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0;
+        const masteryPercent = totalCards > 0 ? Math.round((correctCount / totalCards) * 100) : 0;
+        const lastUpdated = getProgressTimestamp(progress);
+        const subjectCode = deck.subject || 'Uncategorized';
+
+        return {
+          deck,
+          subjectCode,
+          subjectName: subjectInfo[subjectCode]?.name || subjectCode,
+          totalCards,
+          answeredCount,
+          correctCount,
+          incorrectCount,
+          progressPercent,
+          accuracyPercent,
+          masteryPercent,
+          isCompleted: totalCards > 0 && answeredCount === totalCards,
+          lastUpdated,
+          hasProgress: answeredCount > 0
+        };
+      })
+      .sort((left, right) => {
+        if (right.lastUpdated !== left.lastUpdated) {
+          return right.lastUpdated - left.lastUpdated;
+        }
+        return left.deck.name.localeCompare(right.deck.name);
+      });
+  }, [decks, progressVersion, subjectInfo, user?.idNumber]);
+
+  const startedStudyProgressRows = useMemo(
+    () => studyProgressRows.filter(row => row.hasProgress),
+    [studyProgressRows]
+  );
+
+  const studyProgressSummary = useMemo(() => {
+    const totalDecks = studyProgressRows.length;
+    const startedDecks = startedStudyProgressRows.length;
+    const completedDecks = startedStudyProgressRows.filter(row => row.isCompleted).length;
+    const totalCards = studyProgressRows.reduce((sum, row) => sum + row.totalCards, 0);
+    const answeredCards = studyProgressRows.reduce((sum, row) => sum + row.answeredCount, 0);
+    const correctCards = studyProgressRows.reduce((sum, row) => sum + row.correctCount, 0);
+    const incorrectCards = studyProgressRows.reduce((sum, row) => sum + row.incorrectCount, 0);
+    const coveragePercent = totalCards > 0 ? Math.round((answeredCards / totalCards) * 100) : 0;
+    const accuracyPercent = answeredCards > 0 ? Math.round((correctCards / answeredCards) * 100) : 0;
+    const masteryPercent = totalCards > 0 ? Math.round((correctCards / totalCards) * 100) : 0;
+
+    const bySubjectMap = new Map<string, {
+      subjectCode: string;
+      subjectName: string;
+      deckCount: number;
+      startedDeckCount: number;
+      totalCards: number;
+      answeredCount: number;
+      correctCount: number;
+      incorrectCount: number;
+      lastUpdated: number;
+    }>();
+
+    studyProgressRows.forEach(row => {
+      const existing = bySubjectMap.get(row.subjectCode) || {
+        subjectCode: row.subjectCode,
+        subjectName: row.subjectName,
+        deckCount: 0,
+        startedDeckCount: 0,
+        totalCards: 0,
+        answeredCount: 0,
+        correctCount: 0,
+        incorrectCount: 0,
+        lastUpdated: 0
+      };
+
+      existing.deckCount += 1;
+      existing.startedDeckCount += row.hasProgress ? 1 : 0;
+      existing.totalCards += row.totalCards;
+      existing.answeredCount += row.answeredCount;
+      existing.correctCount += row.correctCount;
+      existing.incorrectCount += row.incorrectCount;
+      existing.lastUpdated = Math.max(existing.lastUpdated, row.lastUpdated);
+      bySubjectMap.set(row.subjectCode, existing);
+    });
+
+    const bySubject = Array.from(bySubjectMap.values())
+      .filter(subject => subject.startedDeckCount > 0)
+      .map(subject => ({
+        ...subject,
+        coveragePercent: subject.totalCards > 0 ? Math.round((subject.answeredCount / subject.totalCards) * 100) : 0,
+        accuracyPercent: subject.answeredCount > 0 ? Math.round((subject.correctCount / subject.answeredCount) * 100) : 0
+      }))
+      .sort((left, right) => {
+        if (right.lastUpdated !== left.lastUpdated) {
+          return right.lastUpdated - left.lastUpdated;
+        }
+        return left.subjectName.localeCompare(right.subjectName);
+      });
+
+    return {
+      totalDecks,
+      startedDecks,
+      completedDecks,
+      totalCards,
+      answeredCards,
+      correctCards,
+      incorrectCards,
+      coveragePercent,
+      accuracyPercent,
+      masteryPercent,
+      bySubject
+    };
+  }, [startedStudyProgressRows, studyProgressRows]);
 
   const saveDeckProgressLocal = (deckName: string, progress: DeckProgress, userId?: string | null) => {
     const progressKey = getDeckProgressStorageKey(deckName, userId);
@@ -11243,7 +11405,7 @@ export const App = ({ routeRole }: AppProps) => {
         // Listen for foreground messages
         messaging.onMessage((payload: any) => {
           console.log('📬 Foreground message:', payload);
-          const title = payload.notification?.title || 'CumLaude!';
+          const title = payload.notification?.title || 'Classroom Virtual Environment';
           const body = payload.notification?.body || 'New notification';
           addToast(`${title}: ${body}`, 'info');
         });
@@ -11758,7 +11920,7 @@ export const App = ({ routeRole }: AppProps) => {
                 <Icon name="download" className="text-2xl" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold">Install CumLaude!</p>
+                <p className="font-semibold">Install Classroom Virtual Environment</p>
                 <p className="text-sm text-stone-300">Get faster access & offline support</p>
               </div>
               <div className="flex gap-2 flex-shrink-0">
@@ -11808,7 +11970,7 @@ export const App = ({ routeRole }: AppProps) => {
         )}
 
         {/* Admin Announcement Panel */}
-        {showAnnouncementPanel && user?.idNumber === ADMIN_USER_ID && (
+        {showAnnouncementPanel && user?.idNumber === ANNOUNCEMENT_ADMIN_USER_ID && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-md shadow-xl overflow-hidden`}>
               <div className="bg-gradient-to-r from-amber-500 to-amber-400 p-4 text-white">
@@ -12478,8 +12640,7 @@ export const App = ({ routeRole }: AppProps) => {
                   <p className="text-xs opacity-60 mt-1">ID: {user.idNumber}</p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  {user.idNumber === ADMIN_USER_ID && (
-                    <>
+                  {user.idNumber === ANNOUNCEMENT_ADMIN_USER_ID && (
                     <button
                       onClick={() => setShowAnnouncementPanel(true)}
                       className="flex items-center gap-1 px-3 py-1.5 bg-amber-500/30 hover:bg-amber-500/50 text-amber-200 text-xs rounded-lg transition-colors"
@@ -12488,6 +12649,8 @@ export const App = ({ routeRole }: AppProps) => {
                       <Icon name="campaign" className="text-sm" />
                       <span>Announce</span>
                     </button>
+                  )}
+                  {canUserBumpGlobalCache() && (
                     <button
                       onClick={() => setShowAdminCacheConfirm(true)}
                       className="flex items-center gap-1 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-200 text-xs rounded-lg transition-colors"
@@ -12496,7 +12659,6 @@ export const App = ({ routeRole }: AppProps) => {
                       <Icon name="delete_sweep" className="text-sm" />
                       <span>Clear Cache</span>
                     </button>
-                    </>
                   )}
                 </div>
               </div>
@@ -12995,73 +13157,77 @@ export const App = ({ routeRole }: AppProps) => {
         
         {/* Header */}
         <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
-          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-            <button onClick={goBack} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
-              <Icon name="arrow_back" className="text-stone-600" />
-            </button>
-            <div className="flex-1 min-w-0">
-              <h1 className="font-bold text-stone-800 text-lg">{activeSubject}</h1>
-              {subjectInfo[activeSubject || '']?.name && (
-                <p className="text-xs text-stone-500 truncate">{subjectInfo[activeSubject || ''].name}</p>
-              )}
+          <div className="max-w-5xl mx-auto px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <button onClick={goBack} className="p-2 -ml-2 hover:bg-stone-100 rounded-full">
+                <Icon name="arrow_back" className="text-stone-600" />
+              </button>
+              <div className="flex-1 min-w-0">
+                <h1 className="font-bold text-stone-800 text-lg leading-tight">{activeSubject}</h1>
+                {subjectInfo[activeSubject || '']?.name && (
+                  <p className="text-xs text-stone-500 truncate">{subjectInfo[activeSubject || ''].name}</p>
+                )}
+              </div>
             </div>
-            {activeTab === 'Resources' && (
-              <>
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              {activeTab === 'Resources' && (
+                <>
+                  <RefreshIconButton
+                    onClick={() => void handleResourcesRefresh()}
+                    disabled={isResourcesRefreshing}
+                    spinning={isResourcesRefreshing}
+                    title="Refresh resources"
+                  />
+                  <button
+                    onClick={() => user ? setShowUpload(true) : setShowLogin(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
+                  >
+                    <Icon name="cloud_upload" className="text-sm" />
+                    Upload
+                  </button>
+                  <button
+                    onClick={() => user ? setShowRequestResource(true) : setShowLogin(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 transition-colors"
+                  >
+                    <Icon name="help" className="text-sm" />
+                    Request Resource
+                  </button>
+                </>
+              )}
+              {activeTab === 'Classroom' && (
                 <RefreshIconButton
-                  onClick={() => void handleResourcesRefresh()}
+                  onClick={() => void handleClassroomRefresh()}
                   disabled={isResourcesRefreshing}
                   spinning={isResourcesRefreshing}
-                  title="Refresh resources"
+                  title="Refresh classroom"
                 />
-                <button
-                  onClick={() => user ? setShowUpload(true) : setShowLogin(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
-                >
-                  <Icon name="cloud_upload" className="text-sm" />
-                  Upload
-                </button>
-                <button
-                  onClick={() => user ? setShowRequestResource(true) : setShowLogin(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 transition-colors ml-2"
-                >
-                  <Icon name="help" className="text-sm" />
-                  Request Resource
-                </button>
-              </>
-            )}
-            {activeTab === 'Classroom' && (
-              <RefreshIconButton
-                onClick={() => void handleClassroomRefresh()}
-                disabled={isResourcesRefreshing}
-                spinning={isResourcesRefreshing}
-                title="Refresh classroom"
-              />
-            )}
-            {activeTab === 'Schedule' && (
-              <RefreshIconButton
-                onClick={() => void handleSubjectScheduleRefresh()}
-                disabled={isSemesterSubjectsRefreshing}
-                spinning={isSemesterSubjectsRefreshing}
-                title="Refresh schedule"
-              />
-            )}
-            {activeTab === 'Exams' && (
-              <>
+              )}
+              {activeTab === 'Schedule' && (
                 <RefreshIconButton
-                  onClick={() => void handleObligationsRefresh()}
-                  disabled={isObligationsLoading}
-                  spinning={isObligationsLoading}
-                  title="Refresh obligations"
+                  onClick={() => void handleSubjectScheduleRefresh()}
+                  disabled={isSemesterSubjectsRefreshing}
+                  spinning={isSemesterSubjectsRefreshing}
+                  title="Refresh schedule"
                 />
-                <button
-                  onClick={() => user ? setShowAddExam(true) : setShowLogin(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
-                >
-                  <Icon name="add" className="text-sm" />
-                  Add
-                </button>
-              </>
-            )}
+              )}
+              {activeTab === 'Exams' && (
+                <>
+                  <RefreshIconButton
+                    onClick={() => void handleObligationsRefresh()}
+                    disabled={isObligationsLoading}
+                    spinning={isObligationsLoading}
+                    title="Refresh obligations"
+                  />
+                  <button
+                    onClick={() => user ? setShowAddExam(true) : setShowLogin(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-900 transition-colors"
+                  >
+                    <Icon name="add" className="text-sm" />
+                    Add
+                  </button>
+                </>
+              )}
+            </div>
           </div>
           
           {/* Tabs */}
@@ -13305,7 +13471,7 @@ export const App = ({ routeRole }: AppProps) => {
                                   <Icon name="style" className="text-xl" />
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                 <h4 className="truncate font-semibold text-stone-800">{deck.name}</h4>
+                                 <h4 className="mobile-safe-heading font-semibold text-stone-800">{deck.name}</h4>
                                  <p className="mt-1 text-sm text-stone-500">{deck.cards.length} learning cards</p>
                                   {deck.submittedByName && (
                                     <p className="mt-1 text-xs text-stone-400">by {deck.submittedByName}</p>
@@ -14142,6 +14308,8 @@ export const App = ({ routeRole }: AppProps) => {
 
   // ANALYTICS View
   if (view === 'ANALYTICS') {
+    const hasStudyProgress = startedStudyProgressRows.length > 0;
+
     return (
       <div className={`min-h-screen ${darkMode ? 'bg-stone-900' : 'bg-[#F5F5F4]'}`}>
         <ToastContainer toasts={toasts} removeToast={removeToast} />
@@ -14162,9 +14330,9 @@ export const App = ({ routeRole }: AppProps) => {
               <Icon name="arrow_back" />
             </button>
             <div className="flex-1">
-              <h1 className={`text-lg font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>My Analytics</h1>
+              <h1 className={`text-lg font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>Study Progress</h1>
               <p className={`text-sm ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>
-                {refreshingAnalytics ? 'Track your learning progress • syncing...' : 'Track your learning progress'}
+                {refreshingAnalytics ? 'Tracking your flipcard progress • syncing...' : 'Tracking your flipcard progress'}
               </p>
             </div>
             <RefreshIconButton
@@ -14172,7 +14340,7 @@ export const App = ({ routeRole }: AppProps) => {
               disabled={!user || refreshingAnalytics}
               spinning={refreshingAnalytics}
               darkMode={darkMode}
-              title="Refresh analytics"
+              title="Refresh progress"
             />
           </div>
         </header>
@@ -14181,7 +14349,7 @@ export const App = ({ routeRole }: AppProps) => {
           {!user ? (
             <div className="text-center py-12">
               <Icon name="person" className="text-4xl text-stone-300 mb-2" />
-              <p className="text-stone-500 mb-4">Sign in to view your analytics</p>
+              <p className="text-stone-500 mb-4">Sign in to view your study progress</p>
               <button 
                 onClick={() => setShowLogin(true)}
                 className="px-6 py-2 bg-stone-800 text-white rounded-xl font-semibold"
@@ -14218,16 +14386,16 @@ export const App = ({ routeRole }: AppProps) => {
                 </div>
               ))}
             </div>
-          ) : !userAnalytics || !userAnalytics.analytics || userAnalytics.analytics.length === 0 ? (
+          ) : !hasStudyProgress ? (
             <div className="text-center py-16">
-              <div className="w-20 h-20 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Icon name="school" className="text-4xl text-stone-400" />
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${darkMode ? 'bg-stone-800' : 'bg-stone-100'}`}>
+                <Icon name="analytics" className="text-4xl text-stone-400" />
               </div>
-              <h3 className="text-xl font-bold text-stone-800 mb-2">No Analytics Yet</h3>
-              <p className="text-stone-500 mb-1">You haven't completed any flashcard sessions yet.</p>
-              <p className="text-stone-400 text-sm mb-6">Start studying to track your progress!</p>
+              <h3 className={`text-xl font-bold mb-2 ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>No Study Progress Yet</h3>
+              <p className={`${darkMode ? 'text-stone-400' : 'text-stone-500'} mb-1`}>You have not answered any flipcards yet.</p>
+              <p className={`${darkMode ? 'text-stone-500' : 'text-stone-400'} text-sm mb-6`}>Open a learning set and your progress will appear here.</p>
               <button 
-                onClick={() => { setView('HOME'); }}
+                onClick={() => navigateTo('HOME')}
                 className="px-6 py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-700 transition-colors inline-flex items-center gap-2"
               >
                 <Icon name="play_arrow" />
@@ -14236,253 +14404,162 @@ export const App = ({ routeRole }: AppProps) => {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Overall Stats with Donut Chart */}
-              {userAnalytics.summary?.analytics && (
-                <div className="bg-white rounded-2xl p-6 border border-stone-200">
-                  <h2 className="font-bold text-stone-800 mb-4">Overall Progress</h2>
-                  {(() => {
-                    const subjects = userAnalytics.summary.analytics.subjects || {};
-                    let totalAttempts = 0;
-                    let totalCorrect = 0;
-                    let totalIncorrect = 0;
-                    let totalDecks = 0;
-                    Object.values(subjects).forEach((s: any) => {
-                      totalAttempts += s.totalAttempts || 0;
-                      totalCorrect += s.correct || 0;
-                      totalIncorrect += s.incorrect || 0;
-                      totalDecks += Object.keys(s.decks || {}).length;
-                    });
-                    const avgScore = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
-                    const correctPercent = totalAttempts > 0 ? (totalCorrect / totalAttempts) * 100 : 0;
-                    
-                    // SVG Donut Chart calculations
-                    const radius = 60;
-                    const circumference = 2 * Math.PI * radius;
-                    const correctOffset = circumference - (correctPercent / 100) * circumference;
-                    
-                    return (
-                      <div className="flex flex-col md:flex-row items-center gap-6">
-                        {/* Donut Chart */}
-                        <div className="relative w-40 h-40 flex-shrink-0">
-                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 160 160">
-                            {/* Background circle */}
-                            <circle
-                              cx="80"
-                              cy="80"
-                              r={radius}
-                              fill="none"
-                              stroke="#fecaca"
-                              strokeWidth="20"
-                            />
-                            {/* Correct portion */}
-                            <circle
-                              cx="80"
-                              cy="80"
-                              r={radius}
-                              fill="none"
-                              stroke="#10b981"
-                              strokeWidth="20"
-                              strokeDasharray={circumference}
-                              strokeDashoffset={correctOffset}
-                              strokeLinecap="round"
-                              className="transition-all duration-1000"
-                            />
-                          </svg>
-                          <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="text-3xl font-bold text-stone-800">{avgScore}%</span>
-                            <span className="text-xs text-stone-500">Accuracy</span>
-                          </div>
-                        </div>
-                        
-                        {/* Stats Grid */}
-                        <div className="flex-1 grid grid-cols-2 gap-3 w-full">
-                          <div className="text-center p-4 bg-emerald-50 rounded-xl border border-emerald-100">
-                            <div className="text-2xl font-bold text-emerald-600">{totalCorrect}</div>
-                            <div className="text-xs text-emerald-700">Correct</div>
-                          </div>
-                          <div className="text-center p-4 bg-red-50 rounded-xl border border-red-100">
-                            <div className="text-2xl font-bold text-red-500">{totalIncorrect}</div>
-                            <div className="text-xs text-red-600">Incorrect</div>
-                          </div>
-                          <div className="text-center p-4 bg-stone-50 rounded-xl border border-stone-200">
-                            <div className="text-2xl font-bold text-stone-800">{totalAttempts}</div>
-                            <div className="text-xs text-stone-500">Cards Reviewed</div>
-                          </div>
-                          <div className="text-center p-4 bg-blue-50 rounded-xl border border-blue-100">
-                            <div className="text-2xl font-bold text-blue-600">{totalDecks}</div>
-                            <div className="text-xs text-blue-700">Decks Studied</div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
+              <div className={`${darkMode ? 'bg-stone-800 border-stone-700' : 'bg-white border-stone-200'} rounded-2xl p-6 border`}>
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
+                  <div className="relative w-40 h-40 mx-auto lg:mx-0 flex-shrink-0">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 160 160">
+                      <circle cx="80" cy="80" r="60" fill="none" stroke={darkMode ? '#44403c' : '#e7e5e4'} strokeWidth="18" />
+                      <circle
+                        cx="80"
+                        cy="80"
+                        r="60"
+                        fill="none"
+                        stroke="#10b981"
+                        strokeWidth="18"
+                        strokeDasharray={2 * Math.PI * 60}
+                        strokeDashoffset={(2 * Math.PI * 60) - ((2 * Math.PI * 60) * studyProgressSummary.coveragePercent / 100)}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className={`text-3xl font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>{studyProgressSummary.coveragePercent}%</span>
+                      <span className={`text-xs ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>Coverage</span>
+                    </div>
+                  </div>
 
-              {/* Subject Performance Bar Chart */}
-              {userAnalytics.summary?.analytics?.subjects && Object.keys(userAnalytics.summary.analytics.subjects).length > 0 && (
-                <div className="bg-white rounded-2xl p-6 border border-stone-200">
-                  <h2 className="font-bold text-stone-800 mb-4">Performance by Subject</h2>
+                  <div className="flex-1">
+                    <h2 className={`text-xl font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>Overall Flipcard Progress</h2>
+                    <p className={`mt-1 text-sm ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>
+                      {studyProgressSummary.answeredCards} of {studyProgressSummary.totalCards} cards answered across {studyProgressSummary.startedDecks} active deck{studyProgressSummary.startedDecks === 1 ? '' : 's'}.
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                      <div className={`rounded-xl p-4 border ${darkMode ? 'bg-emerald-950/40 border-emerald-900' : 'bg-emerald-50 border-emerald-100'}`}>
+                        <div className="text-2xl font-bold text-emerald-600">{studyProgressSummary.correctCards}</div>
+                        <div className={`text-xs ${darkMode ? 'text-emerald-300' : 'text-emerald-700'}`}>Mastered cards</div>
+                      </div>
+                      <div className={`rounded-xl p-4 border ${darkMode ? 'bg-rose-950/40 border-rose-900' : 'bg-rose-50 border-rose-100'}`}>
+                        <div className="text-2xl font-bold text-rose-500">{studyProgressSummary.incorrectCards}</div>
+                        <div className={`text-xs ${darkMode ? 'text-rose-300' : 'text-rose-700'}`}>Need review</div>
+                      </div>
+                      <div className={`rounded-xl p-4 border ${darkMode ? 'bg-sky-950/40 border-sky-900' : 'bg-sky-50 border-sky-100'}`}>
+                        <div className="text-2xl font-bold text-sky-600">{studyProgressSummary.accuracyPercent}%</div>
+                        <div className={`text-xs ${darkMode ? 'text-sky-300' : 'text-sky-700'}`}>Answered accuracy</div>
+                      </div>
+                      <div className={`rounded-xl p-4 border ${darkMode ? 'bg-amber-950/40 border-amber-900' : 'bg-amber-50 border-amber-100'}`}>
+                        <div className="text-2xl font-bold text-amber-600">{studyProgressSummary.completedDecks}</div>
+                        <div className={`text-xs ${darkMode ? 'text-amber-300' : 'text-amber-700'}`}>Completed decks</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {studyProgressSummary.bySubject.length > 0 && (
+                <div className={`${darkMode ? 'bg-stone-800 border-stone-700' : 'bg-white border-stone-200'} rounded-2xl p-6 border`}>
+                  <h2 className={`font-bold mb-4 ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>Progress by Subject</h2>
                   <div className="space-y-4">
-                    {Object.entries(userAnalytics.summary.analytics.subjects).map(([subject, data]: [string, any]) => {
-                      const accuracy = data.totalAttempts > 0 ? Math.round((data.correct / data.totalAttempts) * 100) : 0;
-                      const subjectName = subjectInfo[subject]?.name || subject;
-                      return (
-                        <div key={subject} className="space-y-1">
-                          <div className="flex justify-between items-center text-sm">
-                            <span className="font-medium text-stone-700 truncate flex-1">{subjectName}</span>
-                            <span className="text-stone-500 ml-2">{accuracy}%</span>
-                          </div>
-                          <div className="h-6 bg-stone-100 rounded-lg overflow-hidden flex">
-                            <div 
-                              className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-lg flex items-center justify-end pr-2 text-xs font-medium text-white transition-all duration-500"
-                              style={{ width: `${Math.max(accuracy, 8)}%` }}
-                            >
-                              {accuracy > 15 && `${data.correct}`}
+                    {studyProgressSummary.bySubject.map(subject => (
+                      <div key={subject.subjectCode} className="space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className={`font-medium ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>{subject.subjectName}</div>
+                            <div className={`text-xs ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>
+                              {subject.startedDeckCount}/{subject.deckCount} decks started • {subject.correctCount} correct • {subject.incorrectCount} incorrect
                             </div>
-                            {data.incorrect > 0 && (
-                              <div 
-                                className="h-full bg-gradient-to-r from-red-400 to-red-500 flex items-center justify-start pl-2 text-xs font-medium text-white"
-                                style={{ width: `${Math.max(100 - accuracy, 8)}%` }}
-                              >
-                                {(100 - accuracy) > 15 && `${data.incorrect}`}
-                              </div>
-                            )}
                           </div>
-                          <div className="flex justify-between text-xs text-stone-400">
-                            <span>{data.correct} correct</span>
-                            <span>{data.incorrect} incorrect</span>
+                          <div className="text-right">
+                            <div className={`text-sm font-semibold ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>{subject.coveragePercent}%</div>
+                            <div className={`text-xs ${darkMode ? 'text-stone-500' : 'text-stone-400'}`}>coverage</div>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                  
-                  {/* Legend */}
-                  <div className="flex justify-center gap-6 mt-4 pt-4 border-t border-stone-100">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded bg-emerald-500"></div>
-                      <span className="text-xs text-stone-500">Correct</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded bg-red-500"></div>
-                      <span className="text-xs text-stone-500">Incorrect</span>
-                    </div>
+                        <div className={`h-3 rounded-full overflow-hidden ${darkMode ? 'bg-stone-700' : 'bg-stone-100'}`}>
+                          <div className="h-full bg-gradient-to-r from-amber-400 via-sky-500 to-emerald-500 rounded-full" style={{ width: `${Math.max(subject.coveragePercent, 4)}%` }} />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
 
-              {/* Deck Details - Expandable Cards */}
-              {userAnalytics.summary?.analytics?.subjects && Object.entries(userAnalytics.summary.analytics.subjects).map(([subject, data]: [string, any]) => (
-                <div key={subject} className="bg-white rounded-2xl p-6 border border-stone-200">
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="font-bold text-stone-800">{subjectInfo[subject]?.name || subject}</h2>
-                    <span className="text-sm px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full font-medium">
-                      {data.totalAttempts > 0 ? Math.round((data.correct / data.totalAttempts) * 100) : 0}%
-                    </span>
+              <div className={`${darkMode ? 'bg-stone-800 border-stone-700' : 'bg-white border-stone-200'} rounded-2xl p-6 border`}>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h2 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>Deck Progress</h2>
+                    <p className={`text-sm ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>
+                      {studyProgressSummary.totalDecks - studyProgressSummary.startedDecks} deck{studyProgressSummary.totalDecks - studyProgressSummary.startedDecks === 1 ? '' : 's'} not started yet.
+                    </p>
                   </div>
+                  <div className={`text-sm ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>{studyProgressSummary.masteryPercent}% total mastery</div>
+                </div>
 
-                  {/* Mini donut for this subject */}
-                  <div className="flex items-center gap-4 mb-4">
-                    {(() => {
-                      const accuracy = data.totalAttempts > 0 ? (data.correct / data.totalAttempts) * 100 : 0;
-                      const r = 24;
-                      const c = 2 * Math.PI * r;
-                      const offset = c - (accuracy / 100) * c;
-                      return (
-                        <div className="relative w-16 h-16 flex-shrink-0">
-                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 64 64">
-                            <circle cx="32" cy="32" r={r} fill="none" stroke="#fecaca" strokeWidth="8" />
-                            <circle cx="32" cy="32" r={r} fill="none" stroke="#10b981" strokeWidth="8"
-                              strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round" />
-                          </svg>
-                        </div>
-                      );
-                    })()}
-                    <div className="flex-1 grid grid-cols-3 gap-2 text-center">
-                      <div>
-                        <div className="text-lg font-bold text-emerald-600">{data.correct}</div>
-                        <div className="text-xs text-stone-400">Correct</div>
-                      </div>
-                      <div>
-                        <div className="text-lg font-bold text-red-500">{data.incorrect}</div>
-                        <div className="text-xs text-stone-400">Wrong</div>
-                      </div>
-                      <div>
-                        <div className="text-lg font-bold text-stone-700">{Object.keys(data.decks || {}).length}</div>
-                        <div className="text-xs text-stone-400">Decks</div>
-                      </div>
-                    </div>
-                  </div>
+                <div className="space-y-3">
+                  {studyProgressRows.map(row => (
+                    <div key={row.deck.name} className={`rounded-2xl border p-4 ${darkMode ? 'border-stone-700 bg-stone-900/50' : 'border-stone-200 bg-stone-50/80'}`}>
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <h3 className={`font-semibold truncate ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>{row.deck.name}</h3>
+                              <p className={`text-xs ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>{row.subjectName}</p>
+                            </div>
+                            <span className={`text-xs px-2.5 py-1 rounded-full whitespace-nowrap ${
+                              row.isCompleted
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : row.hasProgress
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : darkMode
+                                    ? 'bg-stone-700 text-stone-300'
+                                    : 'bg-stone-200 text-stone-600'
+                            }`}>
+                              {row.isCompleted ? 'Completed' : row.hasProgress ? 'In Progress' : 'Not Started'}
+                            </span>
+                          </div>
 
-                  {/* Decks breakdown */}
-                  {data.decks && Object.entries(data.decks).length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs text-stone-400 uppercase tracking-wide">Decks Studied</p>
-                      {Object.entries(data.decks).map(([deckName, deckData]: [string, any]) => {
-                        const deckAccuracy = (deckData.correct + deckData.incorrect) > 0 
-                          ? Math.round((deckData.correct / (deckData.correct + deckData.incorrect)) * 100) 
-                          : 0;
-                        return (
-                          <div key={deckName} className="p-3 bg-stone-50 rounded-xl">
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="font-medium text-stone-700 truncate flex-1 text-sm">{deckName}</span>
-                              <span className="text-xs bg-stone-200 px-2 py-0.5 rounded-full text-stone-600 ml-2">
-                                Best: {deckData.bestScore}%
-                              </span>
+                          <div className="grid grid-cols-3 gap-3 mt-3 text-sm">
+                            <div>
+                              <div className={`font-semibold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>{row.answeredCount}/{row.totalCards}</div>
+                              <div className={`text-xs ${darkMode ? 'text-stone-500' : 'text-stone-400'}`}>answered</div>
                             </div>
-                            <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-emerald-500 rounded-full"
-                                style={{ width: `${deckAccuracy}%` }}
-                              ></div>
+                            <div>
+                              <div className="font-semibold text-emerald-600">{row.correctCount}</div>
+                              <div className={`text-xs ${darkMode ? 'text-stone-500' : 'text-stone-400'}`}>correct</div>
                             </div>
-                            <div className="flex justify-between mt-1 text-xs text-stone-400">
-                              <span>{deckData.correct} correct, {deckData.incorrect} wrong</span>
-                              <span>{deckAccuracy}%</span>
+                            <div>
+                              <div className="font-semibold text-rose-500">{row.incorrectCount}</div>
+                              <div className={`text-xs ${darkMode ? 'text-stone-500' : 'text-stone-400'}`}>incorrect</div>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              ))}
 
-              {/* Session History Table */}
-              {userAnalytics.analytics && userAnalytics.analytics.length > 0 && (
-                <div className="bg-white rounded-2xl p-6 border border-stone-200">
-                  <h2 className="font-bold text-stone-800 mb-4">Session History</h2>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-stone-200">
-                          <th className="text-left py-2 text-stone-500 font-medium">Subject</th>
-                          <th className="text-left py-2 text-stone-500 font-medium">Deck</th>
-                          <th className="text-right py-2 text-stone-500 font-medium">Cards</th>
-                          <th className="text-right py-2 text-stone-500 font-medium">Best</th>
-                          <th className="text-right py-2 text-stone-500 font-medium">Avg</th>
-                          <th className="text-right py-2 text-stone-500 font-medium">Last Played</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {userAnalytics.analytics.map((row: any, idx: number) => (
-                          <tr key={idx} className="border-b border-stone-100">
-                            <td className="py-2 text-stone-700">{subjectInfo[row.subject]?.name || row.subject}</td>
-                            <td className="py-2 text-stone-700 truncate max-w-32">{row.deck}</td>
-                            <td className="py-2 text-right text-stone-600">{row.totalAttempts}</td>
-                            <td className="py-2 text-right text-emerald-600 font-medium">{row.bestScore}%</td>
-                            <td className="py-2 text-right text-stone-600">{row.averageScore}%</td>
-                            <td className="py-2 text-right text-stone-400 text-xs">
-                              {row.lastPlayed ? new Date(row.lastPlayed).toLocaleDateString() : '-'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className={darkMode ? 'text-stone-400' : 'text-stone-500'}>{row.progressPercent}% complete</span>
+                              <span className={darkMode ? 'text-stone-400' : 'text-stone-500'}>{row.accuracyPercent}% accuracy</span>
+                            </div>
+                            <div className={`h-2 rounded-full overflow-hidden ${darkMode ? 'bg-stone-700' : 'bg-stone-200'}`}>
+                              <div className="h-full bg-gradient-to-r from-amber-400 via-sky-500 to-emerald-500 rounded-full" style={{ width: `${Math.max(row.progressPercent, row.hasProgress ? 4 : 0)}%` }} />
+                            </div>
+                          </div>
+
+                          <div className={`mt-2 text-xs ${darkMode ? 'text-stone-500' : 'text-stone-400'}`}>
+                            {row.lastUpdated > 0 ? `Updated ${new Date(row.lastUpdated).toLocaleString()}` : 'No saved progress yet'}
+                          </div>
+                        </div>
+
+                        <div className="md:w-auto">
+                          <button
+                            onClick={() => openDeck(row.deck)}
+                            className={`w-full md:w-auto px-4 py-2 rounded-xl font-medium transition-colors ${
+                              darkMode ? 'bg-stone-700 hover:bg-stone-600 text-stone-100' : 'bg-stone-800 hover:bg-stone-700 text-white'
+                            }`}
+                          >
+                            {row.hasProgress ? 'Continue Deck' : 'Open Deck'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
             </div>
           )}
         </main>
@@ -14951,7 +15028,7 @@ export const App = ({ routeRole }: AppProps) => {
                           <Icon name={getResourceIcon(resource.category)} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className={`font-semibold ${darkMode ? 'text-white group-hover:text-blue-400' : 'text-stone-800 group-hover:text-blue-600'} truncate transition-colors text-sm sm:text-base`}>
+                          <h3 className={`mobile-safe-heading font-semibold ${darkMode ? 'text-white group-hover:text-blue-400' : 'text-stone-800 group-hover:text-blue-600'} transition-colors text-sm sm:text-base`}>
                             {resource.name}
                           </h3>
                           <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'} mt-0.5 truncate`}>
@@ -15155,8 +15232,8 @@ export const App = ({ routeRole }: AppProps) => {
 
         <main className="max-w-5xl mx-auto p-4 space-y-4">
           {/* Month Navigation with controls */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
               <button
                 onClick={() => changeMonth(-1)}
                 className="p-2 hover:bg-stone-200 rounded-full transition-colors"
@@ -15164,7 +15241,7 @@ export const App = ({ routeRole }: AppProps) => {
               >
                 <Icon name="chevron_left" className="text-stone-600" />
               </button>
-              <div className="px-4 py-2 bg-stone-100 rounded-xl text-sm font-semibold text-stone-700 min-w-[160px] text-center">
+              <div className="min-w-[7.5rem] px-3 py-2 text-center text-sm font-semibold text-stone-700 bg-stone-100 rounded-xl sm:min-w-[10rem] sm:px-4">
                 {formatMonthLabel}
               </div>
               <button
@@ -15211,13 +15288,13 @@ export const App = ({ routeRole }: AppProps) => {
           </div>
 
           {/* Calendar Grid */}
-          <div className="bg-white rounded-2xl border border-stone-200 p-3 sm:p-4 shadow-sm overflow-x-auto">
-            <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-[10px] sm:text-xs font-semibold text-stone-500 mb-2 min-w-[280px]">
+          <div className="bg-white rounded-2xl border border-stone-200 p-3 sm:p-4 shadow-sm overflow-hidden">
+            <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-stone-500 sm:gap-2 sm:text-xs">
               {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d) => (
                 <div key={d} className="uppercase tracking-wide">{d}</div>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-1 sm:gap-2 min-w-[280px]">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2">
               {gridDays.map(({ date, inMonth }) => {
                 const key = toDateKey(date);
                 const isToday = key === todayKey;
@@ -15265,7 +15342,7 @@ export const App = ({ routeRole }: AppProps) => {
             <div className="flex items-center justify-between mb-3 gap-2">
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-stone-400">Scheduled</p>
-                <h3 className="font-bold text-stone-800 text-sm sm:text-base truncate">{selectedLabel}</h3>
+                <h3 className="mobile-safe-heading font-bold text-stone-800 text-sm sm:text-base">{selectedLabel}</h3>
               </div>
               <span className="text-xs sm:text-sm text-stone-500 flex-shrink-0">{selectedEvents.length || monthEvents.length} items</span>
             </div>

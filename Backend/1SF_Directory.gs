@@ -120,6 +120,90 @@ function getIdNumberFromSessionToken(sessionToken) {
   return CacheService.getScriptCache().get(`session:${sessionToken}`) || '';
 }
 
+const CACHE_VERSION_PROPERTY_KEY = 'CACHE_VERSION';
+
+function getStoredCacheVersion() {
+  const props = PropertiesService.getScriptProperties();
+  const rawVersion = props.getProperty(CACHE_VERSION_PROPERTY_KEY);
+  const parsedVersion = parseInt(rawVersion || '1', 10);
+  return Number.isFinite(parsedVersion) && parsedVersion > 0 ? parsedVersion : 1;
+}
+
+function getUserAccountRowById(userSheet, idNumber) {
+  if (!idNumber) return null;
+
+  const data = userSheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][COL.ID_NUMBER]) === String(idNumber)) {
+      return data[i];
+    }
+  }
+
+  return null;
+}
+
+function canUserManageGlobalCache(idNumber) {
+  if (!idNumber) return false;
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const userSheet = ss.getSheetByName('UserAccounts');
+  if (!userSheet) return false;
+
+  const userRow = getUserAccountRowById(userSheet, idNumber);
+  if (!userRow) return false;
+
+  const role = String(userRow[COL.ROLE] || '').toLowerCase();
+  return role === 'admin' || role === 'superadmin';
+}
+
+function getCacheVersion() {
+  try {
+    return {
+      success: true,
+      version: getStoredCacheVersion()
+    };
+  } catch (error) {
+    return {
+      success: false,
+      version: 1,
+      error: error.message
+    };
+  }
+}
+
+function bumpCacheVersion(requestedByIdNumber, sessionToken) {
+  try {
+    const callerIdNumber = getIdNumberFromSessionToken(sessionToken);
+
+    if (!callerIdNumber) {
+      return { error: 'Unauthorized. Please log in again.' };
+    }
+
+    if (requestedByIdNumber && String(requestedByIdNumber) !== String(callerIdNumber)) {
+      return { error: 'Unauthorized request context.' };
+    }
+
+    if (!canUserManageGlobalCache(callerIdNumber)) {
+      return { error: 'Unauthorized. Only admin or superadmin can bump cache version.' };
+    }
+
+    const props = PropertiesService.getScriptProperties();
+    const oldVersion = getStoredCacheVersion();
+    const newVersion = oldVersion + 1;
+
+    props.setProperty(CACHE_VERSION_PROPERTY_KEY, String(newVersion));
+
+    return {
+      success: true,
+      message: 'Cache version bumped. All users will be forced to reset on their next check.',
+      oldVersion: oldVersion,
+      newVersion: newVersion
+    };
+  } catch (error) {
+    return { error: 'Failed to bump cache version: ' + error.message };
+  }
+}
+
 // =====================================================
 // MAIN REQUEST HANDLERS
 // =====================================================
@@ -140,6 +224,8 @@ function doGet(e) {
     switch(action) {
       case 'ping':
         return jsonResponse({ success: true, message: '1SF Directory API is running', timestamp: new Date().toISOString() });
+      case 'getCacheVersion':
+        return jsonResponse(getCacheVersion());
       case 'checkUsername':
         return jsonResponse(checkUsernameAvailable(e.parameter.username));
       case 'checkIdNumber':
@@ -187,12 +273,16 @@ function doPost(e) {
         return jsonResponse(updateUserProfile(data));
       case 'getUserProfile':
         return jsonResponse(getUserProfile(data.idNumber));
+      case 'getCacheVersion':
+        return jsonResponse(getCacheVersion());
       case 'findUserByQRCode':
         return jsonResponse(findUserByQRCode(data.qrCodeText));
       case 'getClassmates':
         return jsonResponse(getClassmates(data.idNumber, data.section));
       case 'updateUserRole':
         return jsonResponse(updateUserRole(data.adminIdNumber, data.targetIdNumber, data.role, data.position, data.sessionToken));
+      case 'bumpCacheVersion':
+        return jsonResponse(bumpCacheVersion(data.userId, data.sessionToken));
       
       // Utilities
       case 'checkUsername':

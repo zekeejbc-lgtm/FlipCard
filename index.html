@@ -2,14 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>CumLaude!</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Classroom Virtual Environment</title>
   
   <!-- PWA Setup -->
+  <meta name="application-name" content="Classroom Virtual Environment">
+  <meta name="apple-mobile-web-app-title" content="Classroom Virtual Environment">
+  <meta name="description" content="Classroom Virtual Environment for lessons, resources, schedules, and exams.">
   <meta name="theme-color" content="#292524">
+  <meta name="msapplication-TileColor" content="#292524">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="apple-touch-icon" href="/icon-192.svg">
+  <link rel="icon" type="image/svg+xml" sizes="any" href="/favicon.svg?v=3">
+  <link rel="shortcut icon" href="/favicon.svg?v=3">
+  <link rel="apple-touch-icon" href="/icon-192.svg?v=3">
   <link rel="manifest" href="/manifest.json">
 
   <!-- Fonts -->
@@ -30,7 +36,7 @@
         <span class="material-symbols-rounded" style="font-size: 32px; color: white;">school</span>
       </div>
       <div style="width: 48px; height: 48px; border: 3px solid #e7e5e4; border-top-color: #292524; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-      <p style="margin-top: 16px; color: #57534e; font-size: 14px; font-weight: 500;">Loading CumLaude!...</p>
+      <p style="margin-top: 16px; color: #57534e; font-size: 14px; font-weight: 500;">Loading Classroom Virtual Environment...</p>
       <p id="loading-status" style="margin-top: 8px; color: #a8a29e; font-size: 12px;">Initializing app...</p>
       <button id="recovery-btn" style="display: none; margin-top: 24px; padding: 12px 24px; background: #292524; color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15);" onclick="clearAllAndReload()">
         Clear Cache & Reload

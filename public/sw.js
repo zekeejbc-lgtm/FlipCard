@@ -1,11 +1,12 @@
-// CumLaude! Service Worker
-const CACHE_NAME = 'cumlaude-v2';
+// Classroom Virtual Environment Service Worker
+const CACHE_NAME = 'classroom-virtual-environment-v3';
 
 // Assets to cache on install
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/favicon.svg',
   '/icon-192.svg',
   '/icon-512.svg'
 ];
@@ -20,6 +21,7 @@ function isCacheableAppRequest(requestUrl) {
     pathname === '/' ||
     pathname === '/index.html' ||
     pathname === '/manifest.json' ||
+    pathname === '/favicon.svg' ||
     pathname === '/icon-192.svg' ||
     pathname === '/icon-512.svg' ||
     pathname.startsWith('/assets/')
@@ -105,7 +107,7 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log('Background message received:', payload);
   
-  const title = payload.notification?.title || 'CumLaude!';
+  const title = payload.notification?.title || 'Classroom Virtual Environment';
   const options = {
     body: payload.notification?.body || 'You have a new notification',
     icon: '/icon-192.svg',

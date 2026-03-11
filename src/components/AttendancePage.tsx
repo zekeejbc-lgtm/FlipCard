@@ -301,7 +301,7 @@ function TinyStatCard({
   return (
     <div className={`rounded-2xl border p-4 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-stone-200 bg-stone-50'}`}>
       <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{label}</p>
-      <p className={`mt-2 text-3xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{value}</p>
+      <p className={`mt-2 text-2xl font-bold sm:text-3xl ${darkMode ? 'text-white' : 'text-stone-800'}`}>{value}</p>
       <div className={`mt-3 h-1.5 rounded-full ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
         <div className={`h-full rounded-full ${accent}`} style={{ width: '100%' }} />
       </div>
@@ -325,18 +325,18 @@ function DonutChartCard({
   const total = items.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border rounded-3xl p-6`}>
-      <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{title}</h2>
+    <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border rounded-3xl p-4 sm:p-6`}>
+      <h2 className={`mobile-safe-heading text-base font-bold sm:text-lg ${darkMode ? 'text-white' : 'text-stone-800'}`}>{title}</h2>
       <div className="mt-6 grid gap-6 sm:grid-cols-[220px_1fr] sm:items-center">
         <div className="mx-auto">
           <div
-            className="relative h-48 w-48 rounded-full"
+            className="relative h-40 w-40 rounded-full sm:h-48 sm:w-48"
             style={{ background: buildDonutSegments(items) }}
           >
             <div className={`absolute inset-[22%] rounded-full ${darkMode ? 'bg-gray-800' : 'bg-white'} flex items-center justify-center text-center`}>
               <div>
                 <p className={`text-xs uppercase tracking-[0.2em] ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>Total</p>
-                <p className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{total}</p>
+                <p className={`text-2xl font-bold sm:text-3xl ${darkMode ? 'text-white' : 'text-stone-800'}`}>{total}</p>
               </div>
             </div>
           </div>
@@ -357,7 +357,7 @@ function DonutChartCard({
             >
               <div className="flex min-w-0 items-center gap-3">
                 <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
-                <p className={`truncate text-sm ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>{item.label}</p>
+                <p className={`mobile-safe-wrap text-sm ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>{item.label}</p>
               </div>
               <div className="text-right">
                 <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{item.value}</p>
@@ -385,21 +385,21 @@ function VerticalBarChartCard({
   const max = Math.max(...items.map((item) => item.value), 1);
 
   return (
-    <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border rounded-3xl p-6`}>
-      <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{title}</h2>
-      <div className="mt-6 flex h-72 items-end gap-3 overflow-x-auto pb-2">
+    <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border rounded-3xl p-4 sm:p-6`}>
+      <h2 className={`mobile-safe-heading text-base font-bold sm:text-lg ${darkMode ? 'text-white' : 'text-stone-800'}`}>{title}</h2>
+      <div className="mt-6 grid grid-cols-2 gap-3 pb-2 sm:flex sm:h-72 sm:items-end">
         {items.length === 0 ? (
           <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>No data for this filter.</p>
         ) : items.map((item) => (
-          <div key={item.label} className="flex min-w-[72px] flex-1 flex-col items-center justify-end gap-3">
+          <div key={item.label} className="flex min-w-0 flex-col items-center justify-end gap-3 sm:min-w-[72px] sm:flex-1">
             <p className={`text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-stone-600'}`}>{item.value}</p>
-            <div className={`flex h-48 w-full items-end rounded-t-2xl ${darkMode ? 'bg-gray-900' : 'bg-stone-100'}`}>
+            <div className={`flex h-32 w-full items-end rounded-t-2xl sm:h-48 ${darkMode ? 'bg-gray-900' : 'bg-stone-100'}`}>
               <div
                 className={`w-full rounded-t-2xl ${colorClass}`}
                 style={{ height: `${Math.max((item.value / max) * 100, item.value ? 8 : 0)}%` }}
               />
             </div>
-            <p className={`w-full truncate text-center text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} title={item.label}>{item.label}</p>
+            <p className={`mobile-safe-wrap w-full text-center text-[11px] leading-tight sm:text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} title={item.label}>{item.label}</p>
           </div>
         ))}
       </div>
@@ -420,6 +420,7 @@ function LineChartCard({
   const height = 220;
   const padding = 24;
   const max = Math.max(...items.map((item) => item.value), 1);
+  const labelStep = items.length > 10 ? 3 : items.length > 6 ? 2 : 1;
   const points = items.map((item, index) => {
     const x = items.length === 1 ? width / 2 : padding + (index * (width - (padding * 2))) / (items.length - 1);
     const y = height - padding - ((item.value / max) * (height - (padding * 2)));
@@ -427,14 +428,14 @@ function LineChartCard({
   }).join(' ');
 
   return (
-    <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border rounded-3xl p-6`}>
-      <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{title}</h2>
+    <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border rounded-3xl p-4 sm:p-6`}>
+      <h2 className={`mobile-safe-heading text-base font-bold sm:text-lg ${darkMode ? 'text-white' : 'text-stone-800'}`}>{title}</h2>
       {items.length === 0 ? (
         <p className={`mt-6 text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>No data for this filter.</p>
       ) : (
         <>
-          <div className="mt-6 overflow-x-auto">
-            <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[520px]">
+          <div className="mt-6">
+            <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full">
               {[0, 1, 2, 3, 4].map((step) => {
                 const y = padding + (step * (height - (padding * 2))) / 4;
                 return (
@@ -463,9 +464,11 @@ function LineChartCard({
                 return (
                   <g key={item.label}>
                     <circle cx={x} cy={y} r="5" fill="#0ea5e9" />
-                    <text x={x} y={height - 6} textAnchor="middle" fontSize="10" fill={darkMode ? '#9ca3af' : '#78716c'}>
-                      {item.label}
-                    </text>
+                    {(index % labelStep === 0 || index === items.length - 1) ? (
+                      <text x={x} y={height - 6} textAnchor="middle" fontSize="10" fill={darkMode ? '#9ca3af' : '#78716c'}>
+                        {item.label}
+                      </text>
+                    ) : null}
                   </g>
                 );
               })}
@@ -474,7 +477,7 @@ function LineChartCard({
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {items.map((item) => (
               <div key={item.label} className={`rounded-2xl border px-3 py-2 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-stone-200 bg-stone-50'}`}>
-                <p className={`truncate text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{item.label}</p>
+                <p className={`mobile-safe-wrap text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{item.label}</p>
                 <p className={`mt-1 text-lg font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{item.value}</p>
               </div>
             ))}
@@ -503,8 +506,8 @@ function RankedBreakdownCard({
   const max = Math.max(...items.map((item) => item.value), 1);
 
   return (
-    <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border rounded-3xl p-6`}>
-      <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{title}</h2>
+    <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border rounded-3xl p-4 sm:p-6`}>
+      <h2 className={`mobile-safe-heading text-base font-bold sm:text-lg ${darkMode ? 'text-white' : 'text-stone-800'}`}>{title}</h2>
       <div className="mt-5 space-y-4">
         {items.length === 0 ? (
           <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>No data for this filter.</p>
@@ -522,7 +525,7 @@ function RankedBreakdownCard({
             }`}
           >
             <div className="mb-2 flex items-center justify-between gap-3">
-              <p className={`truncate text-sm ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>{item.label}</p>
+              <p className={`mobile-safe-wrap text-sm ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>{item.label}</p>
               <span className={`text-xs font-semibold ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{item.value}</span>
             </div>
             <div className={`h-2.5 overflow-hidden rounded-full ${darkMode ? 'bg-gray-900' : 'bg-stone-100'}`}>
@@ -604,9 +607,9 @@ function AnalyticsStatusModal({
                     className="shrink-0"
                   />
                   <div className="min-w-0 flex-1">
-                    <p className={`truncate font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{student.memberName}</p>
+                    <p className={`mobile-safe-wrap font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{student.memberName}</p>
                     <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{student.memberId}</p>
-                    <p className={`mt-1 truncate text-xs ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>
+                    <p className={`mobile-safe-wrap mt-1 text-xs ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>
                       {student.records.map((record) => record.eventLabel || record.eventId).join(' • ')}
                     </p>
                   </div>
@@ -1292,6 +1295,30 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
     }
   }, [cacheKey, showToast, user?.idNumber]);
 
+  const handleMyQrSaved = useCallback((qrText: string) => {
+    const normalizedQrText = qrText.trim();
+    if (!normalizedQrText) return;
+
+    setContext((prev) => {
+      const next: AttendancePageContext = {
+        ...(prev || { success: true }),
+        userProfile: {
+          idNumber: prev?.userProfile?.idNumber || user?.idNumber || '',
+          name: prev?.userProfile?.name || user?.name,
+          fullName: prev?.userProfile?.fullName || user?.fullName || user?.name,
+          position: prev?.userProfile?.position || user?.position,
+          profilePictureURL: prev?.userProfile?.profilePictureURL || user?.profilePictureURL,
+          qrCodeValue: normalizedQrText
+        }
+      };
+
+      if (cacheKey) setCache(cacheKey, next);
+      return next;
+    });
+
+    showToast('Your QR code has been linked to this account.', 'success');
+  }, [cacheKey, showToast, user]);
+
   useEffect(() => {
     initialFetchRef.current = false;
   }, [user?.idNumber]);
@@ -1658,10 +1685,10 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
             <p className="font-semibold">Sign in to access attendance.</p>
           </div>
         ) : loading ? (
-          <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-            <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border rounded-3xl p-6`}>
-              <Skeleton className="h-7 w-44" darkMode={darkMode} />
-              <div className="mt-5 space-y-4">
+          <div className="grid gap-4 sm:gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+            <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} min-w-0 border rounded-3xl p-4 sm:p-6`}>
+              <Skeleton className="h-6 w-40 sm:h-7 sm:w-44" darkMode={darkMode} />
+              <div className="mt-4 space-y-3 sm:mt-5 sm:space-y-4">
                 <div>
                   <Skeleton className="h-4 w-24" darkMode={darkMode} />
                   <Skeleton className="mt-2 h-12 w-full rounded-xl" darkMode={darkMode} />
@@ -1670,29 +1697,29 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
                   <Skeleton className="h-4 w-20" darkMode={darkMode} />
                   <Skeleton className="mt-2 h-12 w-full rounded-xl" darkMode={darkMode} />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
                   <Skeleton className="h-12 rounded-2xl" darkMode={darkMode} />
                   <Skeleton className="h-12 rounded-2xl" darkMode={darkMode} />
                   <Skeleton className="h-12 rounded-2xl" darkMode={darkMode} />
                   <Skeleton className="h-12 rounded-2xl" darkMode={darkMode} />
                 </div>
-                <Skeleton className="h-20 rounded-2xl" darkMode={darkMode} />
+                <Skeleton className="h-16 rounded-2xl sm:h-20" darkMode={darkMode} />
                 <Skeleton className="h-12 rounded-2xl" darkMode={darkMode} />
-                <Skeleton className="h-40 rounded-2xl" darkMode={darkMode} />
+                <Skeleton className="h-28 rounded-2xl sm:h-40" darkMode={darkMode} />
               </div>
             </div>
-            <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} border rounded-3xl p-6`}>
+            <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} min-w-0 border rounded-3xl p-4 sm:p-6`}>
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <Skeleton className="h-7 w-52" darkMode={darkMode} />
-                  <Skeleton className="mt-2 h-4 w-72" darkMode={darkMode} />
+                <div className="min-w-0 flex-1">
+                  <Skeleton className="h-6 w-44 sm:h-7 sm:w-52" darkMode={darkMode} />
+                  <Skeleton className="mt-2 h-4 w-full max-w-[18rem]" darkMode={darkMode} />
                 </div>
-                <Skeleton className="h-10 w-28 rounded-2xl" darkMode={darkMode} />
+                <Skeleton className="h-10 w-20 rounded-2xl sm:w-28" darkMode={darkMode} />
               </div>
-              <div className="mt-5 space-y-4">
-                <Skeleton className="h-24 rounded-2xl" darkMode={darkMode} />
-                <Skeleton className="h-24 rounded-2xl" darkMode={darkMode} />
-                <Skeleton className="h-24 rounded-2xl" darkMode={darkMode} />
+              <div className="mt-4 space-y-3 sm:mt-5 sm:space-y-4">
+                <Skeleton className="h-20 rounded-2xl sm:h-24" darkMode={darkMode} />
+                <Skeleton className="h-20 rounded-2xl sm:h-24" darkMode={darkMode} />
+                <Skeleton className="h-20 rounded-2xl sm:h-24" darkMode={darkMode} />
               </div>
             </div>
           </div>
@@ -2018,11 +2045,26 @@ export default function AttendancePage({ onBack, darkMode, user, addToast, remov
                   <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Scanner Preview</h2>
                   <div className="mt-5 space-y-4">
                     <div className={`rounded-2xl border p-4 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-stone-200 bg-stone-50'}`}>
-                      <p className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Use this for attendance scanning</p>
+                      <p className={`font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Link your school QR here</p>
                       <p className={`mt-2 text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>
-                        Officers can scan this QR directly from your screen. It uses your saved `qrCodeValue`, so it matches the same identity record used by the attendance backend.
+                        Upload or scan the QR from the USeP attendance system on this tab. Once saved, the generated QR on the left becomes the one officers scan for attendance.
                       </p>
                     </div>
+
+                    {user?.idNumber ? (
+                      <QRScanner
+                        userId={user.idNumber}
+                        mode="profile"
+                        title="Link School QR"
+                        successActionLabel="Save QR Code"
+                        onSuccess={handleMyQrSaved}
+                        onError={(message) => showToast(message, 'error')}
+                      />
+                    ) : (
+                      <div className={`${darkMode ? 'bg-amber-900/20 border-amber-700 text-amber-300' : 'bg-amber-50 border-amber-300 text-amber-800'} border rounded-2xl p-4 text-sm`}>
+                        Sign in again to link a QR code to your account.
+                      </div>
+                    )}
 
                     <div className={`rounded-2xl border p-4 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-stone-200 bg-stone-50'}`}>
                       <p className={`text-sm font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>Linked QR text</p>
