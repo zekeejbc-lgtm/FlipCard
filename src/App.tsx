@@ -836,11 +836,12 @@ function buildPageScopedParams(args: {
     case 'deck':
     case 'play':
     case 'summary':
-    case 'analytics':
       params.subject = activeSubject || null;
       params.course = activeSubject || null;
       params.tab = activeTab.toLowerCase();
       params.deck = activeDeck?.name || null;
+      break;
+    case 'analytics':
       break;
     case 'resource':
       params.subject = activeSubject || null;
@@ -9176,7 +9177,7 @@ export const App = ({ routeRole }: AppProps) => {
 
   useEffect(() => {
     const needsSubject = view === 'SUBJECT' || view === 'RESOURCE_VIEW';
-    const needsDeck = view === 'DECK_OVERVIEW' || view === 'PLAY' || view === 'SUMMARY' || view === 'ANALYTICS';
+    const needsDeck = view === 'DECK_OVERVIEW' || view === 'PLAY' || view === 'SUMMARY';
 
     if (needsSubject && !activeSubject) {
       setView('HOME');
