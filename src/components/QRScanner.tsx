@@ -392,7 +392,10 @@ export const QRScanner: React.FC<QRScannerProps> = ({
 
           {scannedText && (
             <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl">
-              <p className="text-xs text-stone-600 mb-1 font-medium">✓ QR Code Detected:</p>
+              <p className="text-xs text-stone-600 mb-1 font-medium flex items-center gap-1">
+                <ScannerIcon name="check_circle" className="text-[16px] text-emerald-600" />
+                QR Code Detected:
+              </p>
               <p className="font-mono text-sm text-emerald-700 break-all">{scannedText}</p>
             </div>
           )}
@@ -451,7 +454,10 @@ export const QRScanner: React.FC<QRScannerProps> = ({
               
               {scannedText ? (
                 <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl">
-                  <p className="text-xs text-stone-600 mb-1 font-medium">✓ QR Code Detected:</p>
+                  <p className="text-xs text-stone-600 mb-1 font-medium flex items-center gap-1">
+                    <ScannerIcon name="check_circle" className="text-[16px] text-emerald-600" />
+                    QR Code Detected:
+                  </p>
                   <p className="font-mono text-sm text-emerald-700 break-all">{scannedText}</p>
                 </div>
               ) : (

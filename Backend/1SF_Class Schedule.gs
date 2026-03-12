@@ -99,7 +99,8 @@ const OBLIGATION_COL = {
   CREATED_BY: 11,
   CREATED_BY_NAME: 12,
   CREATED_AT: 13,
-  UPDATED_AT: 14
+  UPDATED_AT: 14,
+  END_DATE: 15
 };
 
 const USER_ACCOUNT_COL = {
@@ -468,34 +469,45 @@ function setupSemesterConfigSheet() {
 function setupObligationsSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName('Obligations');
+  const headers = [
+    'ObligationID',
+    'CourseCode',
+    'CourseName',
+    'Category',
+    'Date',
+    'StartTime',
+    'EndTime',
+    'Location',
+    'Facilitator',
+    'Notes',
+    'IsActive',
+    'CreatedBy',
+    'CreatedByName',
+    'CreatedAt',
+    'UpdatedAt',
+    'EndDate'
+  ];
 
   if (!sheet) {
     sheet = ss.insertSheet('Obligations');
-    sheet.appendRow([
-      'ObligationID',
-      'CourseCode',
-      'CourseName',
-      'Category',
-      'Date',
-      'StartTime',
-      'EndTime',
-      'Location',
-      'Facilitator',
-      'Notes',
-      'IsActive',
-      'CreatedBy',
-      'CreatedByName',
-      'CreatedAt',
-      'UpdatedAt'
-    ]);
+    sheet.appendRow(headers);
     sheet.setFrozenRows(1);
 
-    const headerRange = sheet.getRange(1, 1, 1, 15);
+    const headerRange = sheet.getRange(1, 1, 1, headers.length);
     headerRange.setBackground('#0f766e');
     headerRange.setFontColor('#ffffff');
     headerRange.setFontWeight('bold');
 
     return { success: true, message: 'Obligations sheet created' };
+  }
+
+  if (sheet.getRange(1, 1, 1, headers.length).getValues()[0][OBLIGATION_COL.END_DATE] !== 'EndDate') {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    const headerRange = sheet.getRange(1, 1, 1, headers.length);
+    headerRange.setBackground('#0f766e');
+    headerRange.setFontColor('#ffffff');
+    headerRange.setFontWeight('bold');
+    sheet.setFrozenRows(1);
   }
 
   return { success: true, message: 'Obligations sheet already exists' };
@@ -758,6 +770,10 @@ function normalizeTimeValue(timeValue) {
   return value;
 }
 
+function scheduleTypeRequiresCourse(type) {
+  return String(type || '').trim().toLowerCase() === 'semestral';
+}
+
 function canManageRestrictedObligations(userId) {
   return canManageSemestral(userId);
 }
@@ -993,6 +1009,10 @@ function addClassSchedule(data) {
       userId, 
       userName 
     } = data;
+    const normalizedType = String(type || '').trim();
+    const normalizedCourseCode = normalizeCourseCode(courseCode);
+    const providedCourseName = String(courseName || '').trim();
+    const requiresCourse = scheduleTypeRequiresCourse(normalizedType);
     
     // Validate permission
     if (!canManageSchedules(userId)) {
@@ -1002,23 +1022,27 @@ function addClassSchedule(data) {
     }
     
     // PIOs can only add non-semestral schedules
-    if (type === 'semestral' && !canManageSemestral(userId)) {
+    if (normalizedType === 'semestral' && !canManageSemestral(userId)) {
       return { 
         error: 'Unauthorized. Only Mayor, Vice Mayor, or Secretary can add semestral schedules.' 
       };
     }
     
     // Validate required fields
-    if (!type || !courseCode || !startTime || !endTime) {
-      return { error: 'Missing required fields (type, courseCode, startTime, endTime)' };
+    if (!normalizedType || !startTime || !endTime) {
+      return { error: 'Missing required fields (type, startTime, endTime)' };
+    }
+
+    if (requiresCourse && !normalizedCourseCode) {
+      return { error: 'Semestral schedules require a course code' };
     }
     
     // Validate type-specific requirements
-    if (type === 'semestral' && (!dayOfWeek || !semester)) {
+    if (normalizedType === 'semestral' && (!dayOfWeek || !semester)) {
       return { error: 'Semestral schedules require dayOfWeek and semester' };
     }
     
-    if (type !== 'semestral' && !specificDate) {
+    if (normalizedType !== 'semestral' && !specificDate) {
       return { error: 'Special schedules (makeup, activity, special) require a specific date' };
     }
     
@@ -1031,22 +1055,25 @@ function addClassSchedule(data) {
       sheet = ss.getSheetByName('ClassSchedule');
     }
 
-    const courseResult = ensureCourseExists(courseCode, courseName, userId, userName);
-    if (!courseResult.success) {
-      return { error: courseResult.error || 'Failed to save course' };
+    let savedCourseName = providedCourseName;
+    if (normalizedCourseCode) {
+      const courseResult = ensureCourseExists(normalizedCourseCode, courseName, userId, userName);
+      if (!courseResult.success) {
+        return { error: courseResult.error || 'Failed to save course' };
+      }
+      savedCourseName = courseResult.course.name;
     }
     
     // Generate unique ID
     const scheduleId = 'SCHED-' + Date.now();
     const now = getManilaTimestamp();
-    const savedCourseName = courseResult.course.name;
     
     // Append the new row
     sheet.appendRow([
       scheduleId,                    // A: ScheduleID
-      type,                          // B: Type
+      normalizedType,                // B: Type
       semester || '',                // C: Semester
-      normalizeCourseCode(courseCode), // D: CourseCode
+      normalizedCourseCode,          // D: CourseCode
       savedCourseName,               // E: CourseName
       teacher || '',                 // F: Teacher
       classroom || '',               // G: Classroom
@@ -1067,9 +1094,9 @@ function addClassSchedule(data) {
       success: true,
       schedule: {
         scheduleId,
-        type,
+        type: normalizedType,
         semester: semester || '',
-        courseCode: normalizeCourseCode(courseCode),
+        courseCode: normalizedCourseCode,
         courseName: savedCourseName,
         teacher: teacher || '',
         classroom: classroom || '',
@@ -1335,7 +1362,8 @@ function updateClassSchedule(data) {
         
         // Check if trying to update semestral schedule
         const currentType = String(sheetData[i][SCHEDULE_COL.TYPE]).trim();
-        const newType = data.type || currentType;
+        const newType = String(data.type || currentType).trim();
+        const requiresCourse = scheduleTypeRequiresCourse(newType);
         
         if ((currentType === 'semestral' || newType === 'semestral') && !canManageSemestral(userId)) {
           return { 
@@ -1345,27 +1373,37 @@ function updateClassSchedule(data) {
         
         // Update fields if provided (row is 1-indexed, column is 1-indexed)
         const rowIndex = i + 1;
-        const nextCourseCode = data.courseCode !== undefined ? data.courseCode : sheetData[i][SCHEDULE_COL.COURSE_CODE];
-        const nextCourseName = data.courseName !== undefined ? data.courseName : sheetData[i][SCHEDULE_COL.COURSE_NAME];
-        const courseResult = ensureCourseExists(
-          nextCourseCode,
-          nextCourseName,
-          userId,
-          data.userName || sheetData[i][SCHEDULE_COL.CREATED_BY_NAME]
-        );
-        
-        if (!courseResult.success) {
-          return { error: courseResult.error || 'Failed to save course' };
+        const nextCourseCode = normalizeCourseCode(data.courseCode !== undefined ? data.courseCode : sheetData[i][SCHEDULE_COL.COURSE_CODE]);
+        const nextCourseName = String(data.courseName !== undefined ? data.courseName : sheetData[i][SCHEDULE_COL.COURSE_NAME] || '').trim();
+
+        if (requiresCourse && !nextCourseCode) {
+          return { error: 'Semestral schedules require a course code' };
+        }
+
+        let savedCourseName = nextCourseName;
+        if (nextCourseCode) {
+          const courseResult = ensureCourseExists(
+            nextCourseCode,
+            nextCourseName,
+            userId,
+            data.userName || sheetData[i][SCHEDULE_COL.CREATED_BY_NAME]
+          );
+          
+          if (!courseResult.success) {
+            return { error: courseResult.error || 'Failed to save course' };
+          }
+
+          savedCourseName = courseResult.course.name;
         }
         
         if (data.type !== undefined) 
-          sheet.getRange(rowIndex, SCHEDULE_COL.TYPE + 1).setValue(data.type);
+          sheet.getRange(rowIndex, SCHEDULE_COL.TYPE + 1).setValue(newType);
         if (data.semester !== undefined) 
           sheet.getRange(rowIndex, SCHEDULE_COL.SEMESTER + 1).setValue(data.semester);
         if (data.courseCode !== undefined) 
-          sheet.getRange(rowIndex, SCHEDULE_COL.COURSE_CODE + 1).setValue(normalizeCourseCode(data.courseCode));
+          sheet.getRange(rowIndex, SCHEDULE_COL.COURSE_CODE + 1).setValue(nextCourseCode);
         if (data.courseCode !== undefined || data.courseName !== undefined)
-          sheet.getRange(rowIndex, SCHEDULE_COL.COURSE_NAME + 1).setValue(courseResult.course.name);
+          sheet.getRange(rowIndex, SCHEDULE_COL.COURSE_NAME + 1).setValue(savedCourseName);
         if (data.teacher !== undefined) 
           sheet.getRange(rowIndex, SCHEDULE_COL.TEACHER + 1).setValue(data.teacher);
         if (data.classroom !== undefined) 
@@ -1473,22 +1511,27 @@ function getOrCreateObligationsSheet() {
   return sheet;
 }
 
-function getObligationStatus(dateValue, startTime, endTime) {
-  const now = getManilaDate();
-  let obligationDate;
-
+function parseObligationDateValue(dateValue) {
   if (dateValue instanceof Date) {
-    obligationDate = new Date(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate());
-  } else {
-    const rawDate = String(dateValue || '').trim();
-    if (!rawDate) return 'upcoming';
-    if (rawDate.includes('-')) {
-      const dateParts = rawDate.split('-').map(Number);
-      obligationDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
-    } else {
-      obligationDate = new Date(rawDate);
-    }
+    return new Date(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate());
   }
+
+  const rawDate = String(dateValue || '').trim();
+  if (!rawDate) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+    const dateParts = rawDate.split('-').map(Number);
+    return new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+  }
+
+  const parsed = new Date(rawDate);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getObligationStatus(dateValue, endDateValue, startTime, endTime) {
+  const now = getManilaDate();
+  const obligationDate = parseObligationDateValue(dateValue);
+  if (!obligationDate) return 'upcoming';
+  const obligationEndDate = parseObligationDateValue(endDateValue) || new Date(obligationDate);
 
   const normalizedStartTime = normalizeTimeValue(startTime) || '00:00';
   const normalizedEndTime = normalizeTimeValue(endTime) || '23:59';
@@ -1498,7 +1541,7 @@ function getObligationStatus(dateValue, startTime, endTime) {
   const startDateTime = new Date(obligationDate);
   startDateTime.setHours(startHour || 0, startMinute || 0, 0, 0);
 
-  const endDateTime = new Date(obligationDate);
+  const endDateTime = new Date(obligationEndDate);
   endDateTime.setHours(endHour || 23, endMinute || 59, 59, 999);
 
   if (endDateTime.getTime() <= startDateTime.getTime()) {
@@ -1512,11 +1555,15 @@ function getObligationStatus(dateValue, startTime, endTime) {
 
 function mapObligationRow(row, displayRow) {
   const rawDate = row[OBLIGATION_COL.DATE];
+  const rawEndDate = row[OBLIGATION_COL.END_DATE];
   const startTime = normalizeTimeValue(displayRow[OBLIGATION_COL.START_TIME] || row[OBLIGATION_COL.START_TIME]);
   const endTime = normalizeTimeValue(displayRow[OBLIGATION_COL.END_TIME] || row[OBLIGATION_COL.END_TIME]);
   const date = rawDate instanceof Date
     ? Utilities.formatDate(rawDate, MANILA_TIMEZONE, 'yyyy-MM-dd')
     : String(rawDate || '').trim();
+  const endDate = rawEndDate instanceof Date
+    ? Utilities.formatDate(rawEndDate, MANILA_TIMEZONE, 'yyyy-MM-dd')
+    : String(rawEndDate || '').trim() || date;
 
   return {
     examId: String(row[OBLIGATION_COL.OBLIGATION_ID] || '').trim(),
@@ -1526,6 +1573,7 @@ function mapObligationRow(row, displayRow) {
     examType: String(row[OBLIGATION_COL.CATEGORY] || '').trim() || 'Obligation',
     obligationType: String(row[OBLIGATION_COL.CATEGORY] || '').trim() || 'Obligation',
     date: date,
+    endDate: endDate,
     startTime: startTime,
     endTime: endTime,
     room: String(row[OBLIGATION_COL.LOCATION] || '').trim(),
@@ -1537,7 +1585,7 @@ function mapObligationRow(row, displayRow) {
     createdByName: String(row[OBLIGATION_COL.CREATED_BY_NAME] || '').trim(),
     createdAt: String(row[OBLIGATION_COL.CREATED_AT] || ''),
     updatedAt: String(row[OBLIGATION_COL.UPDATED_AT] || ''),
-    status: getObligationStatus(rawDate, startTime, endTime)
+    status: getObligationStatus(rawDate, rawEndDate || rawDate, startTime, endTime)
   };
 }
 
@@ -1559,7 +1607,7 @@ function getObligations(subject) {
       if (!isTruthy(row[OBLIGATION_COL.IS_ACTIVE])) continue;
 
       const courseCode = normalizeCourseCode(row[OBLIGATION_COL.COURSE_CODE]);
-      if (subject && courseCode !== normalizeCourseCode(subject)) continue;
+      if (subject && courseCode && courseCode !== normalizeCourseCode(subject)) continue;
 
       obligations.push(mapObligationRow(row, displayData[i]));
     }
@@ -1585,6 +1633,7 @@ function addObligation(data) {
     const userId = data.userId;
     const userName = data.userName;
     const courseCode = normalizeCourseCode(data.courseCode);
+    const courseName = String(data.courseName || '').trim();
 
     if (!canManageSchedules(userId)) {
       return { error: 'Unauthorized. Only Mayor, Vice Mayor, Secretary, or PIOs can manage obligations.' };
@@ -1594,29 +1643,42 @@ function addObligation(data) {
       return { error: 'Unauthorized. Only Mayor, Vice Mayor, or Secretary can add exam-type obligations.' };
     }
 
-    if (!courseCode || !category || !data.date || !data.startTime) {
-      return { error: 'Missing required fields (courseCode, category, date, startTime)' };
+    if (!category || !data.date) {
+      return { error: 'Missing required fields (category, date)' };
     }
 
     const sheet = getOrCreateObligationsSheet();
-    const courseResult = ensureCourseExists(courseCode, data.courseName, userId, userName);
-    if (!courseResult.success) {
-      return { error: courseResult.error || 'Failed to save course' };
+    if (!courseCode && !courseName) {
+      return { error: 'Add either a course code or an event name' };
+    }
+
+    let resolvedCourseName = courseName;
+    if (courseCode) {
+      const courseResult = ensureCourseExists(courseCode, data.courseName, userId, userName);
+      if (!courseResult.success) {
+        return { error: courseResult.error || 'Failed to save course' };
+      }
+      resolvedCourseName = courseResult.course.name;
     }
 
     const obligationId = 'OBL-' + Date.now();
     const now = getManilaTimestamp();
     const dateValue = String(data.date || '').trim();
+    const endDateValue = String(data.endDate || '').trim();
     const startTime = normalizeTimeValue(data.startTime);
     const endTime = normalizeTimeValue(data.endTime);
     const location = String(data.room || data.location || '').trim();
     const facilitator = String(data.proctor || data.facilitator || '').trim();
     const notes = String(data.notes || '').trim();
 
+    if (endDateValue && endDateValue < dateValue) {
+      return { error: 'End date must be on or after the start date' };
+    }
+
     sheet.appendRow([
       obligationId,
       courseCode,
-      courseResult.course.name,
+      resolvedCourseName,
       category,
       dateValue,
       startTime,
@@ -1628,7 +1690,8 @@ function addObligation(data) {
       userId,
       userName || '',
       now,
-      now
+      now,
+      endDateValue
     ]);
 
     return {
@@ -1637,7 +1700,7 @@ function addObligation(data) {
       obligation: mapObligationRow([
         obligationId,
         courseCode,
-        courseResult.course.name,
+        resolvedCourseName,
         category,
         dateValue,
         startTime,
@@ -1649,11 +1712,12 @@ function addObligation(data) {
         userId,
         userName || '',
         now,
-        now
+        now,
+        endDateValue
       ], [
         obligationId,
         courseCode,
-        courseResult.course.name,
+        resolvedCourseName,
         category,
         dateValue,
         startTime,
@@ -1665,7 +1729,8 @@ function addObligation(data) {
         userId,
         userName || '',
         now,
-        now
+        now,
+        endDateValue
       ])
     };
   } catch (error) {
@@ -1709,22 +1774,38 @@ function updateObligation(data) {
 
       const rowIndex = i + 1;
       const nextCourseCode = data.courseCode !== undefined ? normalizeCourseCode(data.courseCode) : normalizeCourseCode(values[i][OBLIGATION_COL.COURSE_CODE]);
-      const nextCourseName = data.courseName !== undefined ? data.courseName : values[i][OBLIGATION_COL.COURSE_NAME];
-      const courseResult = ensureCourseExists(
-        nextCourseCode,
-        nextCourseName,
-        userId,
-        data.userName || values[i][OBLIGATION_COL.CREATED_BY_NAME]
-      );
+      const nextCourseName = String(data.courseName !== undefined ? data.courseName : values[i][OBLIGATION_COL.COURSE_NAME] || '').trim();
+      if (!nextCourseCode && !nextCourseName) {
+        return { error: 'Add either a course code or an event name' };
+      }
 
-      if (!courseResult.success) {
-        return { error: courseResult.error || 'Failed to save course' };
+      let resolvedCourseName = nextCourseName;
+      if (nextCourseCode) {
+        const courseResult = ensureCourseExists(
+          nextCourseCode,
+          nextCourseName,
+          userId,
+          data.userName || values[i][OBLIGATION_COL.CREATED_BY_NAME]
+        );
+
+        if (!courseResult.success) {
+          return { error: courseResult.error || 'Failed to save course' };
+        }
+
+        resolvedCourseName = courseResult.course.name;
+      }
+
+      const nextDate = String(data.date !== undefined ? data.date : values[i][OBLIGATION_COL.DATE] || '').trim();
+      const nextEndDate = String(data.endDate !== undefined ? data.endDate : values[i][OBLIGATION_COL.END_DATE] || '').trim();
+      if (nextEndDate && nextEndDate < nextDate) {
+        return { error: 'End date must be on or after the start date' };
       }
 
       if (data.courseCode !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.COURSE_CODE + 1).setValue(nextCourseCode);
-      if (data.courseCode !== undefined || data.courseName !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.COURSE_NAME + 1).setValue(courseResult.course.name);
+      if (data.courseCode !== undefined || data.courseName !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.COURSE_NAME + 1).setValue(resolvedCourseName);
       if (data.examType !== undefined || data.obligationType !== undefined || data.category !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.CATEGORY + 1).setValue(nextCategory);
       if (data.date !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.DATE + 1).setValue(String(data.date || '').trim());
+      if (data.endDate !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.END_DATE + 1).setValue(String(data.endDate || '').trim());
       if (data.startTime !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.START_TIME + 1).setValue(normalizeTimeValue(data.startTime));
       if (data.endTime !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.END_TIME + 1).setValue(normalizeTimeValue(data.endTime));
       if (data.room !== undefined || data.location !== undefined) sheet.getRange(rowIndex, OBLIGATION_COL.LOCATION + 1).setValue(String(data.room !== undefined ? data.room : data.location || '').trim());

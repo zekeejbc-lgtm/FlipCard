@@ -112,6 +112,7 @@ function CourseDropdown({
   value,
   defaultValue = '',
   placeholder = 'Select a course',
+  emptyLabel = 'None',
   required = false,
   onChange
 }: {
@@ -120,6 +121,7 @@ function CourseDropdown({
   value?: string;
   defaultValue?: string;
   placeholder?: string;
+  emptyLabel?: string;
   required?: boolean;
   onChange?: (value: string) => void;
 }) {
@@ -127,7 +129,7 @@ function CourseDropdown({
     <CustomDropdown
       name={name}
       options={[
-        { value: '', label: placeholder },
+        { value: '', label: emptyLabel, description: 'Not under any course' },
         ...options.map(option => ({
           value: option.code,
           label: option.code,
@@ -152,7 +154,7 @@ function CourseDropdown({
           ) : null}
         </div>
       ) : (
-        <span className="block truncate text-stone-500">{placeholder}</span>
+        <span className="block truncate text-stone-500">{emptyLabel}</span>
       )}
       renderOption={(option) => option.value ? (
         <div className="flex min-w-0 items-center gap-2">
@@ -165,7 +167,10 @@ function CourseDropdown({
           ) : null}
         </div>
       ) : (
-        <span className="truncate text-stone-500">{placeholder}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 font-semibold text-stone-700">{emptyLabel}</span>
+          <span className="truncate text-sm text-stone-500">Not under any course</span>
+        </div>
       )}
     />
   );
@@ -356,7 +361,7 @@ const ResourceRequestList = ({ subject, user, onFulfill, onMarkFulfilled, addToa
       });
       const result = await response.json();
       if (result.success) {
-        updateToast(toastId, '✓ Request fulfilled!', 'success', 100);
+        updateToast(toastId, 'Request fulfilled.', 'success', 100);
         setTimeout(() => removeToast(toastId), 2000);
         setFulfillModal({ open: false, request: null });
         setFulfillUrl('');
@@ -646,7 +651,7 @@ function buildPageScopedParams(args: {
   routeRole: RouteRole;
   user: User | null;
   activeSubject: string | null;
-  activeTab: 'Classroom' | 'Schedule' | 'Resources' | 'Exams';
+  activeTab: 'Classroom' | 'Schedule' | 'Resources' | 'Exams' | 'Groups';
   activeDeck: Deck | null;
   activeResource: Resource | null;
 }) {
@@ -739,6 +744,7 @@ type Exam = {
   courseName: string;
   examType: string;
   date: string;
+  endDate?: string;
   startTime: string;
   endTime: string;
   room: string;
@@ -749,6 +755,96 @@ type Exam = {
   createdAt: string;
   status: 'upcoming' | 'ongoing' | 'done';
 };
+
+type ExamModalSource = 'HOME' | 'EXAMS' | 'CALENDAR' | null;
+
+function parseExamDateOnly(dateStr: string) {
+  const raw = String(dateStr || '').trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [year, month, day] = raw.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatExamDateOnly(dateStr: string, options: Intl.DateTimeFormatOptions) {
+  const parsed = parseExamDateOnly(dateStr);
+  return parsed ? parsed.toLocaleDateString('en-US', options) : '';
+}
+
+function getExamEndDate(exam: Pick<Exam, 'date' | 'endDate'>) {
+  return String(exam.endDate || exam.date || '').trim();
+}
+
+function formatExamDateRangeLabel(dateStr: string, endDateStr?: string) {
+  const start = parseExamDateOnly(dateStr);
+  const end = parseExamDateOnly(endDateStr || dateStr);
+  if (!start) return '';
+  if (!end || start.getTime() === end.getTime()) {
+    return start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  return `${start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} to ${end.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}`;
+}
+
+function formatExamTimeRangeLabel(startTime: string, endTime: string, formatter: (timeStr: string) => string) {
+  if (!startTime && !endTime) return 'All day';
+  if (startTime && endTime) return `${formatter(startTime)} - ${formatter(endTime)}`;
+  if (startTime) return `Starts ${formatter(startTime)}`;
+  return `Until ${formatter(endTime)}`;
+}
+
+function getExamDisplayTitle(exam: Pick<Exam, 'courseCode' | 'courseName' | 'examType'>) {
+  return exam.courseCode || exam.courseName || exam.examType || 'General obligation';
+}
+
+function getExamSecondaryLabel(exam: Pick<Exam, 'courseCode' | 'courseName' | 'examType'>) {
+  if (exam.courseCode && exam.courseName && exam.courseName !== exam.courseCode) return exam.courseName;
+  if (!exam.courseCode && exam.courseName && exam.courseName !== exam.examType) return '';
+  return '';
+}
+
+function getScheduleDisplayTitle(schedule: Pick<ClassSchedule, 'courseCode' | 'courseName' | 'type'>) {
+  return schedule.courseCode || schedule.courseName || schedule.type || 'General schedule';
+}
+
+function getScheduleSecondaryLabel(schedule: Pick<ClassSchedule, 'courseCode' | 'courseName'>) {
+  if (schedule.courseCode && schedule.courseName && schedule.courseName !== schedule.courseCode) return schedule.courseName;
+  return '';
+}
+
+function examAppliesToSubject(exam: Pick<Exam, 'courseCode'>, subjectCode: string) {
+  const normalizedSubjectCode = String(subjectCode || '').trim().toUpperCase();
+  const normalizedCourseCode = String(exam.courseCode || '').trim().toUpperCase();
+  return !normalizedCourseCode || normalizedCourseCode === normalizedSubjectCode;
+}
+
+function enumerateExamDateKeys(exam: Pick<Exam, 'date' | 'endDate'>) {
+  const start = parseExamDateOnly(exam.date);
+  const end = parseExamDateOnly(getExamEndDate(exam));
+  if (!start) return [] as string[];
+  const finalEnd = end && end.getTime() >= start.getTime() ? end : start;
+  const keys: string[] = [];
+  const current = new Date(start);
+  while (current.getTime() <= finalEnd.getTime()) {
+    keys.push(`${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`);
+    current.setDate(current.getDate() + 1);
+  }
+  return keys;
+}
+
+function examOverlapsMonth(exam: Pick<Exam, 'date' | 'endDate'>, year: number, month: number) {
+  const start = parseExamDateOnly(exam.date);
+  const end = parseExamDateOnly(getExamEndDate(exam));
+  if (!start) return false;
+  const finalEnd = end && end.getTime() >= start.getTime() ? end : start;
+  const monthStart = new Date(year, month, 1);
+  const monthEnd = new Date(year, month + 1, 0);
+  monthStart.setHours(0, 0, 0, 0);
+  monthEnd.setHours(23, 59, 59, 999);
+  return start.getTime() <= monthEnd.getTime() && finalEnd.getTime() >= monthStart.getTime();
+}
 
 type Announcement = {
   id: string;
@@ -1347,7 +1443,7 @@ const UploadModal = ({
         { key: 'upload' as const, label: 'Upload File', icon: 'cloud_upload' },
         { key: 'link' as const, label: 'Paste Link', icon: 'link' }
       ];
-  const subjectObligations = obligations.filter(obligation => obligation.courseCode === subject);
+  const subjectObligations = obligations.filter(obligation => examAppliesToSubject(obligation, subject));
   const selectedObligation = subjectObligations.find(obligation => obligation.examId === selectedObligationId) || null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1523,7 +1619,7 @@ const UploadModal = ({
         updateToast(toastId, 'Step 4/4: Finalizing...', 'loading', 90);
         
         if (result.success) {
-          updateToast(toastId, '✓ Resource added successfully!', 'success', 100);
+          updateToast(toastId, 'Resource added successfully.', 'success', 100);
           setTimeout(() => removeToast(toastId), 3000);
           onUploadComplete();
           onClose();
@@ -1596,7 +1692,7 @@ const UploadModal = ({
             successCount++;
             updateToast(toastId, `Step 6/6: Verifying${fileNum}...`, 'loading', 95);
           } else {
-            updateToast(toastId, `✗ Failed: ${result.error || 'Unknown error'}`, 'error');
+            updateToast(toastId, `Failed: ${result.error || 'Unknown error'}`, 'error');
             setTimeout(() => removeToast(toastId), 5000);
             setUploading(false);
             return;
@@ -1604,7 +1700,7 @@ const UploadModal = ({
         }
         
         if (successCount === files.length) {
-          updateToast(toastId, `✓ ${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully!`, 'success', 100);
+          updateToast(toastId, `${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully.`, 'success', 100);
           setTimeout(() => removeToast(toastId), 3000);
           onUploadComplete();
           onClose();
@@ -1614,7 +1710,7 @@ const UploadModal = ({
           setTimeout(() => removeToast(toastId), 5000);
         }
       } catch (err: any) {
-        updateToast(toastId, `✗ Upload failed: ${err.message || 'Network error'}`, 'error');
+        updateToast(toastId, `Upload failed: ${err.message || 'Network error'}`, 'error');
         setTimeout(() => removeToast(toastId), 5000);
       } finally {
         setUploading(false);
@@ -1638,7 +1734,10 @@ const UploadModal = ({
           
           <div className="space-y-4 text-sm">
             <div className="bg-blue-50 p-4 rounded-xl">
-              <p className="font-semibold text-blue-800 mb-2">📁 Google Drive Files</p>
+              <p className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                <Icon name="folder" className="text-base" />
+                Google Drive Files
+              </p>
               <ol className="list-decimal list-inside space-y-1 text-blue-700">
                 <li>Go to <a href="https://drive.google.com" target="_blank" className="underline">drive.google.com</a></li>
                 <li>Upload your file</li>
@@ -1649,7 +1748,10 @@ const UploadModal = ({
             </div>
             
             <div className="bg-green-50 p-4 rounded-xl">
-              <p className="font-semibold text-green-800 mb-2">🎥 YouTube Videos</p>
+              <p className="font-semibold text-green-800 mb-2 flex items-center gap-2">
+                <Icon name="smart_display" className="text-base" />
+                YouTube Videos
+              </p>
               <ol className="list-decimal list-inside space-y-1 text-green-700">
                 <li>Go to the YouTube video</li>
                 <li>Click Share → Copy link</li>
@@ -1658,7 +1760,10 @@ const UploadModal = ({
             </div>
             
             <div className="bg-amber-50 p-4 rounded-xl">
-              <p className="font-semibold text-amber-800 mb-2">⚠️ Important</p>
+              <p className="font-semibold text-amber-800 mb-2 flex items-center gap-2">
+                <Icon name="warning" className="text-base" />
+                Important
+              </p>
               <p className="text-amber-700">Make sure the file is set to "Anyone with the link can view"</p>
             </div>
           </div>
@@ -1938,6 +2043,7 @@ const ExamDetailModal = ({
   exam,
   onClose,
   onEdit,
+  onDelete,
   user,
   getExamStatus,
   getTimeUntilExam,
@@ -1951,11 +2057,12 @@ const ExamDetailModal = ({
   exam: Exam | null;
   onClose: () => void;
   onEdit: (exam: Exam) => void;
+  onDelete?: (exam: Exam) => void;
   user: User | null;
   getExamStatus: (exam: Exam) => 'upcoming' | 'ongoing' | 'completed';
   getTimeUntilExam: (exam: Exam) => { days: number; hours: number; minutes: number; seconds: number } | null;
   formatCountdown: (exam: Exam) => string;
-  formatExamDate: (dateStr: string) => string;
+  formatExamDate: (dateStr: string, endDateStr?: string) => string;
   formatExamTime: (timeStr: string) => string;
   darkMode: boolean;
   linkedResources?: Resource[];
@@ -1967,7 +2074,7 @@ const ExamDetailModal = ({
   const timeUntil = getTimeUntilExam(exam);
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={onClose}>
       <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up`} onClick={e => e.stopPropagation()}>
         {/* Header with status color */}
         <div className={`p-6 ${
@@ -1979,20 +2086,37 @@ const ExamDetailModal = ({
               <span className="px-2 py-1 bg-white/20 text-xs rounded-full font-medium">
                 {exam.examType}
               </span>
-              <h2 className="text-2xl font-bold mt-2">{exam.courseCode}</h2>
-              {exam.courseName && <p className="text-white/80">{exam.courseName}</p>}
+              <h2 className="text-2xl font-bold mt-2">{getExamDisplayTitle(exam)}</h2>
+              {getExamSecondaryLabel(exam) && <p className="truncate text-white/80" title={getExamSecondaryLabel(exam)}>{getExamSecondaryLabel(exam)}</p>}
             </div>
             <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition-colors">
               <Icon name="close" />
             </button>
           </div>
           <div className="mt-4 flex items-center gap-4 text-sm flex-wrap">
-            <span className="px-3 py-1 bg-white/20 rounded-full font-medium capitalize">
-              {status === 'ongoing' ? '🟢 In Progress' :
-               status === 'upcoming' ? '🟡 Upcoming' : '✓ Completed'}
+            <span className="px-3 py-1 bg-white/20 rounded-full font-medium capitalize inline-flex items-center gap-2">
+              {status === 'ongoing' ? (
+                <>
+                  <Icon name="radio_button_checked" className="text-base text-emerald-200" />
+                  In Progress
+                </>
+              ) : status === 'upcoming' ? (
+                <>
+                  <Icon name="schedule" className="text-base text-amber-100" />
+                  Upcoming
+                </>
+              ) : (
+                <>
+                  <Icon name="check_circle" className="text-base text-white/90" />
+                  Completed
+                </>
+              )}
             </span>
             {status === 'upcoming' && timeUntil && (
-              <span className="px-3 py-1 bg-white/30 rounded-full font-medium">⏱️ {formatCountdown(exam)}</span>
+              <span className="px-3 py-1 bg-white/30 rounded-full font-medium inline-flex items-center gap-2">
+                <Icon name="timer" className="text-base" />
+                {formatCountdown(exam)}
+              </span>
             )}
           </div>
         </div>
@@ -2033,21 +2157,23 @@ const ExamDetailModal = ({
             </div>
             <div>
               <p className="text-sm text-stone-500">Date & Time</p>
-              <p className="font-semibold text-stone-800">{formatExamDate(exam.date)}</p>
-              <p className="text-stone-600">{formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)}</p>
+              <p className="font-semibold text-stone-800">{formatExamDate(exam.date, exam.endDate)}</p>
+              <p className="text-stone-600">{formatExamTimeRangeLabel(exam.startTime, exam.endTime, (time) => formatExamTime(time))}</p>
             </div>
           </div>
 
           {/* Room */}
+          {exam.room && (
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center text-stone-600">
               <Icon name="meeting_room" />
             </div>
             <div>
-              <p className="text-sm text-stone-500">Room</p>
+              <p className="text-sm text-stone-500">Location</p>
               <p className="font-semibold text-stone-800">{exam.room}</p>
             </div>
           </div>
+          )}
 
           {/* Proctor */}
           {exam.proctor && (
@@ -2122,13 +2248,23 @@ const ExamDetailModal = ({
           >
             Close
           </button>
-          {user && user.idNumber === exam.createdBy && status !== 'completed' && (
-            <button
-              onClick={() => { onEdit(exam); onClose(); }}
-              className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors flex items-center justify-center gap-2"
-            >
-              <Icon name="edit" /> Edit
-            </button>
+          {user && user.idNumber === exam.createdBy && (
+            <>
+              {status !== 'completed' && (
+                <button
+                  onClick={() => { onEdit(exam); onClose(); }}
+                  className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-medium hover:bg-stone-900 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Icon name="edit" /> Edit
+                </button>
+              )}
+              <button
+                onClick={() => { onDelete?.(exam); onClose(); }}
+                className="px-4 py-3 bg-red-50 text-red-700 rounded-xl font-medium hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+              >
+                <Icon name="delete" /> Delete
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -2849,8 +2985,13 @@ const DigitalSignatureUpload = ({
           </div>
         </>
       )}
-      <p className="text-xs text-stone-500 text-center">
-        {value ? '✓ Signature saved' : 'Draw your signature or upload an image'}
+      <p className="text-xs text-stone-500 text-center flex items-center justify-center gap-1">
+        {value ? (
+          <>
+            <Icon name="check_circle" className="text-sm text-emerald-500" />
+            Signature saved
+          </>
+        ) : 'Draw your signature or upload an image'}
       </p>
     </div>
   );
@@ -3882,7 +4023,10 @@ const RegistrationForm = ({
                 <p className="text-xs text-amber-600 mt-1">* Profile picture is required</p>
               )}
               {formData.profilePicture && (
-                <p className="text-xs text-emerald-600 mt-1">✓ Profile picture uploaded</p>
+                <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+                  <Icon name="check_circle" className="text-sm" />
+                  Profile picture uploaded
+                </p>
               )}
             </div>
 
@@ -3951,14 +4095,14 @@ const RegistrationForm = ({
                   ) : null}
                 </div>
               </div>
-              <p className={`text-xs mt-1 ${
+              <p className={`text-xs mt-1 flex items-center gap-1 ${
                 idNumberStatus.available === true && idNumberStatus.valid === true ? 'text-emerald-500' :
                 idNumberStatus.available === false || idNumberStatus.valid === false ? 'text-red-500' :
                 'text-stone-400'
               }`}>
                 {idNumberStatus.checking ? 'Verifying...' :
-                 idNumberStatus.available === true && idNumberStatus.valid === true ? '✓ ID number is available' :
-                 idNumberStatus.error ? `✗ ${idNumberStatus.error}` :
+                 idNumberStatus.available === true && idNumberStatus.valid === true ? <><Icon name="check_circle" className="text-sm" /> ID number is available</> :
+                 idNumberStatus.error ? <><Icon name="cancel" className="text-sm" /> {idNumberStatus.error}</> :
                  'Format: YYYY-NNNNN (e.g., 2025-12345)'}
               </p>
             </div>
@@ -4013,14 +4157,14 @@ const RegistrationForm = ({
                   ) : null}
                 </div>
               </div>
-              <p className={`text-xs mt-1 ${
+              <p className={`text-xs mt-1 flex items-center gap-1 ${
                 emailStatus.available === true && emailStatus.valid === true ? 'text-emerald-500' :
                 emailStatus.available === false || emailStatus.valid === false ? 'text-red-500' :
                 'text-stone-400'
               }`}>
                 {emailStatus.checking ? 'Verifying...' :
-                 emailStatus.available === true && emailStatus.valid === true ? '✓ Email is available' :
-                 emailStatus.error ? `✗ ${emailStatus.error}` :
+                 emailStatus.available === true && emailStatus.valid === true ? <><Icon name="check_circle" className="text-sm" /> Email is available</> :
+                 emailStatus.error ? <><Icon name="cancel" className="text-sm" /> {emailStatus.error}</> :
                  'Enter your personal email address'}
               </p>
               <div className="flex items-center gap-2 mt-2">
@@ -4067,14 +4211,14 @@ const RegistrationForm = ({
                 <p className="text-xs mt-1 text-amber-600">Verify personal email first before adding school email.</p>
               )}
               {personalVerified && formData.schoolEmail && (
-                <p className={`text-xs mt-1 ${
+                <p className={`text-xs mt-1 flex items-center gap-1 ${
                   schoolEmailStatus.available === true && schoolEmailStatus.valid === true ? 'text-emerald-500' :
                   schoolEmailStatus.available === false || schoolEmailStatus.valid === false ? 'text-red-500' :
                   'text-stone-400'
                 }`}>
                   {schoolEmailStatus.checking ? 'Verifying...' :
-                   schoolEmailStatus.available === true && schoolEmailStatus.valid === true ? '✓ School email is available' :
-                   schoolEmailStatus.error ? `✗ ${schoolEmailStatus.error}` :
+                   schoolEmailStatus.available === true && schoolEmailStatus.valid === true ? <><Icon name="check_circle" className="text-sm" /> School email is available</> :
+                   schoolEmailStatus.error ? <><Icon name="cancel" className="text-sm" /> {schoolEmailStatus.error}</> :
                    'Enter your school email address'}
                 </p>
               )}
@@ -4225,14 +4369,14 @@ const RegistrationForm = ({
                   ) : null}
                 </div>
               </div>
-              <p className={`text-xs mt-1 ${
+              <p className={`text-xs mt-1 flex items-center gap-1 ${
                 usernameStatus.available === true ? 'text-emerald-500' :
                 usernameStatus.available === false ? 'text-red-500' :
                 'text-stone-400'
               }`}>
                 {usernameStatus.checking ? 'Checking availability...' :
-                 usernameStatus.available === true ? '✓ Username is available' : 
-                 usernameStatus.available === false ? '✗ Username is already taken' : 
+                 usernameStatus.available === true ? <><Icon name="check_circle" className="text-sm" /> Username is available</> : 
+                 usernameStatus.available === false ? <><Icon name="cancel" className="text-sm" /> Username is already taken</> : 
                  'Only lowercase letters, numbers, and underscores (min 4 chars)'}
               </p>
             </div>
@@ -4308,7 +4452,10 @@ const RegistrationForm = ({
                 <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
               )}
               {formData.confirmPassword && formData.password === formData.confirmPassword && (
-                <p className="text-xs text-emerald-500 mt-1">✓ Passwords match</p>
+                <p className="text-xs text-emerald-500 mt-1 flex items-center gap-1">
+                  <Icon name="check_circle" className="text-sm" />
+                  Passwords match
+                </p>
               )}
             </div>
           </div>
@@ -5282,7 +5429,8 @@ async function prefetchSessionBootstrapData(user: User): Promise<SessionBootstra
         ? postToAppsScript({
             action: 'getClassmates',
             idNumber: user.idNumber,
-            section: user.section
+            section: user.section,
+            sessionToken: user.sessionToken
           })
             .then(response => response.json())
             .catch(() => null)
@@ -5457,7 +5605,12 @@ const ClassPage = ({
     setRefreshing(hasCachedClassmates);
 
     try {
-      const response = await postToAppsScript({ action: 'getClassmates', idNumber: user.idNumber, section: user.section });
+      const response = await postToAppsScript({
+        action: 'getClassmates',
+        idNumber: user.idNumber,
+        section: user.section,
+        sessionToken: user.sessionToken
+      });
       const result = await response.json();
       if (result.success) {
         setClassmates(result.classmates || []);
@@ -6286,6 +6439,9 @@ const SchedulePage = ({
     }
   }, [editingSchedule, showAddModal, canManageSemestral]);
 
+  const scheduleRequiresCourse = scheduleFormType === 'semestral';
+  const scheduleCourseDropdownValue = editingSchedule?.courseCode || (!scheduleRequiresCourse && editingSchedule?.courseName ? '__NONE__' : '');
+
   // Save semester configuration
   const handleSaveSemesterConfig = async () => {
     if (!user || !canManage) return;
@@ -6819,12 +6975,12 @@ const SchedulePage = ({
               {isOngoing ? 'Current Scheduled Class' : 'Next Scheduled Class'}
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-bold text-stone-800">{schedule.courseCode}</h2>
+              <h2 className="text-xl font-bold text-stone-800">{getScheduleDisplayTitle(schedule)}</h2>
               <span className={`px-2 py-1 text-xs rounded-full font-semibold capitalize ${getScheduleTypeColor(schedule.type)}`}>
                 {schedule.type}
               </span>
             </div>
-            {schedule.courseName && <p className="text-sm text-stone-600 mt-1">{schedule.courseName}</p>}
+            {getScheduleSecondaryLabel(schedule) && <p className="text-sm text-stone-600 mt-1">{getScheduleSecondaryLabel(schedule)}</p>}
           </div>
           <div className={`rounded-2xl px-4 py-3 text-sm font-semibold ${isOngoing ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'}`}>
             {countdown}
@@ -6941,7 +7097,7 @@ const SchedulePage = ({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-stone-800">{schedule.courseCode}</span>
+                <span className="font-bold text-stone-800">{getScheduleDisplayTitle(schedule)}</span>
                 {schedule.semester && (
                   <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">{schedule.semester}</span>
                 )}
@@ -6949,8 +7105,8 @@ const SchedulePage = ({
                   <span className="text-xs px-2 py-0.5 rounded-full bg-purple-600 text-white">Today</span>
                 )}
               </div>
-              {schedule.courseName && (
-                <p className="text-sm text-stone-500 mt-1">{schedule.courseName}</p>
+              {getScheduleSecondaryLabel(schedule) && (
+                <p className="text-sm text-stone-500 mt-1">{getScheduleSecondaryLabel(schedule)}</p>
               )}
             </div>
             {canManage && (
@@ -7031,8 +7187,9 @@ const SchedulePage = ({
 
   // Calendar view helpers
   const toDateKey = (d: Date | string) => {
-    const date = typeof d === 'string' ? new Date(d) : d;
-    return date.toISOString().split('T')[0];
+    const date = typeof d === 'string' ? parseExamDateOnly(d) : new Date(d);
+    if (!date) return '';
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   };
 
   const monthStart = new Date(calendarMonth);
@@ -7295,14 +7452,14 @@ const SchedulePage = ({
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-bold text-stone-800">{schedule.courseCode}</span>
+                                <span className="font-bold text-stone-800">{getScheduleDisplayTitle(schedule)}</span>
                                 <span className="px-2 py-0.5 text-xs rounded-full bg-green-600 text-white font-medium">Today</span>
                                 <span className={`px-2 py-0.5 text-xs rounded-full font-medium capitalize ${getScheduleTypeColor(schedule.type)}`}>
                                   {schedule.type}
                                 </span>
                               </div>
-                              {schedule.courseName && (
-                                <p className="text-sm text-stone-500 mt-1">{schedule.courseName}</p>
+                              {getScheduleSecondaryLabel(schedule) && (
+                                <p className="text-sm text-stone-500 mt-1">{getScheduleSecondaryLabel(schedule)}</p>
                               )}
                               <div className="flex items-center gap-4 mt-2 text-sm text-stone-600 flex-wrap">
                                 <span className="flex items-center gap-1">
@@ -7382,7 +7539,7 @@ const SchedulePage = ({
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-bold text-stone-800">{schedule.courseCode}</span>
+                                  <span className="font-bold text-stone-800">{getScheduleDisplayTitle(schedule)}</span>
                                   <span className={`px-2 py-0.5 text-xs rounded-full font-medium capitalize ${getScheduleTypeColor(schedule.type)}`}>
                                     {schedule.type}
                                   </span>
@@ -7392,8 +7549,8 @@ const SchedulePage = ({
                                     </span>
                                   )}
                                 </div>
-                                {schedule.courseName && (
-                                  <p className="text-sm text-stone-500">{schedule.courseName}</p>
+                                {getScheduleSecondaryLabel(schedule) && (
+                                  <p className="text-sm text-stone-500">{getScheduleSecondaryLabel(schedule)}</p>
                                 )}
                                 <div className="flex items-center gap-4 mt-2 text-sm text-stone-600 flex-wrap">
                                   <span className="flex items-center gap-1">
@@ -7515,7 +7672,7 @@ const SchedulePage = ({
                                 'bg-pink-100 text-pink-700 hover:bg-pink-200'
                               }`}
                               >
-                                {event.courseCode}
+                                {getScheduleDisplayTitle(event)}
                               </button>
                             ))}
                           </div>
@@ -7546,12 +7703,12 @@ const SchedulePage = ({
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-semibold text-stone-800">{schedule.courseCode}</span>
+                                <span className="font-semibold text-stone-800">{getScheduleDisplayTitle(schedule)}</span>
                                 <span className={`px-2 py-0.5 text-[11px] rounded-full font-medium capitalize ${getScheduleTypeColor(schedule.type)}`}>
                                   {schedule.type}
                                 </span>
                               </div>
-                              {schedule.courseName && <p className="text-sm text-stone-500">{schedule.courseName}</p>}
+                              {getScheduleSecondaryLabel(schedule) && <p className="text-sm text-stone-500">{getScheduleSecondaryLabel(schedule)}</p>}
                               <p className="text-xs text-stone-500 mt-1">
                                 {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
                                 {schedule.classroom ? ` • ${schedule.classroom}` : ''}
@@ -7707,7 +7864,7 @@ const SchedulePage = ({
                         >
                           <div className="flex items-center gap-2 mb-2">
                             <Icon name={getScheduleTypeIcon(schedule.type)} className="text-lg" />
-                            <span className="font-bold">{schedule.courseCode}</span>
+                            <span className="font-bold">{getScheduleDisplayTitle(schedule)}</span>
                             <span className="text-xs px-1.5 py-0.5 rounded capitalize opacity-80">{schedule.type}</span>
                           </div>
                           <p className="text-xs opacity-80">{formatDate(schedule.specificDate)} • {formatTime(schedule.startTime)}</p>
@@ -7902,12 +8059,15 @@ const SchedulePage = ({
                 e.preventDefault();
                 const form = e.target as HTMLFormElement;
                 const formData = new FormData(form);
+                const rawCourseCode = String(formData.get('courseCode') || '');
+                const normalizedCourseCode = rawCourseCode === '__NONE__' ? '' : rawCourseCode;
+                const courseNameInput = String(formData.get('courseName') || '').trim();
                 
                 const scheduleData = {
                   type: formData.get('type') as string,
                   semester: formData.get('semester') as string,
-                  courseCode: formData.get('courseCode') as string,
-                  courseName: formData.get('courseName') as string || scheduleSubjectInfo[formData.get('courseCode') as string]?.name || '',
+                  courseCode: normalizedCourseCode,
+                  courseName: courseNameInput || (normalizedCourseCode ? scheduleSubjectInfo[normalizedCourseCode]?.name || '' : ''),
                   teacher: formData.get('teacher') as string,
                   classroom: formData.get('classroom') as string,
                   dayOfWeek: formData.get('dayOfWeek') as string,
@@ -7992,20 +8152,24 @@ const SchedulePage = ({
 
                 {/* Course Code */}
                 <div>
-                  <label className="block text-sm font-medium text-stone-700 mb-1">Course Code *</label>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Course Code {scheduleRequiresCourse && <span className="text-red-500">*</span>}</label>
                   {!isCreatingNewCourse ? (
                     <>
                       <CustomDropdown
+                        key={`schedule-course-${editingSchedule?.scheduleId || 'new'}-${scheduleFormType}`}
                         name="courseCode"
-                        required={!isCreatingNewCourse}
-                        defaultValue={editingSchedule?.courseCode || ''}
+                        required={!isCreatingNewCourse && scheduleRequiresCourse}
+                        defaultValue={scheduleCourseDropdownValue}
                         onChange={(nextValue) => {
                           if (nextValue === '__CREATE_NEW__') {
                             setIsCreatingNewCourse(true);
+                          } else {
+                            setIsCreatingNewCourse(false);
                           }
                         }}
                         options={[
-                          { value: '', label: 'Select a course' },
+                          { value: '', label: scheduleRequiresCourse ? 'Select a course' : 'Select a course (optional)' },
+                          ...(!scheduleRequiresCourse ? [{ value: '__NONE__', label: 'None', description: 'Not under any course' }] : []),
                           { value: '__CREATE_NEW__', label: 'Create New Course...' },
                           ...scheduleSubjects.map(s => ({
                             value: s,
@@ -8017,8 +8181,8 @@ const SchedulePage = ({
                       <select 
                         disabled
                         name="legacyCourseCode" 
-                        required={!isCreatingNewCourse}
-                        defaultValue={editingSchedule?.courseCode || ''}
+                        required={!isCreatingNewCourse && scheduleRequiresCourse}
+                        defaultValue={scheduleCourseDropdownValue}
                         onChange={(e) => {
                           if (e.target.value === '__CREATE_NEW__') {
                             setIsCreatingNewCourse(true);
@@ -8027,8 +8191,9 @@ const SchedulePage = ({
                         }}
                         className="hidden"
                       >
-                        <option value="">Select a course</option>
-                        <option value="__CREATE_NEW__" className="text-purple-600 font-medium">➕ Create New Course...</option>
+                        <option value="">{scheduleRequiresCourse ? 'Select a course' : 'Select a course (optional)'}</option>
+                        {!scheduleRequiresCourse && <option value="__NONE__">None - Not under any course</option>}
+                        <option value="__CREATE_NEW__" className="text-purple-600 font-medium">Create New Course...</option>
                         {scheduleSubjects.map(s => (
                           <option key={s} value={s}>{s} {scheduleSubjectInfo[s]?.name ? `- ${scheduleSubjectInfo[s].name}` : ''}</option>
                         ))}
@@ -8070,7 +8235,7 @@ const SchedulePage = ({
                 {/* Course Name (optional override) */}
                 <div>
                   <label className="block text-sm font-medium text-stone-700 mb-1">
-                    Course Title {isCreatingNewCourse && <span className="text-red-500">*</span>}
+                    {scheduleRequiresCourse ? 'Course Title' : 'Course Title / Event Name'} {isCreatingNewCourse && <span className="text-red-500">*</span>}
                   </label>
                   {isCreatingNewCourse ? (
                     <input 
@@ -8089,7 +8254,7 @@ const SchedulePage = ({
                       type="text" 
                       name="courseName" 
                       defaultValue={editingSchedule?.courseName || ''}
-                      placeholder="Auto-filled from course code"
+                      placeholder={scheduleRequiresCourse ? 'Auto-filled from course code' : 'Optional if this schedule is not under any course'}
                       className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
                     />
                   )}
@@ -8269,7 +8434,7 @@ const SchedulePage = ({
 
       {/* Schedule Detail Modal */}
       {selectedSchedule && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedSchedule(null)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => setSelectedSchedule(null)}>
           <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-slide-up`} onClick={e => e.stopPropagation()}>
             {/* Header with type color */}
             <div className={`p-6 ${
@@ -8282,8 +8447,8 @@ const SchedulePage = ({
                   <span className="px-2 py-1 bg-white/20 text-xs rounded-full font-medium capitalize">
                     {selectedSchedule.type}
                   </span>
-                  <h2 className="text-2xl font-bold mt-2">{selectedSchedule.courseCode}</h2>
-                  {selectedSchedule.courseName && <p className="text-white/80">{selectedSchedule.courseName}</p>}
+                  <h2 className="text-2xl font-bold mt-2">{getScheduleDisplayTitle(selectedSchedule)}</h2>
+                  {getScheduleSecondaryLabel(selectedSchedule) && <p className="text-white/80">{getScheduleSecondaryLabel(selectedSchedule)}</p>}
                 </div>
                 <button onClick={() => setSelectedSchedule(null)} className="p-2 hover:bg-white/20 rounded-full">
                   <Icon name="close" />
@@ -8386,12 +8551,20 @@ const SchedulePage = ({
                 Close
               </button>
               {canManage && (
-                <button
-                  onClick={() => { setEditingSchedule(selectedSchedule); setSelectedSchedule(null); }}
-                  className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Icon name="edit" /> Edit
-                </button>
+                <>
+                  <button
+                    onClick={() => { setEditingSchedule(selectedSchedule); setSelectedSchedule(null); }}
+                    className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Icon name="edit" /> Edit
+                  </button>
+                  <button
+                    onClick={() => { setScheduleToDelete(selectedSchedule.scheduleId); setSelectedSchedule(null); }}
+                    className="px-4 py-3 bg-red-50 text-red-700 rounded-xl font-medium hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Icon name="delete" /> Delete
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -8421,26 +8594,78 @@ const SchedulePage = ({
               )}
 
               {detailSchedules.map((schedule) => (
-                <button
+                <div
                   key={schedule.scheduleId}
-                  onClick={() => { setSelectedSchedule(schedule); setCalendarDetailDate(null); }}
-                  className={`w-full text-left p-3 rounded-xl border ${darkMode ? 'border-gray-700 bg-gray-800 hover:border-gray-500' : 'border-stone-200 bg-white hover:border-stone-400'} hover:shadow-sm transition-all flex items-start gap-3`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedSchedule(schedule)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelectedSchedule(schedule);
+                    }
+                  }}
+                  className={`w-full text-left p-3 rounded-xl border ${darkMode ? 'border-gray-700 bg-gray-800 hover:border-gray-500' : 'border-stone-200 bg-white hover:border-stone-400'} hover:shadow-sm transition-all`}
                 >
-                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${getScheduleTypeColor(schedule.type)}`}>
-                    <Icon name={getScheduleTypeIcon(schedule.type)} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`font-semibold line-clamp-1 ${darkMode ? 'text-white' : 'text-stone-800'}`}>{schedule.courseCode}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${getScheduleTypeColor(schedule.type)}`}>
-                        {schedule.type}
-                      </span>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${getScheduleTypeColor(schedule.type)}`}>
+                      <Icon name={getScheduleTypeIcon(schedule.type)} />
                     </div>
-                    {schedule.courseName && <p className={`text-xs line-clamp-1 ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{schedule.courseName}</p>}
-                    <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}</p>
-                    {schedule.classroom && <p className={`text-[11px] ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Room: {schedule.classroom}</p>}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`font-semibold line-clamp-1 ${darkMode ? 'text-white' : 'text-stone-800'}`}>{getScheduleDisplayTitle(schedule)}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${getScheduleTypeColor(schedule.type)}`}>
+                          {schedule.type}
+                        </span>
+                      </div>
+                      {getScheduleSecondaryLabel(schedule) && <p className={`text-xs line-clamp-1 ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{getScheduleSecondaryLabel(schedule)}</p>}
+                      <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}</p>
+                      {schedule.classroom && <p className={`text-[11px] ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Room: {schedule.classroom}</p>}
+                    </div>
                   </div>
-                </button>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setSelectedSchedule(schedule);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        darkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                      }`}
+                    >
+                      Open
+                    </button>
+                    {canManage && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setEditingSchedule(schedule);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          darkMode ? 'bg-blue-900/40 text-blue-200 hover:bg-blue-900/60' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                        }`}
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {canManage && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setScheduleToDelete(schedule.scheduleId);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          darkMode ? 'bg-red-900/40 text-red-200 hover:bg-red-900/60' : 'bg-red-50 text-red-700 hover:bg-red-100'
+                        }`}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
 
@@ -8860,10 +9085,12 @@ export const App = ({ routeRole }: AppProps) => {
   const [showAddExam, setShowAddExam] = useState(false);
   const [selectedExamCourseCode, setSelectedExamCourseCode] = useState('');
   const [selectedExamCourseName, setSelectedExamCourseName] = useState('');
+  const [hasTouchedExamCourseSelection, setHasTouchedExamCourseSelection] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date()); // For real-time exam status
   const [examToDelete, setExamToDelete] = useState<string | null>(null); // For delete confirmation
   const [examToEdit, setExamToEdit] = useState<Exam | null>(null); // For editing exam
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null); // For exam detail view
+  const [selectedExamSource, setSelectedExamSource] = useState<ExamModalSource>(null);
   
   // Semester State
   const [currentSemester, setCurrentSemester] = useState<'1st' | '2nd'>('1st');
@@ -8933,6 +9160,14 @@ export const App = ({ routeRole }: AppProps) => {
   });
   const [calendarSelectedDate, setCalendarSelectedDate] = useState<Date | null>(() => new Date());
   const [calendarDetailDate, setCalendarDetailDate] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setSelectedExam(null);
+    setSelectedExamSource(null);
+    setExamToEdit(null);
+    setExamToDelete(null);
+    setCalendarDetailDate(null);
+  }, [view]);
   const [prefillExamDate, setPrefillExamDate] = useState<string | null>(null);
   const [showDateJump, setShowDateJump] = useState(false);
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
@@ -8945,11 +9180,23 @@ export const App = ({ routeRole }: AppProps) => {
     setPrefillExamDate(null);
     setSelectedExamCourseCode('');
     setSelectedExamCourseName('');
+    setHasTouchedExamCourseSelection(false);
   };
 
   const handleExamCourseChange = (courseCode: string) => {
+    setHasTouchedExamCourseSelection(true);
     setSelectedExamCourseCode(courseCode);
     setSelectedExamCourseName(subjectInfo[courseCode]?.name || '');
+  };
+
+  const openExamDetail = (exam: Exam, source: Exclude<ExamModalSource, null>) => {
+    setSelectedExam(exam);
+    setSelectedExamSource(source);
+  };
+
+  const closeExamDetail = () => {
+    setSelectedExam(null);
+    setSelectedExamSource(null);
   };
   const isAuthPhase = showLogin || !user;
   const syncedPage =
@@ -9765,7 +10012,7 @@ export const App = ({ routeRole }: AppProps) => {
         
         if (outcome === 'accepted') {
           setShowInstallToast(false);
-          addToast('Installing Classroom Virtual Environment... 📲', 'success');
+          addToast('Installing Classroom Virtual Environment...', 'success');
           localStorage.setItem('cumlaude_installed', 'true');
         } else {
           addToast('Installation cancelled', 'info');
@@ -9974,7 +10221,7 @@ export const App = ({ routeRole }: AppProps) => {
       if (toastId) updateToast(toastId, 'Finalizing...', 'loading', 95);
       
       if (toastId) {
-        updateToast(toastId, '✓ Data loaded successfully!', 'success', 100);
+        updateToast(toastId, 'Data loaded successfully.', 'success', 100);
         setTimeout(() => removeToast(toastId!), 2000);
       }
     } catch (error: any) {
@@ -10417,7 +10664,7 @@ export const App = ({ routeRole }: AppProps) => {
         emoji: preset.emoji
       });
       
-      updateToast(toastId, '✓ Announcement published to all users!', 'success');
+      updateToast(toastId, 'Announcement published to all users.', 'success');
       setTimeout(() => removeToast(toastId), 3000);
     } catch (error: any) {
       updateToast(toastId, `Failed: ${error.message}`, 'error');
@@ -10466,7 +10713,7 @@ export const App = ({ routeRole }: AppProps) => {
         emoji: customAnnouncementEmoji
       });
       
-      updateToast(toastId, '✓ Announcement published to all users!', 'success');
+      updateToast(toastId, 'Announcement published to all users.', 'success');
       setTimeout(() => removeToast(toastId), 3000);
       
       // Clear form
@@ -10993,16 +11240,9 @@ export const App = ({ routeRole }: AppProps) => {
   const getExamStatus = (exam: Exam): 'upcoming' | 'ongoing' | 'completed' => {
     // Use currentTime state for real-time updates
     const now = currentTime;
-    
-    // Parse date correctly - split to avoid timezone issues
-    const dateStr = String(exam.date);
-    let examDate: Date;
-    if (dateStr.includes('-')) {
-      const [year, month, day] = dateStr.split('-').map(Number);
-      examDate = new Date(year, month - 1, day); // month is 0-indexed
-    } else {
-      examDate = new Date(dateStr);
-    }
+    const examDate = parseExamDateOnly(exam.date);
+    const examEndDate = parseExamDateOnly(getExamEndDate(exam)) || examDate;
+    if (!examDate || !examEndDate) return 'upcoming';
     
     const { hour: startHour, min: startMin } = parseTimeString(exam.startTime);
     const { hour: endHour, min: endMin } = parseTimeString(exam.endTime || '23:59');
@@ -11010,7 +11250,7 @@ export const App = ({ routeRole }: AppProps) => {
     const startDateTime = new Date(examDate);
     startDateTime.setHours(startHour, startMin, 0, 0);
     
-    const endDateTime = new Date(examDate);
+    const endDateTime = new Date(examEndDate);
     // Set end time to the END of the minute (59 seconds, 999 ms) for proper comparison
     endDateTime.setHours(endHour || 23, endMin || 59, 59, 999);
     
@@ -11028,15 +11268,8 @@ export const App = ({ routeRole }: AppProps) => {
   const getTimeUntilExam = (exam: Exam): { days: number; hours: number; minutes: number; seconds: number; total: number } | null => {
     const now = currentTime;
     
-    // Parse date
-    const dateStr = String(exam.date);
-    let examDate: Date;
-    if (dateStr.includes('-')) {
-      const [year, month, day] = dateStr.split('-').map(Number);
-      examDate = new Date(year, month - 1, day);
-    } else {
-      examDate = new Date(dateStr);
-    }
+    const examDate = parseExamDateOnly(exam.date);
+    if (!examDate) return null;
     
     const { hour: startHour, min: startMin } = parseTimeString(exam.startTime);
     const startDateTime = new Date(examDate);
@@ -11120,8 +11353,7 @@ export const App = ({ routeRole }: AppProps) => {
   };
   
   const getSubjectExams = (subjectCode: string): Exam[] => {
-    const normalizedSubjectCode = String(subjectCode || '').trim().toUpperCase();
-    return exams.filter(e => String(e.courseCode || '').trim().toUpperCase() === normalizedSubjectCode);
+    return exams.filter(e => examAppliesToSubject(e, subjectCode));
   };
 
   const scheduleDayOrder: Record<string, number> = {
@@ -11187,9 +11419,8 @@ export const App = ({ routeRole }: AppProps) => {
     return `${formatScheduleDate(schedule.specificDate)} • ${formatScheduleTimeRange(schedule)}`;
   };
   
-  const formatExamDate = (dateStr: string): string => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  const formatExamDate = (dateStr: string, endDateStr?: string): string => {
+    return formatExamDateRangeLabel(dateStr, endDateStr);
   };
   
   const formatExamTime = (time: string | number): string => {
@@ -11200,10 +11431,10 @@ export const App = ({ routeRole }: AppProps) => {
   };
 
   useEffect(() => {
-    if (!showAddExam || selectedExamCourseCode || !activeSubject) return;
+    if (!showAddExam || hasTouchedExamCourseSelection || selectedExamCourseCode || !activeSubject) return;
     setSelectedExamCourseCode(activeSubject);
     setSelectedExamCourseName(subjectInfo[activeSubject]?.name || '');
-  }, [showAddExam, selectedExamCourseCode, activeSubject, subjectInfo]);
+  }, [showAddExam, hasTouchedExamCourseSelection, selectedExamCourseCode, activeSubject, subjectInfo]);
 
   const getExamTypeColor = (examType: string) => {
     const colors: Record<string, { bg: string; text: string; dot: string }> = {
@@ -11225,9 +11456,11 @@ export const App = ({ routeRole }: AppProps) => {
   };
 
   const toDateKey = (dateInput: string | Date) => {
-    const d = typeof dateInput === 'string' ? new Date(dateInput) : new Date(dateInput);
-    d.setHours(0, 0, 0, 0);
-    return d.toISOString().split('T')[0];
+    const d = typeof dateInput === 'string'
+      ? parseExamDateOnly(dateInput)
+      : new Date(dateInput);
+    if (!d) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
   // --- Push Notifications (Firebase Cloud Messaging) ---
@@ -11453,15 +11686,15 @@ export const App = ({ routeRole }: AppProps) => {
     }
   };
 
-  const getObligationLabel = (exam: Pick<Exam, 'examType' | 'courseCode' | 'date' | 'startTime'>) => {
-    const parts = [exam.examType, exam.courseCode, formatExamDate(exam.date)];
+  const getObligationLabel = (exam: Pick<Exam, 'examType' | 'courseCode' | 'courseName' | 'date' | 'endDate' | 'startTime'>) => {
+    const parts = [exam.examType, getExamDisplayTitle(exam), formatExamDate(exam.date, exam.endDate)];
     if (exam.startTime) {
       parts.push(formatExamTime(exam.startTime));
     }
     return parts.filter(Boolean).join(' • ');
   };
 
-  const syncLinkedResourcesForObligation = async (exam: Pick<Exam, 'examId' | 'examType' | 'courseCode' | 'date' | 'startTime'>) => {
+  const syncLinkedResourcesForObligation = async (exam: Pick<Exam, 'examId' | 'examType' | 'courseCode' | 'courseName' | 'date' | 'endDate' | 'startTime'>) => {
     if (!navigator.onLine || !exam.examId) return;
     try {
       await fetch(RESOURCE_GAS_URL, {
@@ -11503,7 +11736,7 @@ export const App = ({ routeRole }: AppProps) => {
     );
   };
 
-  const addExamToBackend = async (exam: { courseCode: string; courseName: string; examType: string; date: string; startTime: string; endTime: string; room: string; proctor: string; notes: string }) => {
+  const addExamToBackend = async (exam: { courseCode: string; courseName: string; examType: string; date: string; endDate?: string; startTime: string; endTime: string; room: string; proctor: string; notes: string }) => {
     if (!user) {
       addToast('Please login to add obligations', 'error');
       return false;
@@ -11517,6 +11750,8 @@ export const App = ({ routeRole }: AppProps) => {
         body: JSON.stringify({
           action: 'addObligation',
           ...exam,
+          location: exam.room,
+          facilitator: exam.proctor,
           userId: user.idNumber,
           userName: user.name
         })
@@ -11532,7 +11767,9 @@ export const App = ({ routeRole }: AppProps) => {
             examId: result.obligation.examId || result.obligation.obligationId,
             examType: result.obligation.examType || exam.examType,
             courseCode: result.obligation.courseCode || exam.courseCode,
+            courseName: result.obligation.courseName || exam.courseName,
             date: result.obligation.date || exam.date,
+            endDate: result.obligation.endDate || exam.endDate,
             startTime: result.obligation.startTime || exam.startTime
           });
         }
@@ -11603,6 +11840,8 @@ export const App = ({ routeRole }: AppProps) => {
           action: 'updateObligation',
           obligationId: examId,
           ...updates,
+          location: updates.room,
+          facilitator: updates.proctor,
           userId: user.idNumber
         })
       });
@@ -11615,7 +11854,9 @@ export const App = ({ routeRole }: AppProps) => {
           examId,
           examType: (updates.examType as string) || currentExam?.examType || '',
           courseCode: (updates.courseCode as string) || currentExam?.courseCode || '',
+          courseName: (updates.courseName as string) || currentExam?.courseName || '',
           date: (updates.date as string) || currentExam?.date || '',
+          endDate: (updates.endDate as string) || currentExam?.endDate || '',
           startTime: (updates.startTime as string) || currentExam?.startTime || ''
         });
         await fetchObligationsFromBackend();
@@ -12450,7 +12691,6 @@ export const App = ({ routeRole }: AppProps) => {
                     >
                       <Icon name="fact_check" className="text-cyan-500" />
                       <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>Attendance</span>
-                      <span className={`ml-auto px-1.5 py-0.5 ${darkMode ? 'bg-cyan-900/30 text-cyan-400' : 'bg-cyan-100 text-cyan-600'} text-[10px] font-bold rounded`}>SOON</span>
                     </button>
                     
                     <button
@@ -12459,7 +12699,6 @@ export const App = ({ routeRole }: AppProps) => {
                   >
                     <Icon name="calendar_month" className="text-violet-500" />
                     <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>Class Schedule</span>
-                    <span className={`ml-auto px-1.5 py-0.5 ${darkMode ? 'bg-violet-900/30 text-violet-400' : 'bg-violet-100 text-violet-600'} text-[10px] font-bold rounded`}>SOON</span>
                   </button>
                   </div>
                 )}
@@ -12512,11 +12751,32 @@ export const App = ({ routeRole }: AppProps) => {
                       Get notified about upcoming exams and deadlines even when the app is closed.
                     </p>
                     <p className="text-xs text-blue-600 mb-3">
-                      Current status: <strong>{notificationsEnabled ? '✓ Enabled' : notificationPermission === 'denied' ? '✗ Blocked' : '○ Not enabled'}</strong>
+                      Current status:{' '}
+                      <strong className="inline-flex items-center gap-1">
+                        {notificationsEnabled ? (
+                          <>
+                            <Icon name="check_circle" className="text-sm" />
+                            Enabled
+                          </>
+                        ) : notificationPermission === 'denied' ? (
+                          <>
+                            <Icon name="cancel" className="text-sm" />
+                            Blocked
+                          </>
+                        ) : (
+                          <>
+                            <Icon name="radio_button_unchecked" className="text-sm" />
+                            Not enabled
+                          </>
+                        )}
+                      </strong>
                     </p>
                     {notificationsEnabled ? (
                       <div className="space-y-2">
-                        <p className="text-sm text-green-700">✓ Notifications are enabled!</p>
+                        <p className="text-sm text-green-700 inline-flex items-center gap-1">
+                          <Icon name="check_circle" className="text-sm" />
+                          Notifications are enabled.
+                        </p>
                         <button
                           onClick={async () => {
                             try {
@@ -12714,12 +12974,11 @@ export const App = ({ routeRole }: AppProps) => {
                   <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-400'} mt-1`}>Payments, transparency, and audit</p>
                 </button>
 
-                {/* Attendance - Coming Soon */}
+                {/* Attendance */}
                 <button
                   onClick={() => navigateTo('ATTENDANCE')}
                   className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} p-4 rounded-2xl border text-left hover:border-cyan-300 hover:shadow-lg hover:scale-[1.02] transition-all group relative`}
                 >
-                  <span className={`absolute top-2 right-2 px-1.5 py-0.5 ${darkMode ? 'bg-cyan-900/30 text-cyan-400' : 'bg-cyan-100 text-cyan-600'} text-[10px] font-bold rounded`}>SOON</span>
                   <div className={`w-10 h-10 ${darkMode ? 'bg-cyan-900/30' : 'bg-cyan-100'} rounded-xl flex items-center justify-center mb-3 text-cyan-600 group-hover:scale-110 transition-transform`}>
                     <Icon name="fact_check" />
                   </div>
@@ -12761,7 +13020,7 @@ export const App = ({ routeRole }: AppProps) => {
             <>
               <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-stone-800'} mb-4 mt-6 flex items-center justify-between`}>
                 <span className="flex items-center gap-2">
-                  <Icon name="event" className="text-amber-500" /> Next Exams
+                  <Icon name="event" className="text-amber-500" /> Next Activity
                 </span>
                 <button onClick={() => setView('CALENDAR')} className={`text-sm ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-stone-500 hover:text-stone-700'}`}>
                   View all →
@@ -12775,18 +13034,23 @@ export const App = ({ routeRole }: AppProps) => {
                     <div 
                       key={exam.examId} 
                       className={`p-3 rounded-xl border ${isOngoing ? (darkMode ? 'bg-green-900/30 border-green-800' : 'bg-green-50 border-green-200') : (darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200')} flex items-center gap-3 cursor-pointer hover:shadow-md transition-all`}
-                      onClick={() => setSelectedExam(exam)}
+                      onClick={() => openExamDetail(exam, 'HOME')}
                     >
                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isOngoing ? 'bg-green-500 text-white' : (darkMode ? 'bg-amber-900/50 text-amber-400' : 'bg-amber-100 text-amber-600')}`}>
                         <Icon name={isOngoing ? 'schedule' : 'event'} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className={`font-semibold ${isOngoing ? (darkMode ? 'text-green-200' : 'text-green-800') : (darkMode ? 'text-white' : 'text-stone-800')}`}>{exam.courseCode}</span>
+                          <span className={`font-semibold ${isOngoing ? (darkMode ? 'text-green-200' : 'text-green-800') : (darkMode ? 'text-white' : 'text-stone-800')}`}>{getExamDisplayTitle(exam)}</span>
                           <span className={`text-xs ${isOngoing ? (darkMode ? 'text-green-400' : 'text-green-600') : (darkMode ? 'text-gray-400' : 'text-stone-500')}`}>• {exam.examType}</span>
                         </div>
+                        {getExamSecondaryLabel(exam) ? (
+                          <p className={`truncate text-xs ${isOngoing ? (darkMode ? 'text-green-300' : 'text-green-700') : (darkMode ? 'text-gray-400' : 'text-stone-500')}`} title={getExamSecondaryLabel(exam)}>
+                            {getExamSecondaryLabel(exam)}
+                          </p>
+                        ) : null}
                         <p className={`text-xs ${isOngoing ? (darkMode ? 'text-green-400' : 'text-green-600') : (darkMode ? 'text-gray-400' : 'text-stone-400')}`}>
-                          {isOngoing ? `Now until ${formatExamTime(exam.endTime)}` : `${formatExamDate(exam.date)} • ${formatExamTime(exam.startTime)}`} • Room: {exam.room}
+                          {isOngoing ? `Now until ${formatExamTime(exam.endTime)}` : `${formatExamDate(exam.date, exam.endDate)} • ${formatExamTime(exam.startTime)}`}{exam.room ? ` • Location: ${exam.room}` : ''}
                         </p>
                       </div>
                       {isOngoing ? (
@@ -12831,9 +13095,10 @@ export const App = ({ routeRole }: AppProps) => {
 
         {/* Exam Detail Modal */}
         <ExamDetailModal
-          exam={selectedExam}
-          onClose={() => setSelectedExam(null)}
+          exam={selectedExamSource === 'HOME' ? selectedExam : null}
+          onClose={closeExamDetail}
           onEdit={(exam) => setExamToEdit(exam)}
+          onDelete={(exam) => setExamToDelete(exam.examId)}
           user={user}
           getExamStatus={getExamStatus}
           getTimeUntilExam={getTimeUntilExam}
@@ -13022,6 +13287,7 @@ export const App = ({ routeRole }: AppProps) => {
                     courseName: formData.get('courseName') as string || subjectInfo[formData.get('courseCode') as string]?.name || '',
                     examType: formData.get('examType') as string,
                     date: formData.get('date') as string,
+                    endDate: formData.get('endDate') as string,
                     startTime: formData.get('startTime') as string,
                     endTime: formData.get('endTime') as string,
                     room: formData.get('room') as string,
@@ -13035,10 +13301,9 @@ export const App = ({ routeRole }: AppProps) => {
                   }
                 }} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Code *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Code</label>
                     <CourseDropdown
                       name="courseCode"
-                      required
                       value={selectedExamCourseCode}
                       onChange={handleExamCourseChange}
                       options={displaySubjects.map(s => ({
@@ -13049,15 +13314,16 @@ export const App = ({ routeRole }: AppProps) => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Name</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course / Event Name</label>
                     <input
                       type="text"
                       name="courseName"
                       value={selectedExamCourseName}
                       onChange={(e) => setSelectedExamCourseName(e.target.value)}
-                      placeholder="e.g., Introduction to Language"
+                      placeholder="e.g., Intramurals or Introduction to Language"
                       className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500"
                     />
+                    <p className="mt-1 text-xs text-stone-500">Use this for general items like holiday week off, intramurals, or campus events.</p>
                   </div>
                   
                   <div>
@@ -13071,24 +13337,30 @@ export const App = ({ routeRole }: AppProps) => {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Date *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Start Date *</label>
                     <input type="date" name="date" required defaultValue={prefillExamDate || ''} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                   </div>
-                  
+
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">End Date</label>
+                    <input type="date" name="endDate" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    <p className="mt-1 text-xs text-stone-500">Leave blank if this only happens on one date.</p>
+                  </div>
+                   
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time *</label>
-                      <input type="time" name="startTime" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time</label>
+                      <input type="time" name="startTime" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time *</label>
-                      <input type="time" name="endTime" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time</label>
+                      <input type="time" name="endTime" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                     </div>
                   </div>
-                  
+                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Room *</label>
-                    <input type="text" name="room" required placeholder="e.g., Room 101" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Location</label>
+                    <input type="text" name="room" placeholder="e.g., Room 101 or Campus-wide" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                   </div>
                   
                   <div>
@@ -13638,7 +13910,7 @@ export const App = ({ routeRole }: AppProps) => {
                       <div
                         key={exam.examId}
                         className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-stone-200'} rounded-2xl border p-4 cursor-pointer hover:shadow-md transition-all`}
-                        onClick={() => setSelectedExam(exam)}
+                        onClick={() => openExamDetail(exam, 'EXAMS')}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -13657,10 +13929,10 @@ export const App = ({ routeRole }: AppProps) => {
                               </span>
                             </div>
                             <p className={`mt-3 text-base font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>
-                              {formatExamDate(exam.date)}
+                              {formatExamDate(exam.date, exam.endDate)}
                             </p>
                             <p className={`mt-1 text-sm ${darkMode ? 'text-gray-300' : 'text-stone-600'}`}>
-                              {formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)} • Room: {exam.room || 'TBA'}
+                              {formatExamTimeRangeLabel(exam.startTime, exam.endTime, formatExamTime)}{exam.room ? ` • Location: ${exam.room}` : ''}
                             </p>
                             {exam.proctor && (
                               <p className={`mt-1 text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>
@@ -13765,13 +14037,14 @@ export const App = ({ routeRole }: AppProps) => {
                   const formData = new FormData(form);
                   
                   const success = await updateExamToBackend(examToEdit.examId, {
-                    courseCode: formData.get('courseCode') as string,
-                    courseName: subjectInfo[formData.get('courseCode') as string]?.name || '',
-                    examType: formData.get('examType') as string,
-                    date: formData.get('date') as string,
-                    startTime: formData.get('startTime') as string,
-                    endTime: formData.get('endTime') as string,
-                    room: formData.get('room') as string,
+                     courseCode: formData.get('courseCode') as string,
+                     courseName: formData.get('courseName') as string,
+                     examType: formData.get('examType') as string,
+                     date: formData.get('date') as string,
+                     endDate: formData.get('endDate') as string,
+                     startTime: formData.get('startTime') as string,
+                     endTime: formData.get('endTime') as string,
+                     room: formData.get('room') as string,
                     proctor: formData.get('proctor') as string,
                     notes: formData.get('notes') as string
                   });
@@ -13781,16 +14054,20 @@ export const App = ({ routeRole }: AppProps) => {
                   }
                 }} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Course *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Code</label>
                     <CourseDropdown
                       name="courseCode"
-                      required
                       defaultValue={examToEdit.courseCode}
                       options={displaySubjects.map(s => ({
                         code: s,
                         name: subjectInfo[s]?.name || ''
                       }))}
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course / Event Name</label>
+                    <input type="text" name="courseName" defaultValue={examToEdit.courseName || ''} placeholder="e.g., Intramurals or Introduction to Language" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                   </div>
                   
                   <div>
@@ -13804,24 +14081,30 @@ export const App = ({ routeRole }: AppProps) => {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Date *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Start Date *</label>
                     <input type="date" name="date" required defaultValue={examToEdit.date} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                   </div>
-                  
+
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">End Date</label>
+                    <input type="date" name="endDate" defaultValue={examToEdit.endDate || ''} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    <p className="mt-1 text-xs text-stone-500">Leave blank for a one-day obligation.</p>
+                  </div>
+                   
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time *</label>
-                      <input type="time" name="startTime" required defaultValue={examToEdit.startTime} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time</label>
+                      <input type="time" name="startTime" defaultValue={examToEdit.startTime} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time *</label>
-                      <input type="time" name="endTime" required defaultValue={examToEdit.endTime} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time</label>
+                      <input type="time" name="endTime" defaultValue={examToEdit.endTime} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                     </div>
                   </div>
-                  
+                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Room *</label>
-                    <input type="text" name="room" required defaultValue={examToEdit.room} placeholder="e.g., Room 101" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Location</label>
+                    <input type="text" name="room" defaultValue={examToEdit.room} placeholder="e.g., Room 101 or Campus-wide" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                   </div>
                   
                   <div>
@@ -13878,9 +14161,10 @@ export const App = ({ routeRole }: AppProps) => {
 
         {/* Exam Detail Modal */}
         <ExamDetailModal
-          exam={selectedExam}
-          onClose={() => setSelectedExam(null)}
+          exam={selectedExamSource === 'EXAMS' ? selectedExam : null}
+          onClose={closeExamDetail}
           onEdit={(exam) => setExamToEdit(exam)}
+          onDelete={(exam) => setExamToDelete(exam.examId)}
           user={user}
           getExamStatus={getExamStatus}
           getTimeUntilExam={getTimeUntilExam}
@@ -14601,10 +14885,10 @@ export const App = ({ routeRole }: AppProps) => {
     // Get unique resource categories (types)
     const resourceCategories = Array.from(new Set(allResourcesList.map(r => r.category))).sort();
     const obligationFilterOptions = exams
-      .filter(exam => displaySubjectSet.has(exam.courseCode))
+      .filter(exam => !exam.courseCode || displaySubjectSet.has(exam.courseCode))
       .map(exam => ({
         value: exam.examId,
-        label: `${exam.courseCode} • ${exam.examType} • ${formatExamDate(exam.date)}`
+        label: `${getExamDisplayTitle(exam)} • ${exam.examType} • ${formatExamDate(exam.date, exam.endDate)}`
       }));
     
     // Filter resources (using state from top level)
@@ -15146,9 +15430,10 @@ export const App = ({ routeRole }: AppProps) => {
 
     const eventsByDay: Record<string, Exam[]> = {};
     exams.forEach((exam) => {
-      const key = toDateKey(exam.date);
-      if (!eventsByDay[key]) eventsByDay[key] = [];
-      eventsByDay[key].push(exam);
+      enumerateExamDateKeys(exam).forEach((key) => {
+        if (!eventsByDay[key]) eventsByDay[key] = [];
+        eventsByDay[key].push(exam);
+      });
     });
 
     const gridDays = Array.from({ length: 42 }, (_, idx) => {
@@ -15158,11 +15443,12 @@ export const App = ({ routeRole }: AppProps) => {
 
     const selectedEvents = selectedKey ? (eventsByDay[selectedKey] || []) : [];
     const monthEvents = exams
-      .filter((e) => {
-        const d = new Date(e.date);
-        return d.getMonth() === month && d.getFullYear() === year;
-      })
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      .filter((e) => examOverlapsMonth(e, year, month))
+      .sort((a, b) => {
+        const aTime = parseExamDateOnly(a.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        const bTime = parseExamDateOnly(b.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        return aTime - bTime;
+      });
 
     const changeMonth = (delta: number) => {
       const next = new Date(year, month + delta, 1);
@@ -15172,7 +15458,7 @@ export const App = ({ routeRole }: AppProps) => {
 
     const formatMonthLabel = new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const selectedLabel = selectedKey
-      ? new Date(selectedKey).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+      ? formatExamDateOnly(selectedKey, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
       : 'All events this month';
 
     const detailEvents = calendarDetailDate ? (eventsByDay[toDateKey(calendarDetailDate)] || []) : [];
@@ -15374,14 +15660,8 @@ export const App = ({ routeRole }: AppProps) => {
                 
                 // Within same status, sort by time (nearest first)
                 const getStartTime = (exam: Exam) => {
-                  const dateStr = String(exam.date);
-                  let examDate: Date;
-                  if (dateStr.includes('-')) {
-                    const [year, month, day] = dateStr.split('-').map(Number);
-                    examDate = new Date(year, month - 1, day);
-                  } else {
-                    examDate = new Date(dateStr);
-                  }
+                  const examDate = parseExamDateOnly(String(exam.date));
+                  if (!examDate) return Number.MAX_SAFE_INTEGER;
                   const { hour, min } = parseTimeString(exam.startTime);
                   examDate.setHours(hour, min, 0, 0);
                   return examDate.getTime();
@@ -15412,7 +15692,7 @@ export const App = ({ routeRole }: AppProps) => {
                         )}
                         <div
                           className="p-2 sm:p-3 mb-2 last:mb-0 rounded-xl border border-stone-200 bg-white hover:shadow-sm transition-all cursor-pointer"
-                          onClick={() => setSelectedExam(exam)}
+                          onClick={() => openExamDetail(exam, 'CALENDAR')}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
@@ -15421,16 +15701,16 @@ export const App = ({ routeRole }: AppProps) => {
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-semibold text-stone-800 text-sm sm:text-base">{exam.courseCode}</span>
+                                  <span className="font-semibold text-stone-800 text-sm sm:text-base">{getExamDisplayTitle(exam)}</span>
                                   <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ${colors.bg} ${colors.text}`}>
                                     {exam.examType}
                                   </span>
                                 </div>
                                 {exam.courseName && <p className="text-xs sm:text-sm text-stone-500 line-clamp-1">{exam.courseName}</p>}
                                 <p className="text-[11px] sm:text-xs text-stone-500 mt-1">
-                                  {formatExamDate(exam.date)} • {formatExamTime(exam.startTime)}{exam.endTime ? ` - ${formatExamTime(exam.endTime)}` : ''}
+                                  {formatExamDate(exam.date, exam.endDate)} • {formatExamTimeRangeLabel(exam.startTime, exam.endTime, formatExamTime)}
                                 </p>
-                                {exam.room && <p className="text-[11px] sm:text-xs text-stone-400">Room: {exam.room}</p>}
+                                {exam.room && <p className="text-[11px] sm:text-xs text-stone-400">Location: {exam.room}</p>}
                                 {exam.notes && <p className="text-[11px] sm:text-xs text-stone-400 italic line-clamp-2">"{exam.notes}"</p>}
                               </div>
                             </div>
@@ -15485,14 +15765,8 @@ export const App = ({ routeRole }: AppProps) => {
                   }
                   // Within same status, sort by time (nearest first)
                   const getStartTime = (exam: Exam) => {
-                    const dateStr = String(exam.date);
-                    let examDate: Date;
-                    if (dateStr.includes('-')) {
-                      const [year, month, day] = dateStr.split('-').map(Number);
-                      examDate = new Date(year, month - 1, day);
-                    } else {
-                      examDate = new Date(dateStr);
-                    }
+                    const examDate = parseExamDateOnly(String(exam.date));
+                    if (!examDate) return Number.MAX_SAFE_INTEGER;
                     const { hour, min } = parseTimeString(exam.startTime);
                     examDate.setHours(hour, min, 0, 0);
                     return examDate.getTime();
@@ -15501,33 +15775,86 @@ export const App = ({ routeRole }: AppProps) => {
                 }).map((exam) => {
                   const colors = getExamTypeColor(exam.examType);
                   const status = getExamStatus(exam);
+                  const canManageExam = user && user.idNumber === exam.createdBy;
                   return (
-                    <button
+                    <div
                       key={exam.examId}
-                      onClick={() => { setSelectedExam(exam); setCalendarDetailDate(null); }}
-                      className={`w-full text-left p-3 rounded-xl border ${darkMode ? 'border-gray-700 bg-gray-800 hover:border-gray-500' : 'border-stone-200 bg-white hover:border-stone-400'} hover:shadow-sm transition-all flex items-start gap-3`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openExamDetail(exam, 'CALENDAR')}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          openExamDetail(exam, 'CALENDAR');
+                        }
+                      }}
+                      className={`w-full text-left p-3 rounded-xl border ${darkMode ? 'border-gray-700 bg-gray-800 hover:border-gray-500' : 'border-stone-200 bg-white hover:border-stone-400'} hover:shadow-sm transition-all`}
                     >
-                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${colors.bg} ${colors.text}`}>
-                        <Icon name="event" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`font-semibold line-clamp-1 ${darkMode ? 'text-white' : 'text-stone-800'}`}>{exam.courseCode}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${colors.bg} ${colors.text}`}>
-                            {exam.examType}
-                          </span>
+                      <div className="flex items-start gap-3">
+                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${colors.bg} ${colors.text}`}>
+                          <Icon name="event" />
                         </div>
-                        {exam.courseName && <p className={`text-xs line-clamp-1 ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{exam.courseName}</p>}
-                        <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{formatExamTime(exam.startTime)}{exam.endTime ? ` - ${formatExamTime(exam.endTime)}` : ''}</p>
-                        {exam.room && <p className={`text-[11px] ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Room: {exam.room}</p>}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`font-semibold line-clamp-1 ${darkMode ? 'text-white' : 'text-stone-800'}`}>{getExamDisplayTitle(exam)}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${colors.bg} ${colors.text}`}>
+                              {exam.examType}
+                            </span>
+                          </div>
+                          {exam.courseName && <p className={`text-xs line-clamp-1 ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{exam.courseName}</p>}
+                          <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{formatExamTimeRangeLabel(exam.startTime, exam.endTime, formatExamTime)}</p>
+                          {exam.room && <p className={`text-[11px] ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Location: {exam.room}</p>}
+                        </div>
+                        <span className={`px-2 py-1 rounded-full text-[11px] font-semibold ${
+                          status === 'ongoing' ? (darkMode ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700') :
+                          status === 'upcoming' ? (darkMode ? 'bg-amber-900 text-amber-200' : 'bg-amber-100 text-amber-700') : (darkMode ? 'bg-gray-700 text-gray-300' : 'bg-stone-100 text-stone-600')
+                        }`}>
+                          {status === 'ongoing' ? 'Ongoing' : status === 'upcoming' ? 'Upcoming' : 'Done'}
+                        </span>
                       </div>
-                      <span className={`px-2 py-1 rounded-full text-[11px] font-semibold ${
-                        status === 'ongoing' ? (darkMode ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700') :
-                        status === 'upcoming' ? (darkMode ? 'bg-amber-900 text-amber-200' : 'bg-amber-100 text-amber-700') : (darkMode ? 'bg-gray-700 text-gray-300' : 'bg-stone-100 text-stone-600')
-                      }`}>
-                        {status === 'ongoing' ? 'Ongoing' : status === 'upcoming' ? 'Upcoming' : 'Done'}
-                      </span>
-                    </button>
+                      <div className="mt-3 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openExamDetail(exam, 'CALENDAR');
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            darkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                          }`}
+                        >
+                          Open
+                        </button>
+                        {canManageExam && status !== 'completed' && (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setExamToEdit(exam);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              darkMode ? 'bg-blue-900/40 text-blue-200 hover:bg-blue-900/60' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                            }`}
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {canManageExam && (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setExamToDelete(exam.examId);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              darkMode ? 'bg-red-900/40 text-red-200 hover:bg-red-900/60' : 'bg-red-50 text-red-700 hover:bg-red-100'
+                            }`}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -15570,7 +15897,8 @@ export const App = ({ routeRole }: AppProps) => {
                   const formData = new FormData(e.target as HTMLFormElement);
                   const dateStr = formData.get('jumpDate') as string;
                   if (dateStr) {
-                    const targetDate = new Date(dateStr);
+                    const targetDate = parseExamDateOnly(dateStr);
+                    if (!targetDate) return;
                     const monthStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
                     setCalendarMonth(monthStart);
                     setCalendarSelectedDate(targetDate);
@@ -15626,7 +15954,8 @@ export const App = ({ routeRole }: AppProps) => {
                   const formData = new FormData(e.target as HTMLFormElement);
                   const dateStr = formData.get('jumpDate') as string;
                   if (dateStr) {
-                    const targetDate = new Date(dateStr);
+                    const targetDate = parseExamDateOnly(dateStr);
+                    if (!targetDate) return;
                     const monthStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
                     setCalendarMonth(monthStart);
                     setCalendarSelectedDate(targetDate);
@@ -15682,13 +16011,14 @@ export const App = ({ routeRole }: AppProps) => {
                   const formData = new FormData(form);
                   
                   const success = await addExamToBackend({
-                    courseCode: formData.get('courseCode') as string,
-                    courseName: formData.get('courseName') as string || subjectInfo[formData.get('courseCode') as string]?.name || '',
-                    examType: formData.get('examType') as string,
-                    date: formData.get('date') as string,
-                    startTime: formData.get('startTime') as string,
-                    endTime: formData.get('endTime') as string,
-                    room: formData.get('room') as string,
+                     courseCode: formData.get('courseCode') as string,
+                     courseName: formData.get('courseName') as string || subjectInfo[formData.get('courseCode') as string]?.name || '',
+                     examType: formData.get('examType') as string,
+                     date: formData.get('date') as string,
+                     endDate: formData.get('endDate') as string,
+                     startTime: formData.get('startTime') as string,
+                     endTime: formData.get('endTime') as string,
+                     room: formData.get('room') as string,
                     proctor: formData.get('proctor') as string,
                     notes: formData.get('notes') as string
                   });
@@ -15699,10 +16029,9 @@ export const App = ({ routeRole }: AppProps) => {
                   }
                 }} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Code *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Code</label>
                     <CourseDropdown
                       name="courseCode"
-                      required
                       value={selectedExamCourseCode}
                       onChange={handleExamCourseChange}
                       options={displaySubjects.map(s => ({
@@ -15713,15 +16042,16 @@ export const App = ({ routeRole }: AppProps) => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Name</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course / Event Name</label>
                     <input
                       type="text"
                       name="courseName"
                       value={selectedExamCourseName}
                       onChange={(e) => setSelectedExamCourseName(e.target.value)}
-                      placeholder="e.g., Introduction to Language"
+                      placeholder="e.g., Intramurals or Introduction to Language"
                       className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500"
                     />
+                    <p className="mt-1 text-xs text-stone-500">Use this for general items like holiday week off, intramurals, or campus events.</p>
                   </div>
                   
                   <div>
@@ -15735,24 +16065,30 @@ export const App = ({ routeRole }: AppProps) => {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Date *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Start Date *</label>
                     <input type="date" name="date" required defaultValue={prefillExamDate || ''} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                   </div>
-                  
+
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">End Date</label>
+                    <input type="date" name="endDate" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    <p className="mt-1 text-xs text-stone-500">Leave blank if this only happens on one date.</p>
+                  </div>
+                   
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time *</label>
-                      <input type="time" name="startTime" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time</label>
+                      <input type="time" name="startTime" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time *</label>
-                      <input type="time" name="endTime" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time</label>
+                      <input type="time" name="endTime" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                     </div>
                   </div>
-                  
+                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Room *</label>
-                    <input type="text" name="room" required placeholder="e.g., Room 101" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Location</label>
+                    <input type="text" name="room" placeholder="e.g., Room 101 or Campus-wide" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                   </div>
                   
                   <div>
@@ -15773,6 +16109,23 @@ export const App = ({ routeRole }: AppProps) => {
             </div>
           </div>
         )}
+
+        {/* Exam Detail Modal */}
+        <ExamDetailModal
+          exam={selectedExamSource === 'CALENDAR' ? selectedExam : null}
+          onClose={closeExamDetail}
+          onEdit={(exam) => setExamToEdit(exam)}
+          onDelete={(exam) => setExamToDelete(exam.examId)}
+          user={user}
+          getExamStatus={getExamStatus}
+          getTimeUntilExam={getTimeUntilExam}
+          formatCountdown={formatCountdown}
+          formatExamDate={formatExamDate}
+          formatExamTime={formatExamTime}
+          darkMode={darkMode}
+          linkedResources={selectedExam ? getLinkedResourcesForObligation(selectedExam.examId) : []}
+          onOpenResource={(resource) => openResource(resource)}
+        />
       </div>
     );
   }
@@ -15849,7 +16202,7 @@ export const App = ({ routeRole }: AppProps) => {
                       <div 
                         key={exam.examId} 
                         className={`${darkMode ? 'bg-green-900/30 border-green-700' : 'bg-green-50 border-green-200'} border p-4 rounded-xl cursor-pointer hover:shadow-md transition-all`}
-                        onClick={() => setSelectedExam(exam)}
+                        onClick={() => openExamDetail(exam, 'CALENDAR')}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
@@ -15858,14 +16211,14 @@ export const App = ({ routeRole }: AppProps) => {
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className={`font-bold ${darkMode ? 'text-green-400' : 'text-green-800'}`}>{exam.courseCode}</span>
+                                <span className={`font-bold ${darkMode ? 'text-green-400' : 'text-green-800'}`}>{getExamDisplayTitle(exam)}</span>
                                 <span className="px-2 py-0.5 bg-green-500 text-white text-xs rounded-full font-medium">
                                   {exam.examType}
                                 </span>
                               </div>
-                              {exam.courseName && <p className={`text-sm ${darkMode ? 'text-green-300' : 'text-green-700'}`}>{exam.courseName}</p>}
+                              {getExamSecondaryLabel(exam) && <p className={`truncate text-sm ${darkMode ? 'text-green-300' : 'text-green-700'}`} title={getExamSecondaryLabel(exam)}>{getExamSecondaryLabel(exam)}</p>}
                               <p className={`text-sm ${darkMode ? 'text-green-400' : 'text-green-600'} mt-1`}>
-                                {formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)} • Room: {exam.room}
+                                {formatExamTimeRangeLabel(exam.startTime, exam.endTime, formatExamTime)}{exam.room ? ` • Location: ${exam.room}` : ''}
                               </p>
                               {exam.proctor && <p className={`text-xs ${darkMode ? 'text-green-400' : 'text-green-600'}`}>Proctor: {exam.proctor}</p>}
                             </div>
@@ -15892,7 +16245,7 @@ export const App = ({ routeRole }: AppProps) => {
                       <div 
                         key={exam.examId} 
                         className={`${darkMode ? 'bg-gray-800 border-gray-700 hover:border-amber-600' : 'bg-white border-stone-200 hover:border-amber-300'} border p-4 rounded-xl hover:shadow-md transition-all cursor-pointer`}
-                        onClick={() => setSelectedExam(exam)}
+                        onClick={() => openExamDetail(exam, 'CALENDAR')}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
@@ -15901,17 +16254,17 @@ export const App = ({ routeRole }: AppProps) => {
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className={`font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{exam.courseCode}</span>
+                                <span className={`font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>{getExamDisplayTitle(exam)}</span>
                                 <span className={`px-2 py-0.5 ${darkMode ? 'bg-amber-900/50 text-amber-400' : 'bg-amber-100 text-amber-700'} text-xs rounded-full font-medium`}>
                                   {exam.examType}
                                 </span>
                               </div>
-                              {exam.courseName && <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>{exam.courseName}</p>}
+                              {getExamSecondaryLabel(exam) && <p className={`truncate text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`} title={getExamSecondaryLabel(exam)}>{getExamSecondaryLabel(exam)}</p>}
                               <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-stone-600'} mt-1`}>
-                                <span className="font-medium">{formatExamDate(exam.date)}</span>
+                                <span className="font-medium">{formatExamDate(exam.date, exam.endDate)}</span>
                               </p>
                               <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>
-                                {formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)} • Room: {exam.room}
+                                {formatExamTimeRangeLabel(exam.startTime, exam.endTime, formatExamTime)}{exam.room ? ` • Location: ${exam.room}` : ''}
                               </p>
                               {exam.proctor && <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'}`}>Proctor: {exam.proctor}</p>}
                               {exam.notes && <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-400'} italic mt-1 line-clamp-2`}>"{exam.notes}"</p>}
@@ -15960,7 +16313,7 @@ export const App = ({ routeRole }: AppProps) => {
                       <div 
                         key={exam.examId} 
                         className={`${darkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-stone-50 border-stone-200'} border p-4 rounded-xl opacity-60 cursor-pointer hover:opacity-80 hover:shadow-md transition-all`}
-                        onClick={() => setSelectedExam(exam)}
+                        onClick={() => openExamDetail(exam, 'CALENDAR')}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
@@ -15969,16 +16322,16 @@ export const App = ({ routeRole }: AppProps) => {
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className={`font-bold ${darkMode ? 'text-gray-400' : 'text-stone-600'}`}>{exam.courseCode}</span>
+                                <span className={`font-bold ${darkMode ? 'text-gray-400' : 'text-stone-600'}`}>{getExamDisplayTitle(exam)}</span>
                                 <span className={`px-2 py-0.5 ${darkMode ? 'bg-gray-700 text-gray-400' : 'bg-stone-200 text-stone-600'} text-xs rounded-full font-medium`}>
                                   {exam.examType}
                                 </span>
                               </div>
-                              {exam.courseName && <p className={`text-sm ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>{exam.courseName}</p>}
+                              {getExamSecondaryLabel(exam) && <p className={`truncate text-sm ${darkMode ? 'text-gray-500' : 'text-stone-500'}`} title={getExamSecondaryLabel(exam)}>{getExamSecondaryLabel(exam)}</p>}
                               <p className={`text-sm ${darkMode ? 'text-gray-500' : 'text-stone-500'} mt-1`}>
-                                {formatExamDate(exam.date)} • {formatExamTime(exam.startTime)} - {formatExamTime(exam.endTime)}
+                                {formatExamDate(exam.date, exam.endDate)} • {formatExamTimeRangeLabel(exam.startTime, exam.endTime, formatExamTime)}
                               </p>
-                              <p className={`text-xs ${darkMode ? 'text-gray-600' : 'text-stone-400'}`}>Room: {exam.room}</p>
+                              <p className={`text-xs ${darkMode ? 'text-gray-600' : 'text-stone-400'}`}>Location: {exam.room}</p>
                             </div>
                           </div>
                           <span className={`px-2 py-1 ${darkMode ? 'bg-gray-700 text-gray-400' : 'bg-stone-200 text-stone-600'} text-xs rounded-full font-medium`}>
@@ -16027,9 +16380,10 @@ export const App = ({ routeRole }: AppProps) => {
                   
                   const success = await updateExamToBackend(examToEdit.examId, {
                     courseCode: formData.get('courseCode') as string,
-                    courseName: subjectInfo[formData.get('courseCode') as string]?.name || '',
+                    courseName: formData.get('courseName') as string,
                     examType: formData.get('examType') as string,
                     date: formData.get('date') as string,
+                    endDate: formData.get('endDate') as string,
                     startTime: formData.get('startTime') as string,
                     endTime: formData.get('endTime') as string,
                     room: formData.get('room') as string,
@@ -16042,16 +16396,20 @@ export const App = ({ routeRole }: AppProps) => {
                   }
                 }} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Course *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Code</label>
                     <CourseDropdown
                       name="courseCode"
-                      required
                       defaultValue={examToEdit.courseCode}
                       options={displaySubjects.map(s => ({
                         code: s,
                         name: subjectInfo[s]?.name || ''
                       }))}
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course / Event Name</label>
+                    <input type="text" name="courseName" defaultValue={examToEdit.courseName || ''} placeholder="e.g., Intramurals or Introduction to Language" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                   </div>
                   
                   <div>
@@ -16065,24 +16423,30 @@ export const App = ({ routeRole }: AppProps) => {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Date *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Start Date *</label>
                     <input type="date" name="date" required defaultValue={examToEdit.date} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                   </div>
-                  
+
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">End Date</label>
+                    <input type="date" name="endDate" defaultValue={examToEdit.endDate || ''} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    <p className="mt-1 text-xs text-stone-500">Leave blank for a one-day obligation.</p>
+                  </div>
+                   
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time *</label>
-                      <input type="time" name="startTime" required defaultValue={examToEdit.startTime} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time</label>
+                      <input type="time" name="startTime" defaultValue={examToEdit.startTime} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time *</label>
-                      <input type="time" name="endTime" required defaultValue={examToEdit.endTime} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time</label>
+                      <input type="time" name="endTime" defaultValue={examToEdit.endTime} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                     </div>
                   </div>
-                  
+                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Room *</label>
-                    <input type="text" name="room" required defaultValue={examToEdit.room} placeholder="e.g., Room 101" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Location</label>
+                    <input type="text" name="room" defaultValue={examToEdit.room} placeholder="e.g., Room 101 or Campus-wide" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                   </div>
                   
                   <div>
@@ -16126,6 +16490,7 @@ export const App = ({ routeRole }: AppProps) => {
                     courseName: formData.get('courseName') as string || subjectInfo[formData.get('courseCode') as string]?.name || '',
                     examType: formData.get('examType') as string,
                     date: formData.get('date') as string,
+                    endDate: formData.get('endDate') as string,
                     startTime: formData.get('startTime') as string,
                     endTime: formData.get('endTime') as string,
                     room: formData.get('room') as string,
@@ -16139,10 +16504,9 @@ export const App = ({ routeRole }: AppProps) => {
                   }
                 }} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Code *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Code</label>
                     <CourseDropdown
                       name="courseCode"
-                      required
                       value={selectedExamCourseCode}
                       onChange={handleExamCourseChange}
                       options={displaySubjects.map(s => ({
@@ -16153,15 +16517,16 @@ export const App = ({ routeRole }: AppProps) => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Course Name</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Course / Event Name</label>
                     <input
                       type="text"
                       name="courseName"
                       value={selectedExamCourseName}
                       onChange={(e) => setSelectedExamCourseName(e.target.value)}
-                      placeholder="e.g., Introduction to Language"
+                      placeholder="e.g., Intramurals or Introduction to Language"
                       className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500"
                     />
+                    <p className="mt-1 text-xs text-stone-500">Use this for general items like holiday week off, intramurals, or campus events.</p>
                   </div>
                   
                   <div>
@@ -16175,24 +16540,30 @@ export const App = ({ routeRole }: AppProps) => {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Date *</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Start Date *</label>
                     <input type="date" name="date" required defaultValue={prefillExamDate || ''} className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                   </div>
-                  
+
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">End Date</label>
+                    <input type="date" name="endDate" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    <p className="mt-1 text-xs text-stone-500">Leave blank if this only happens on one date.</p>
+                  </div>
+                   
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time *</label>
-                      <input type="time" name="startTime" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                      <label className="block text-sm font-medium text-stone-700 mb-1">Start Time</label>
+                      <input type="time" name="startTime" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time *</label>
-                      <input type="time" name="endTime" required className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                      <label className="block text-sm font-medium text-stone-700 mb-1">End Time</label>
+                      <input type="time" name="endTime" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                     </div>
                   </div>
-                  
+                   
                   <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Room *</label>
-                    <input type="text" name="room" required placeholder="e.g., Room 101" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Location</label>
+                    <input type="text" name="room" placeholder="e.g., Room 101 or Campus-wide" className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-500" />
                   </div>
                   
                   <div>
@@ -16216,9 +16587,10 @@ export const App = ({ routeRole }: AppProps) => {
 
         {/* Exam Detail Modal */}
         <ExamDetailModal
-          exam={selectedExam}
-          onClose={() => setSelectedExam(null)}
+          exam={selectedExamSource === 'EXAMS' ? selectedExam : null}
+          onClose={closeExamDetail}
           onEdit={(exam) => setExamToEdit(exam)}
+          onDelete={(exam) => setExamToDelete(exam.examId)}
           user={user}
           getExamStatus={getExamStatus}
           getTimeUntilExam={getTimeUntilExam}
