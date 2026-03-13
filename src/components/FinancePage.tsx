@@ -119,6 +119,106 @@ function StatCard({ label, value, icon, darkMode }: { label: string; value: stri
   );
 }
 
+function Skeleton({ className = '', darkMode = false }: { className?: string; darkMode?: boolean }) {
+  return <div className={`rounded-lg skeleton-shimmer ${darkMode ? 'brightness-75' : ''} ${className}`} />;
+}
+
+function FinancePageSkeleton({ darkMode, showPrivateHero }: { darkMode: boolean; showPrivateHero: boolean }) {
+  return (
+    <div className="space-y-6">
+      <section className={`${darkMode ? 'border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900' : 'border-stone-200 bg-gradient-to-br from-white to-amber-50'} rounded-[2rem] border p-6`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-4xl flex-1">
+            <Skeleton className="h-7 w-44 rounded-full" darkMode={darkMode} />
+            <Skeleton className="mt-4 h-10 w-full max-w-xl rounded-2xl" darkMode={darkMode} />
+            <Skeleton className="mt-3 h-4 w-full max-w-2xl" darkMode={darkMode} />
+            {showPrivateHero ? <Skeleton className="mt-2 h-4 w-4/5 max-w-xl" darkMode={darkMode} /> : null}
+          </div>
+          <div className={`${darkMode ? 'border-gray-700' : 'border-stone-200'} rounded-3xl border px-4 py-3`}>
+            <Skeleton className="h-4 w-32" darkMode={darkMode} />
+            <Skeleton className="mt-2 h-3 w-24" darkMode={darkMode} />
+          </div>
+        </div>
+      </section>
+
+      {showPrivateHero ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className={`${darkMode ? 'border-gray-700 bg-gray-800' : 'border-stone-200 bg-white'} rounded-3xl border p-5`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <Skeleton className="h-4 w-24" darkMode={darkMode} />
+                  <Skeleton className="mt-3 h-8 w-28" darkMode={darkMode} />
+                </div>
+                <Skeleton className="h-11 w-11 rounded-2xl" darkMode={darkMode} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className={`inline-flex flex-wrap gap-2 rounded-3xl p-2 ${darkMode ? 'bg-gray-800' : 'bg-stone-100'}`}>
+        <Skeleton className="h-10 w-28 rounded-2xl" darkMode={darkMode} />
+        <Skeleton className="h-10 w-28 rounded-2xl" darkMode={darkMode} />
+        {showPrivateHero ? <Skeleton className="h-10 w-28 rounded-2xl" darkMode={darkMode} /> : null}
+        <Skeleton className="h-10 w-24 rounded-2xl" darkMode={darkMode} />
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <Skeleton className="h-4 w-40" darkMode={darkMode} />
+        </div>
+        <Skeleton className="h-10 w-36 rounded-2xl" darkMode={darkMode} />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <section className={`${darkMode ? 'border-gray-700 bg-gray-800' : 'border-stone-200 bg-white'} rounded-3xl border p-6`}>
+          <div className="flex items-center justify-between gap-3">
+            <Skeleton className="h-6 w-40" darkMode={darkMode} />
+            <Skeleton className="h-4 w-24" darkMode={darkMode} />
+          </div>
+          <div className="mt-4 space-y-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className={`${darkMode ? 'border-gray-700 bg-gray-900' : 'border-stone-200 bg-stone-50'} rounded-2xl border p-4`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <Skeleton className="h-5 w-36" darkMode={darkMode} />
+                    <Skeleton className="mt-2 h-4 w-full" darkMode={darkMode} />
+                    <Skeleton className="mt-2 h-3 w-24" darkMode={darkMode} />
+                  </div>
+                  <Skeleton className="h-12 w-20 rounded-2xl" darkMode={darkMode} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className={`${darkMode ? 'border-gray-700 bg-gray-800' : 'border-stone-200 bg-white'} rounded-3xl border p-6`}>
+          <Skeleton className="h-6 w-32" darkMode={darkMode} />
+          <div className="mt-4 space-y-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className={`${darkMode ? 'border-gray-700 bg-gray-900' : 'border-stone-200 bg-stone-50'} rounded-2xl border p-4`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <Skeleton className="h-5 w-40" darkMode={darkMode} />
+                    <Skeleton className="mt-2 h-4 w-full" darkMode={darkMode} />
+                    <Skeleton className="mt-2 h-3 w-32" darkMode={darkMode} />
+                  </div>
+                  <div className="w-24">
+                    <Skeleton className="h-6 w-full rounded-full" darkMode={darkMode} />
+                    <Skeleton className="mt-3 h-6 w-20" darkMode={darkMode} />
+                    <Skeleton className="mt-2 h-3 w-full" darkMode={darkMode} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
 const DEMO_MEMBERS: Member[] = [
   { id: '2025-00001', name: 'Aira Santos' },
   { id: '2025-00002', name: 'Bianca Cruz' },
@@ -584,6 +684,10 @@ export default function FinancePage({ onBack, darkMode, user }: FinancePageProps
       </header>
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+        {loading ? (
+          <FinancePageSkeleton darkMode={darkMode} showPrivateHero={!!user} />
+        ) : (
+          <>
         {user ? (
           <>
             <section className={`${darkMode ? 'border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900' : 'border-stone-200 bg-gradient-to-br from-white to-amber-50'} rounded-[2rem] border p-6`}>
@@ -640,7 +744,6 @@ export default function FinancePage({ onBack, darkMode, user }: FinancePageProps
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            {loading ? <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-stone-500'}`}>Loading finance data...</p> : null}
             {error ? <p className="text-sm text-rose-500">{error}</p> : null}
           </div>
           <button
@@ -1030,6 +1133,8 @@ export default function FinancePage({ onBack, darkMode, user }: FinancePageProps
               </section>
             </div>
           </div>
+        )}
+          </>
         )}
 
       </main>

@@ -774,6 +774,26 @@ function formatExamDateOnly(dateStr: string, options: Intl.DateTimeFormatOptions
   return parsed ? parsed.toLocaleDateString('en-US', options) : '';
 }
 
+function formatRelativeStudyTime(timestamp: number | string) {
+  if (!timestamp) return 'No saved progress yet';
+  const value = typeof timestamp === 'number' ? timestamp : Date.parse(timestamp);
+  if (!Number.isFinite(value) || value <= 0) return 'No saved progress yet';
+
+  const diffMs = Date.now() - value;
+  const diffMinutes = Math.floor(diffMs / 60000);
+
+  if (diffMinutes < 1) return 'Updated just now';
+  if (diffMinutes < 60) return `Updated ${diffMinutes} min${diffMinutes === 1 ? '' : 's'} ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `Updated ${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `Updated ${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+
+  return `Updated ${new Date(value).toLocaleDateString()}`;
+}
+
 function getExamEndDate(exam: Pick<Exam, 'date' | 'endDate'>) {
   return String(exam.endDate || exam.date || '').trim();
 }
@@ -10930,11 +10950,19 @@ export const App = ({ routeRole }: AppProps) => {
         const answeredCount = Object.values(statuses).filter(status => status !== 'unanswered').length;
         const correctCount = Object.values(statuses).filter(status => status === 'correct').length;
         const incorrectCount = Object.values(statuses).filter(status => status === 'incorrect').length;
+        const unansweredCount = Math.max(0, totalCards - answeredCount);
         const progressPercent = totalCards > 0 ? Math.round((answeredCount / totalCards) * 100) : 0;
         const accuracyPercent = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0;
         const masteryPercent = totalCards > 0 ? Math.round((correctCount / totalCards) * 100) : 0;
         const lastUpdated = getProgressTimestamp(progress);
         const subjectCode = deck.subject || 'Uncategorized';
+        const urgencyScore = (
+          incorrectCount * 3 +
+          unansweredCount * 1.25 +
+          Math.max(0, 100 - accuracyPercent) * 0.45 +
+          (answeredCount > 0 && !progressPercent ? 5 : 0) +
+          (answeredCount > 0 && progressPercent < 100 ? 10 : 0)
+        );
 
         return {
           deck,
@@ -10944,9 +10972,11 @@ export const App = ({ routeRole }: AppProps) => {
           answeredCount,
           correctCount,
           incorrectCount,
+          unansweredCount,
           progressPercent,
           accuracyPercent,
           masteryPercent,
+          urgencyScore,
           isCompleted: totalCards > 0 && answeredCount === totalCards,
           lastUpdated,
           hasProgress: answeredCount > 0
@@ -10984,10 +11014,12 @@ export const App = ({ routeRole }: AppProps) => {
       startedDeckCount: number;
       totalCards: number;
       answeredCount: number;
-      correctCount: number;
-      incorrectCount: number;
-      lastUpdated: number;
-    }>();
+        correctCount: number;
+        incorrectCount: number;
+        unansweredCount: number;
+        lastUpdated: number;
+        urgencyScore: number;
+      }>();
 
     studyProgressRows.forEach(row => {
       const existing = bySubjectMap.get(row.subjectCode) || {
@@ -10999,7 +11031,9 @@ export const App = ({ routeRole }: AppProps) => {
         answeredCount: 0,
         correctCount: 0,
         incorrectCount: 0,
-        lastUpdated: 0
+        unansweredCount: 0,
+        lastUpdated: 0,
+        urgencyScore: 0
       };
 
       existing.deckCount += 1;
@@ -11008,7 +11042,9 @@ export const App = ({ routeRole }: AppProps) => {
       existing.answeredCount += row.answeredCount;
       existing.correctCount += row.correctCount;
       existing.incorrectCount += row.incorrectCount;
+      existing.unansweredCount += row.unansweredCount;
       existing.lastUpdated = Math.max(existing.lastUpdated, row.lastUpdated);
+      existing.urgencyScore += row.urgencyScore;
       bySubjectMap.set(row.subjectCode, existing);
     });
 
@@ -11017,11 +11053,14 @@ export const App = ({ routeRole }: AppProps) => {
       .map(subject => ({
         ...subject,
         coveragePercent: subject.totalCards > 0 ? Math.round((subject.answeredCount / subject.totalCards) * 100) : 0,
-        accuracyPercent: subject.answeredCount > 0 ? Math.round((subject.correctCount / subject.answeredCount) * 100) : 0
+        accuracyPercent: subject.answeredCount > 0 ? Math.round((subject.correctCount / subject.answeredCount) * 100) : 0,
+        correctPercent: subject.totalCards > 0 ? (subject.correctCount / subject.totalCards) * 100 : 0,
+        incorrectPercent: subject.totalCards > 0 ? (subject.incorrectCount / subject.totalCards) * 100 : 0,
+        unansweredPercent: subject.totalCards > 0 ? (subject.unansweredCount / subject.totalCards) * 100 : 0
       }))
       .sort((left, right) => {
-        if (right.lastUpdated !== left.lastUpdated) {
-          return right.lastUpdated - left.lastUpdated;
+        if (right.urgencyScore !== left.urgencyScore) {
+          return right.urgencyScore - left.urgencyScore;
         }
         return left.subjectName.localeCompare(right.subjectName);
       });
@@ -11040,6 +11079,22 @@ export const App = ({ routeRole }: AppProps) => {
       bySubject
     };
   }, [startedStudyProgressRows, studyProgressRows]);
+
+  const recommendedStudyRows = useMemo(
+    () => studyProgressRows
+      .filter(row => !row.isCompleted)
+      .sort((left, right) => {
+        if (right.urgencyScore !== left.urgencyScore) {
+          return right.urgencyScore - left.urgencyScore;
+        }
+        if (right.incorrectCount !== left.incorrectCount) {
+          return right.incorrectCount - left.incorrectCount;
+        }
+        return left.deck.name.localeCompare(right.deck.name);
+      })
+      .slice(0, 3),
+    [studyProgressRows]
+  );
 
   const saveDeckProgressLocal = (deckName: string, progress: DeckProgress, userId?: string | null) => {
     const progressKey = getDeckProgressStorageKey(deckName, userId);
@@ -14720,11 +14775,11 @@ export const App = ({ routeRole }: AppProps) => {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
                       <div className={`rounded-xl p-4 border ${darkMode ? 'bg-emerald-950/40 border-emerald-900' : 'bg-emerald-50 border-emerald-100'}`}>
                         <div className="text-2xl font-bold text-emerald-600">{studyProgressSummary.correctCards}</div>
-                        <div className={`text-xs ${darkMode ? 'text-emerald-300' : 'text-emerald-700'}`}>Mastered cards</div>
+                        <div className={`text-xs ${darkMode ? 'text-emerald-300' : 'text-emerald-700'}`}>Correct answers</div>
                       </div>
                       <div className={`rounded-xl p-4 border ${darkMode ? 'bg-rose-950/40 border-rose-900' : 'bg-rose-50 border-rose-100'}`}>
                         <div className="text-2xl font-bold text-rose-500">{studyProgressSummary.incorrectCards}</div>
-                        <div className={`text-xs ${darkMode ? 'text-rose-300' : 'text-rose-700'}`}>Need review</div>
+                        <div className={`text-xs ${darkMode ? 'text-rose-300' : 'text-rose-700'}`}>Incorrect answers</div>
                       </div>
                       <div className={`rounded-xl p-4 border ${darkMode ? 'bg-sky-950/40 border-sky-900' : 'bg-sky-50 border-sky-100'}`}>
                         <div className="text-2xl font-bold text-sky-600">{studyProgressSummary.accuracyPercent}%</div>
@@ -14738,6 +14793,72 @@ export const App = ({ routeRole }: AppProps) => {
                   </div>
                 </div>
               </div>
+
+              {recommendedStudyRows.length > 0 && (
+                <div className={`${darkMode ? 'bg-stone-800 border-stone-700' : 'bg-white border-stone-200'} rounded-2xl p-6 border`}>
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <div>
+                      <h2 className={`font-bold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>What to Study Next</h2>
+                      <p className={`text-sm mt-1 ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>
+                        Prioritized by low accuracy, unanswered cards, and review load.
+                      </p>
+                    </div>
+                    <div className={`text-xs px-3 py-1.5 rounded-full ${darkMode ? 'bg-rose-950/40 text-rose-300' : 'bg-rose-50 text-rose-700'}`}>
+                      {recommendedStudyRows.length} priority deck{recommendedStudyRows.length === 1 ? '' : 's'}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    {recommendedStudyRows.map(row => (
+                      <div key={row.deck.name} className={`rounded-2xl border p-4 ${darkMode ? 'border-stone-700 bg-stone-900/60' : 'border-stone-200 bg-stone-50/70'}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className={`font-semibold truncate ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>{row.deck.name}</h3>
+                            <p className={`text-xs mt-1 ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>{row.subjectName}</p>
+                          </div>
+                          <span className={`text-xs px-2.5 py-1 rounded-full whitespace-nowrap ${
+                            row.accuracyPercent >= 80
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : row.accuracyPercent >= 60
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-rose-100 text-rose-700'
+                          }`}>
+                            {row.accuracyPercent}% accuracy
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3 mt-4 text-sm">
+                          <div>
+                            <div className={`font-semibold ${darkMode ? 'text-stone-100' : 'text-stone-800'}`}>{row.unansweredCount}</div>
+                            <div className={`text-xs ${darkMode ? 'text-stone-500' : 'text-stone-400'}`}>unanswered</div>
+                          </div>
+                          <div>
+                            <div className="font-semibold text-rose-500">{row.incorrectCount}</div>
+                            <div className={`text-xs ${darkMode ? 'text-stone-500' : 'text-stone-400'}`}>to revisit</div>
+                          </div>
+                          <div>
+                            <div className="font-semibold text-sky-600">{row.progressPercent}%</div>
+                            <div className={`text-xs ${darkMode ? 'text-stone-500' : 'text-stone-400'}`}>complete</div>
+                          </div>
+                        </div>
+
+                        <div className={`mt-3 text-xs ${darkMode ? 'text-stone-500' : 'text-stone-400'}`}>
+                          {formatRelativeStudyTime(row.lastUpdated)}
+                        </div>
+
+                        <button
+                          onClick={() => openDeck(row.deck)}
+                          className={`w-full mt-4 px-4 py-2 rounded-xl font-medium transition-colors ${
+                            darkMode ? 'bg-stone-700 hover:bg-stone-600 text-stone-100' : 'bg-stone-800 hover:bg-stone-700 text-white'
+                          }`}
+                        >
+                          {row.hasProgress ? 'Continue Review' : 'Start Deck'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {studyProgressSummary.bySubject.length > 0 && (
                 <div className={`${darkMode ? 'bg-stone-800 border-stone-700' : 'bg-white border-stone-200'} rounded-2xl p-6 border`}>
@@ -14755,10 +14876,43 @@ export const App = ({ routeRole }: AppProps) => {
                           <div className="text-right">
                             <div className={`text-sm font-semibold ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>{subject.coveragePercent}%</div>
                             <div className={`text-xs ${darkMode ? 'text-stone-500' : 'text-stone-400'}`}>coverage</div>
+                            <div className={`text-xs mt-1 ${subject.accuracyPercent >= 80 ? 'text-emerald-600' : subject.accuracyPercent >= 60 ? 'text-amber-600' : 'text-rose-500'}`}>
+                              {subject.accuracyPercent}% accuracy
+                            </div>
                           </div>
                         </div>
                         <div className={`h-3 rounded-full overflow-hidden ${darkMode ? 'bg-stone-700' : 'bg-stone-100'}`}>
-                          <div className="h-full bg-gradient-to-r from-amber-400 via-sky-500 to-emerald-500 rounded-full" style={{ width: `${Math.max(subject.coveragePercent, 4)}%` }} />
+                          <div className="flex h-full w-full">
+                            <div
+                              className="h-full bg-emerald-500"
+                              style={{ width: `${subject.correctPercent}%` }}
+                              title={`${subject.correctCount} correct`}
+                            />
+                            <div
+                              className="h-full bg-rose-500"
+                              style={{ width: `${subject.incorrectPercent}%` }}
+                              title={`${subject.incorrectCount} incorrect`}
+                            />
+                            <div
+                              className={`h-full ${darkMode ? 'bg-stone-700' : 'bg-stone-200'}`}
+                              style={{ width: `${subject.unansweredPercent}%` }}
+                              title={`${subject.unansweredCount} unanswered`}
+                            />
+                          </div>
+                        </div>
+                        <div className={`flex items-center gap-4 text-[11px] ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                            Correct
+                          </span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                            Incorrect
+                          </span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className={`h-2.5 w-2.5 rounded-full ${darkMode ? 'bg-stone-600' : 'bg-stone-300'}`} />
+                            Unanswered
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -14826,7 +14980,7 @@ export const App = ({ routeRole }: AppProps) => {
                           </div>
 
                           <div className={`mt-2 text-xs ${darkMode ? 'text-stone-500' : 'text-stone-400'}`}>
-                            {row.lastUpdated > 0 ? `Updated ${new Date(row.lastUpdated).toLocaleString()}` : 'No saved progress yet'}
+                            {formatRelativeStudyTime(row.lastUpdated)}
                           </div>
                         </div>
 
