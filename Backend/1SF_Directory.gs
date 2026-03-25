@@ -315,6 +315,8 @@ function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('1SF Directory')
     .addItem('Setup Sheets', 'setupSheets')
+    .addItem('Install Password Hash Trigger', 'ensurePasswordHashOnEditTrigger')
+    .addItem('Backfill Password Hashes', 'backfillPlaintextPasswords')
     .addItem('Install OTP Cleanup Trigger', 'ensureOtpCleanupTrigger')
     .addItem('Clean Expired OTPs', 'cleanExpiredOtps')
     .addItem('Show Email Quota', 'showEmailQuotaSidebar')
@@ -375,6 +377,8 @@ function doPost(e) {
         return jsonResponse(uploadImage(data));
       case 'saveScannedQRCode':
         return jsonResponse(saveScannedQRCode(data));
+      case 'updateDigitalSignature':
+        return jsonResponse(updateDigitalSignature(data));
       case 'updateUserProfile':
         return jsonResponse(updateUserProfile(data));
       case 'getUserProfile':
@@ -528,6 +532,11 @@ function setupSheets() {
   const triggerResult = ensureOtpCleanupTrigger();
   if (triggerResult && triggerResult.message) {
     results.push(triggerResult.message);
+  }
+
+  const passwordTriggerResult = ensurePasswordHashOnEditTrigger();
+  if (passwordTriggerResult && passwordTriggerResult.message) {
+    results.push(passwordTriggerResult.message);
   }
 
   const groupSetup = setupGroupSheets();
@@ -1930,6 +1939,71 @@ function verifyPassword(password, storedHash, storedSalt) {
   return computed.hash === storedHash;
 }
 
+/**
+ * Installable on-edit trigger entrypoint.
+ * Hashes plaintext values written into UserAccounts.passwordHash (column C)
+ * and stores the generated salt in column D.
+ */
+function onEditHashUserAccountPasswords(e) {
+  try {
+    if (!e || !e.range) return;
+
+    const range = e.range;
+    const sheet = range.getSheet();
+    if (!sheet || sheet.getName() !== 'UserAccounts') return;
+
+    const startRow = range.getRow();
+    const endRow = startRow + range.getNumRows() - 1;
+    const startCol = range.getColumn();
+    const endCol = startCol + range.getNumColumns() - 1;
+    const passwordCol = COL.PASSWORD_HASH + 1;
+
+    if (endCol < passwordCol || startCol > passwordCol) return;
+
+    for (let row = startRow; row <= endRow; row++) {
+      if (row === 1) continue;
+      hashAndSaltPasswordCellIfNeeded(sheet, row);
+    }
+  } catch (error) {
+    Logger.log('onEditHashUserAccountPasswords error: ' + error.message);
+  }
+}
+
+function hashAndSaltPasswordCellIfNeeded(sheet, row) {
+  if (!sheet || typeof sheet.getRange !== 'function' || !row) {
+    return {
+      success: false,
+      message: 'hashAndSaltPasswordCellIfNeeded requires a sheet and row. Use onEditHashUserAccountPasswords trigger instead.'
+    };
+  }
+
+  const passwordCell = sheet.getRange(row, COL.PASSWORD_HASH + 1);
+  const saltCell = sheet.getRange(row, COL.PASSWORD_SALT + 1);
+
+  const rawPasswordValue = passwordCell.getValue();
+  const rawSaltValue = saltCell.getValue();
+  const passwordValue = String(rawPasswordValue || '');
+  const saltValue = String(rawSaltValue || '');
+
+  if (!passwordValue) {
+    return { success: true, updated: false, reason: 'empty-password' };
+  }
+
+  if (isHex64(passwordValue) && isHex64(saltValue)) {
+    return { success: true, updated: false, reason: 'already-hashed' };
+  }
+
+  const hashed = hashPassword(passwordValue);
+  passwordCell.setValue(hashed.hash);
+  saltCell.setValue(hashed.salt);
+
+  return { success: true, updated: true };
+}
+
+function isHex64(value) {
+  return /^[a-f0-9]{64}$/i.test(String(value || '').trim());
+}
+
 // =====================================================
 // VALIDATION FUNCTIONS
 // =====================================================
@@ -2545,6 +2619,68 @@ function ensureOtpCleanupTrigger() {
   return { success: true, created: true, message: 'Installed hourly OTP cleanup trigger' };
 }
 
+function ensurePasswordHashOnEditTrigger() {
+  const handler = 'onEditHashUserAccountPasswords';
+  const triggers = ScriptApp.getProjectTriggers();
+
+  for (let i = 0; i < triggers.length; i++) {
+    if (
+      triggers[i].getHandlerFunction() === handler &&
+      triggers[i].getEventType() === ScriptApp.EventType.ON_EDIT
+    ) {
+      return { success: true, exists: true, message: 'Password hash on-edit trigger already installed' };
+    }
+  }
+
+  ScriptApp.newTrigger(handler)
+    .forSpreadsheet(SpreadsheetApp.getActiveSpreadsheet())
+    .onEdit()
+    .create();
+
+  return { success: true, created: true, message: 'Installed password hash on-edit trigger' };
+}
+
+/**
+ * Hash any remaining plaintext passwords in UserAccounts column C.
+ * Safe to run repeatedly; already-hashed rows are skipped.
+ */
+function backfillPlaintextPasswords() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('UserAccounts');
+
+  if (!sheet) {
+    return { success: false, message: 'UserAccounts sheet not found' };
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    return { success: true, scanned: 0, updated: 0, skipped: 0, message: 'No user rows to process' };
+  }
+
+  let scanned = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  for (let row = 2; row <= lastRow; row++) {
+    scanned++;
+    const result = hashAndSaltPasswordCellIfNeeded(sheet, row);
+
+    if (result && result.updated) {
+      updated++;
+    } else {
+      skipped++;
+    }
+  }
+
+  return {
+    success: true,
+    scanned: scanned,
+    updated: updated,
+    skipped: skipped,
+    message: 'Password backfill completed'
+  };
+}
+
 function removeExpiredOtpRows(sheet) {
   if (!sheet) return 0;
 
@@ -2817,10 +2953,6 @@ function registerUser(data) {
     if (!data.email) {
       return { error: 'Email is required' };
     }
-
-    if (!data.schoolEmail) {
-      return { error: 'School email is required' };
-    }
     
     // Validate username availability
     const usernameCheck = checkUsernameAvailable(data.username);
@@ -2839,10 +2971,13 @@ function registerUser(data) {
     if (!emailCheck.available) {
       return { error: emailCheck.error || 'Email is already registered' };
     }
-    
-    const schoolEmailCheck = checkEmailAvailable(data.schoolEmail, 'school');
-    if (!schoolEmailCheck.available) {
-      return { error: schoolEmailCheck.error || 'School email is already registered' };
+
+    const schoolEmail = String(data.schoolEmail || '').trim();
+    if (schoolEmail) {
+      const schoolEmailCheck = checkEmailAvailable(schoolEmail, 'school');
+      if (!schoolEmailCheck.available) {
+        return { error: schoolEmailCheck.error || 'School email is already registered' };
+      }
     }
     
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -2873,7 +3008,7 @@ function registerUser(data) {
           const vEmail = verifData[i][2];
           const vType = verifData[i][3];
           if (vType === 'personal' && vEmail === data.email) emailVerifiedFlag = true;
-          if (vType === 'school' && vEmail === data.schoolEmail) schoolEmailVerifiedFlag = true;
+          if (schoolEmail && vType === 'school' && vEmail === schoolEmail) schoolEmailVerifiedFlag = true;
         }
       }
     }
@@ -2943,7 +3078,7 @@ function registerUser(data) {
       data.lastName,                    // F: lastName
       data.email,                       // G: email
       emailVerifiedFlag,                // H: emailVerified
-      data.schoolEmail,                 // I: schoolEmail
+      schoolEmail,                      // I: schoolEmail
       schoolEmailVerifiedFlag,          // J: schoolEmailVerified
       data.birthday || '',              // K: birthday
       profilePictureFileId,             // L: profilePictureFileId
@@ -2968,8 +3103,8 @@ function registerUser(data) {
       if (emailVerifiedFlag) {
         removeVerifiedOtpRowsForEmail(emailVerifSheet, data.idNumber, data.email, 'personal');
       }
-      if (schoolEmailVerifiedFlag) {
-        removeVerifiedOtpRowsForEmail(emailVerifSheet, data.idNumber, data.schoolEmail, 'school');
+      if (schoolEmailVerifiedFlag && schoolEmail) {
+        removeVerifiedOtpRowsForEmail(emailVerifSheet, data.idNumber, schoolEmail, 'school');
       }
     }
     
@@ -2985,7 +3120,7 @@ function registerUser(data) {
         fullName: `${data.firstName} ${data.lastName}`,
         email: data.email,
         emailVerified: emailVerifiedFlag,
-        schoolEmail: data.schoolEmail,
+        schoolEmail: schoolEmail,
         schoolEmailVerified: schoolEmailVerifiedFlag,
         birthday: data.birthday || '',
         profilePictureURL: getFileUrl(profilePictureFileId),
@@ -3445,6 +3580,36 @@ function updateUserRole(adminIdNumber, targetIdNumber, role, position, sessionTo
     return { error: 'User not found' };
   } catch (error) {
     return { error: error.message };
+  }
+}
+
+/**
+ * Update user digital signature only.
+ */
+function updateDigitalSignature(data) {
+  try {
+    const idNumber = safeDirectoryString(data.idNumber || data.userId);
+    if (!idNumber) {
+      return { error: 'ID Number is required' };
+    }
+
+    const auth = getAuthenticatedDirectoryContext(idNumber, data.sessionToken);
+    if (auth.error) return { error: auth.error };
+
+    const fileId = safeDirectoryString(data.digitalSignatureFileId);
+    const rowNumber = auth.userRowIndex + 1;
+
+    auth.userSheet.getRange(rowNumber, COL.DIGITAL_SIGNATURE_FILE_ID + 1).setValue(fileId);
+    auth.userSheet.getRange(rowNumber, COL.LAST_LOGIN + 1).setValue(new Date().toISOString());
+
+    return {
+      success: true,
+      message: fileId ? 'Digital signature updated successfully' : 'Digital signature removed successfully',
+      digitalSignatureFileId: fileId,
+      digitalSignatureURL: getFileUrl(fileId)
+    };
+  } catch (error) {
+    return { error: 'Failed to update digital signature: ' + error.message };
   }
 }
 

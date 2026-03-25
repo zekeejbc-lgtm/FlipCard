@@ -527,6 +527,7 @@ type User = {
   profilePictureURL?: string;
   profilePictureFileId?: string;
   digitalSignatureURL?: string;
+  digitalSignatureFileId?: string;
   birthday?: string;
   email: string;
   emailVerified: boolean;
@@ -2773,11 +2774,13 @@ const DigitalSignatureUpload = ({
   value, 
   onChange,
   idNumber,
+  sessionToken,
   simpleMode = false // In simple mode, just returns dataURL without uploading
 }: { 
   value: string; 
   onChange: (url: string, fileId?: string) => void;
   idNumber?: string;
+  sessionToken?: string;
   simpleMode?: boolean;
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -2860,6 +2863,7 @@ const DigitalSignatureUpload = ({
         body: JSON.stringify({
           action: 'uploadDigitalSignature',
           idNumber: idNumber,
+          sessionToken: sessionToken,
           data: base64,
           fileName: `signature_${Date.now()}.png`,
           mimeType: 'image/png'
@@ -2913,6 +2917,7 @@ const DigitalSignatureUpload = ({
           body: JSON.stringify({
             action: 'uploadDigitalSignature',
             idNumber: idNumber,
+            sessionToken: sessionToken,
             data: base64,
             fileName: file.name,
             mimeType: file.type
@@ -3632,17 +3637,14 @@ const RegistrationForm = ({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [personalVerified, setPersonalVerified] = useState(false);
-  const [schoolVerified, setSchoolVerified] = useState(false);
   const [pendingUser, setPendingUser] = useState<User | null>(null);
   const [showOtpModal, setShowOtpModal] = useState(false);
-  const [otpEmailType, setOtpEmailType] = useState<'personal' | 'school'>('personal');
   const [otpEmail, setOtpEmail] = useState('');
   
   // Validation states
   const [usernameStatus, setUsernameStatus] = useState<{ checking: boolean; available: boolean | null; error?: string }>({ checking: false, available: null });
   const [idNumberStatus, setIdNumberStatus] = useState<{ checking: boolean; available: boolean | null; valid: boolean | null; error?: string }>({ checking: false, available: null, valid: null });
   const [emailStatus, setEmailStatus] = useState<{ checking: boolean; available: boolean | null; valid: boolean | null; error?: string }>({ checking: false, available: null, valid: null });
-  const [schoolEmailStatus, setSchoolEmailStatus] = useState<{ checking: boolean; available: boolean | null; valid: boolean | null; error?: string }>({ checking: false, available: null, valid: null });
   
   // Form fields
   const [formData, setFormData] = useState({
@@ -3653,7 +3655,6 @@ const RegistrationForm = ({
     idNumber: '',
     birthday: '',
     email: '',
-    schoolEmail: '',
     school: SCHOOL_DATA.schools[0],
     college: SCHOOL_DATA.colleges[0],
     program: SCHOOL_DATA.programs[0],
@@ -3753,68 +3754,21 @@ const RegistrationForm = ({
     return () => clearTimeout(timer);
   }, [formData.email]);
 
-  // Check school email availability with debounce
-  useEffect(() => {
-    if (!formData.schoolEmail) {
-      setSchoolEmailStatus({ checking: false, available: null, valid: null });
-      return;
-    }
-    
-    if (!validateEmail(formData.schoolEmail)) {
-      setSchoolEmailStatus({ checking: false, available: null, valid: false, error: 'Invalid email format' });
-      return;
-    }
-    
-    // Check if school email is same as personal email
-    if (formData.schoolEmail.toLowerCase() === formData.email.toLowerCase()) {
-      setSchoolEmailStatus({ checking: false, available: false, valid: true, error: 'Must be different from personal email' });
-      return;
-    }
-    
-    setSchoolEmailStatus(prev => ({ ...prev, checking: true, valid: true }));
-    const timer = setTimeout(async () => {
-      try {
-        const response = await fetch(GAS_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'checkEmail', email: formData.schoolEmail, type: 'school' })
-        });
-        const result = await response.json();
-        setSchoolEmailStatus({ checking: false, available: result.available === true, valid: result.valid !== false, error: result.error });
-      } catch (err) {
-        setSchoolEmailStatus({ checking: false, available: null, valid: true, error: 'Could not verify' });
-      }
-    }, 500);
-    
-    return () => clearTimeout(timer);
-  }, [formData.schoolEmail, formData.email]);
-
   const updateField = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setError('');
     if (field === 'email') {
       setPersonalVerified(false);
-      setSchoolVerified(false);
-    }
-    if (field === 'schoolEmail') {
-      setSchoolVerified(false);
     }
   };
 
-  const openOtpForEmail = (type: 'personal' | 'school') => {
-    if (type === 'personal') {
-      if (!formData.email || !validateEmail(formData.email) || emailStatus.available === false) {
-        setError('Please enter an available personal email first');
-        return;
-      }
-      setOtpEmail(formData.email);
-    } else {
-      if (!formData.schoolEmail || !validateEmail(formData.schoolEmail) || schoolEmailStatus.available === false) {
-        setError('Please enter an available school email first');
-        return;
-      }
-      setOtpEmail(formData.schoolEmail);
+  const openOtpForEmail = () => {
+    if (!formData.email || !validateEmail(formData.email) || emailStatus.available === false) {
+      setError('Please enter an available personal email first');
+      return;
     }
-    setOtpEmailType(type);
+
+    setOtpEmail(formData.email);
     setShowOtpModal(true);
   };
 
@@ -3869,26 +3823,6 @@ const RegistrationForm = ({
         }
         if (!personalVerified) {
           setError('Please verify your personal email to continue');
-          return false;
-        }
-        if (!formData.schoolEmail) {
-          setError('Please enter your school email');
-          return false;
-        }
-        if (!validateEmail(formData.schoolEmail)) {
-          setError('Please enter a valid school email');
-          return false;
-        }
-        if (schoolEmailStatus.checking) {
-          setError('Please wait while we verify your school email');
-          return false;
-        }
-        if (schoolEmailStatus.available === false) {
-          setError(schoolEmailStatus.error || 'This school email is already registered');
-          return false;
-        }
-        if (!schoolVerified) {
-          setError('Please verify your school email');
           return false;
         }
         return true;
@@ -3967,7 +3901,6 @@ const RegistrationForm = ({
           firstName: formData.firstName,
           lastName: formData.lastName,
           email: formData.email,
-          schoolEmail: formData.schoolEmail,
           birthday: formData.birthday,
           school: formData.school,
           college: formData.college,
@@ -3978,8 +3911,7 @@ const RegistrationForm = ({
           digitalSignatureURL: formData.digitalSignature,
           profilePictureURL: formData.profilePicture,
           profilePictureFileId: formData.profilePictureFileId,
-          emailVerified: personalVerified,
-          schoolEmailVerified: schoolVerified
+          emailVerified: personalVerified
         })
       });
 
@@ -3992,14 +3924,13 @@ const RegistrationForm = ({
           name: result.user.fullName || `${result.user.firstName} ${result.user.lastName}`,
           profilePicture: result.user.profilePictureURL
         };
-        if (personalVerified && (!user.schoolEmail || schoolVerified)) {
+        if (personalVerified) {
           localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
           updateToast(toastId, 'Account created successfully!', 'success');
           setTimeout(() => removeToast(toastId), 3000);
           onRegister(user);
         } else {
           setPendingUser(user);
-          setOtpEmailType('personal');
           setOtpEmail(user.email);
           setShowOtpModal(true);
           updateToast(toastId, 'Account created. Please verify your email.', 'success');
@@ -4190,71 +4121,14 @@ const RegistrationForm = ({
               <div className="flex items-center gap-2 mt-2">
                 <button
                   type="button"
-                  onClick={() => openOtpForEmail('personal')}
+                  onClick={openOtpForEmail}
                   disabled={personalVerified || emailStatus.checking || emailStatus.available === false || !formData.email || !validateEmail(formData.email)}
                   className={`px-4 py-2 rounded-lg text-sm font-semibold ${personalVerified ? 'bg-emerald-600 text-white' : 'bg-stone-800 text-white hover:bg-stone-900 disabled:opacity-50'}`}
                 >
                   {personalVerified ? 'Personal Email Verified' : 'Verify Personal Email'}
                 </button>
-                {!personalVerified && <span className="text-xs text-stone-500">Required before school email</span>}
+                {!personalVerified && <span className="text-xs text-stone-500">Required before continuing</span>}
               </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-stone-600 mb-1">School Email *</label>
-              <div className="relative">
-                <input
-                  type="email"
-                  value={formData.schoolEmail}
-                  onChange={(e) => updateField('schoolEmail', e.target.value)}
-                  placeholder="juan@usep.edu.ph"
-                  disabled={!personalVerified}
-                  className={`w-full p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-stone-400 outline-none ${
-                    formData.schoolEmail && schoolEmailStatus.available === true && schoolEmailStatus.valid === true ? 'border-emerald-500' : 
-                    formData.schoolEmail && (schoolEmailStatus.available === false || schoolEmailStatus.valid === false) ? 'border-red-500' : 
-                    'border-stone-200'
-                  }`}
-                />
-                {formData.schoolEmail && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    {schoolEmailStatus.checking ? (
-                      <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
-                    ) : schoolEmailStatus.available === true && schoolEmailStatus.valid === true ? (
-                      <Icon name="check_circle" className="text-emerald-500" />
-                    ) : (schoolEmailStatus.available === false || schoolEmailStatus.valid === false) ? (
-                      <Icon name="cancel" className="text-red-500" />
-                    ) : null}
-                  </div>
-                )}
-              </div>
-              {!personalVerified && (
-                <p className="text-xs mt-1 text-amber-600">Verify personal email first before adding school email.</p>
-              )}
-              {personalVerified && formData.schoolEmail && (
-                <p className={`text-xs mt-1 flex items-center gap-1 ${
-                  schoolEmailStatus.available === true && schoolEmailStatus.valid === true ? 'text-emerald-500' :
-                  schoolEmailStatus.available === false || schoolEmailStatus.valid === false ? 'text-red-500' :
-                  'text-stone-400'
-                }`}>
-                  {schoolEmailStatus.checking ? 'Verifying...' :
-                   schoolEmailStatus.available === true && schoolEmailStatus.valid === true ? <><Icon name="check_circle" className="text-sm" /> School email is available</> :
-                   schoolEmailStatus.error ? <><Icon name="cancel" className="text-sm" /> {schoolEmailStatus.error}</> :
-                   'Enter your school email address'}
-                </p>
-              )}
-              {personalVerified && formData.schoolEmail && (
-                <div className="flex items-center gap-2 mt-2">
-                  <button
-                    type="button"
-                    onClick={() => openOtpForEmail('school')}
-                    disabled={schoolVerified || schoolEmailStatus.checking || schoolEmailStatus.available === false}
-                    className={`px-4 py-2 rounded-lg text-sm font-semibold ${schoolVerified ? 'bg-emerald-600 text-white' : 'bg-stone-800 text-white hover:bg-stone-900 disabled:opacity-50'}`}
-                  >
-                    {schoolVerified ? 'School Email Verified' : 'Verify School Email'}
-                  </button>
-                  {!schoolVerified && <span className="text-xs text-stone-500">Optional but recommended</span>}
-                </div>
-              )}
             </div>
           </div>
         );
@@ -4524,7 +4398,7 @@ const RegistrationForm = ({
         {step < 5 ? (
           <button
             onClick={handleNext}
-            disabled={step === 2 && (!personalVerified || (formData.schoolEmail && !schoolVerified))}
+            disabled={step === 2 && !personalVerified}
             className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-semibold hover:bg-stone-900 transition-all disabled:opacity-50"
           >
             Next
@@ -4546,7 +4420,7 @@ const RegistrationForm = ({
             <EmailOTPVerification
               idNumber={pendingUser?.idNumber || formData.idNumber}
               email={otpEmail}
-              emailType={otpEmailType}
+              emailType="personal"
               addToast={addToast}
               updateToast={updateToast}
               removeToast={removeToast}
@@ -4555,8 +4429,7 @@ const RegistrationForm = ({
                 setPendingUser(null);
               }}
               onVerified={() => {
-                if (otpEmailType === 'personal') setPersonalVerified(true);
-                if (otpEmailType === 'school') setSchoolVerified(true);
+                setPersonalVerified(true);
                 if (!pendingUser) {
                   // Pre-registration verification path
                   setShowOtpModal(false);
@@ -4564,17 +4437,8 @@ const RegistrationForm = ({
                 }
                 const updatedUser: User = {
                   ...pendingUser,
-                  emailVerified: otpEmailType === 'personal' ? true : pendingUser.emailVerified,
-                  schoolEmailVerified: otpEmailType === 'school' ? true : pendingUser.schoolEmailVerified
+                  emailVerified: true
                 };
-
-                if (otpEmailType === 'personal' && pendingUser.schoolEmail) {
-                  setPendingUser(updatedUser);
-                  setOtpEmailType('school');
-                  setOtpEmail(pendingUser.schoolEmail);
-                  setShowOtpModal(true);
-                  return;
-                }
 
                 localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
                 onRegister(updatedUser);
@@ -4599,7 +4463,11 @@ const ProfilePage = ({
   updateToast,
   removeToast,
   darkMode = false,
-  setDarkMode
+  setDarkMode,
+  notificationsEnabled,
+  notificationPermission,
+  onEnableNotifications,
+  onDisableNotifications
 }: {
   user: User;
   onClose: () => void;
@@ -4610,10 +4478,17 @@ const ProfilePage = ({
   removeToast: (id: number) => void;
   darkMode?: boolean;
   setDarkMode: (mode: boolean) => void;
+  notificationsEnabled: boolean;
+  notificationPermission: 'default' | 'granted' | 'denied';
+  onEnableNotifications: () => Promise<void>;
+  onDisableNotifications: () => Promise<void>;
 }) => {
   const [editing, setEditing] = useState(false);
+  const [showSignaturePreview, setShowSignaturePreview] = useState(true);
   const [editData, setEditData] = useState({
     ...user,
+    digitalSignature: user.digitalSignatureURL || '',
+    digitalSignatureFileId: user.digitalSignatureFileId || '',
     birthday: toDateInputValue(user.birthday),
     newUsername: '',
     newPassword: '',
@@ -4645,6 +4520,73 @@ const ProfilePage = ({
     className: darkMode ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-100 text-amber-700',
     icon: 'error'
   };
+
+  const notificationSettingsPanel = (
+    <div className={`rounded-xl border p-4 ${darkMode ? 'bg-gray-700/60 border-gray-600' : 'bg-blue-50 border-blue-200'}`}>
+      <div className="flex items-center gap-3 mb-2">
+        <Icon name="notifications_active" className={darkMode ? 'text-blue-300' : 'text-blue-600'} />
+        <h3 className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-blue-800'}`}>Notification Settings</h3>
+      </div>
+      <p className={`text-sm mb-3 ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>
+        Get notified about upcoming exams and deadlines even when the app is closed.
+      </p>
+      <p className={`text-xs mb-3 ${darkMode ? 'text-blue-200' : 'text-blue-600'}`}>
+        Current status:{' '}
+        <strong className="inline-flex items-center gap-1">
+          {notificationsEnabled ? (
+            <>
+              <Icon name="check_circle" className="text-sm" />
+              Enabled
+            </>
+          ) : notificationPermission === 'denied' ? (
+            <>
+              <Icon name="cancel" className="text-sm" />
+              Blocked
+            </>
+          ) : (
+            <>
+              <Icon name="radio_button_unchecked" className="text-sm" />
+              Not enabled
+            </>
+          )}
+        </strong>
+      </p>
+
+      {notificationsEnabled ? (
+        <div className="space-y-2">
+          <p className={`text-sm inline-flex items-center gap-1 ${darkMode ? 'text-emerald-300' : 'text-green-700'}`}>
+            <Icon name="check_circle" className="text-sm" />
+            Notifications are enabled.
+          </p>
+          <button
+            onClick={onDisableNotifications}
+            className="w-full py-2 px-4 bg-red-100 text-red-700 rounded-xl text-sm font-medium hover:bg-red-200 transition-colors"
+          >
+            Disable Notifications
+          </button>
+        </div>
+      ) : notificationPermission === 'denied' ? (
+        <div className={`border rounded-lg p-3 ${darkMode ? 'bg-red-900/30 border-red-800' : 'bg-red-100 border-red-200'}`}>
+          <p className={`text-sm mb-2 ${darkMode ? 'text-red-200' : 'text-red-700'}`}>Notifications are blocked in your browser settings.</p>
+          <p className={`text-xs ${darkMode ? 'text-red-300' : 'text-red-600'}`}>To enable: Go to browser settings, then Site settings, then Notifications.</p>
+        </div>
+      ) : (
+        <button
+          onClick={onEnableNotifications}
+          className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+        >
+          <Icon name="notifications_active" />
+          Enable Notifications
+        </button>
+      )}
+
+      <div className={`mt-3 rounded-lg border p-3 ${darkMode ? 'bg-amber-900/20 border-amber-700' : 'bg-amber-50 border-amber-200'}`}>
+        <p className={`text-xs ${darkMode ? 'text-amber-200' : 'text-amber-700'}`}>
+          Notification delivery requires internet connection and backend push configuration.
+        </p>
+      </div>
+    </div>
+  );
 
   // Check username availability
   useEffect(() => {
@@ -4775,6 +4717,7 @@ const ProfilePage = ({
         firstName,
         lastName,
         profilePictureFileId: editData.profilePictureFileId,
+        digitalSignatureFileId: editData.digitalSignatureFileId,
         birthday: toDateInputValue(editData.birthday),
         email: editData.email,
         schoolEmail: editData.schoolEmail,
@@ -4805,6 +4748,8 @@ const ProfilePage = ({
           profilePictureURL: editData.profilePicture,
           profilePicture: editData.profilePicture,
           profilePictureFileId: editData.profilePictureFileId,
+          digitalSignatureURL: editData.digitalSignature,
+          digitalSignatureFileId: editData.digitalSignatureFileId,
           birthday: toDateInputValue(editData.birthday),
           email: editData.email,
           schoolEmail: editData.schoolEmail,
@@ -4815,7 +4760,15 @@ const ProfilePage = ({
         localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
         onUpdate(updatedUser);
         setEditing(false);
-        setEditData({ ...updatedUser, birthday: toDateInputValue(updatedUser.birthday), newUsername: '', newPassword: '', confirmPassword: '' });
+        setEditData({
+          ...updatedUser,
+          digitalSignature: updatedUser.digitalSignatureURL || '',
+          digitalSignatureFileId: updatedUser.digitalSignatureFileId || '',
+          birthday: toDateInputValue(updatedUser.birthday),
+          newUsername: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
 
         if (personalEmailChanged || schoolEmailChanged) {
           setPendingProfileUser(updatedUser);
@@ -4831,6 +4784,49 @@ const ProfilePage = ({
       }
     } catch (err) {
       console.error('Update failed:', err);
+      setEditError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateSignatureOnly = async () => {
+    setEditError('');
+
+    if (!editData.digitalSignatureFileId) {
+      setEditError('Please upload or draw a signature first, then save it.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'updateDigitalSignature',
+          idNumber: user.idNumber,
+          sessionToken: user.sessionToken,
+          digitalSignatureFileId: editData.digitalSignatureFileId
+        })
+      });
+
+      const result = await response.json();
+      if (!result.success) {
+        setEditError(result.error || 'Failed to update digital signature');
+        return;
+      }
+
+      const updatedUser: User = {
+        ...user,
+        digitalSignatureURL: editData.digitalSignature,
+        digitalSignatureFileId: editData.digitalSignatureFileId
+      };
+
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
+      onUpdate(updatedUser);
+      const toastId = addToast('Digital signature updated successfully', 'success');
+      setTimeout(() => removeToast(toastId), 3000);
+    } catch (err) {
       setEditError('Network error. Please try again.');
     } finally {
       setLoading(false);
@@ -4899,6 +4895,36 @@ const ProfilePage = ({
                 idNumber={user?.idNumber}
                 firstName={splitFullName(editData.name).firstName}
                 lastName={splitFullName(editData.name).lastName}
+              />
+            </div>
+
+            <div className={`rounded-xl border p-4 ${darkMode ? 'bg-gray-700/60 border-gray-600' : 'bg-stone-50 border-stone-200'}`}>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Digital Signature</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-stone-500'} mt-1`}>
+                    Draw or upload to replace your current signature.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleUpdateSignatureOnly}
+                  disabled={loading}
+                  className="px-3 py-2 text-sm bg-stone-800 text-white rounded-lg hover:bg-stone-900 disabled:opacity-60"
+                >
+                  Update Signature
+                </button>
+              </div>
+              <DigitalSignatureUpload
+                value={editData.digitalSignature || ''}
+                onChange={(url, fileId) => setEditData(prev => ({
+                  ...prev,
+                  digitalSignature: url,
+                  digitalSignatureURL: url,
+                  digitalSignatureFileId: fileId || prev.digitalSignatureFileId || ''
+                }))}
+                idNumber={user?.idNumber}
+                sessionToken={user?.sessionToken}
               />
             </div>
 
@@ -5015,6 +5041,8 @@ const ProfilePage = ({
               </div>
             </div>
 
+            {notificationSettingsPanel}
+
             {/* Credentials Section */}
             <div className="space-y-4">
               <h3 className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-stone-500'} uppercase tracking-wider`}>Change Credentials (Optional)</h3>
@@ -5123,13 +5151,16 @@ const ProfilePage = ({
               <button
                 onClick={() => {
                   setEditing(false);
-                  setEditData({
+                  setEditData(prev => ({
+                    ...prev,
                     ...user,
+                    digitalSignature: user.digitalSignatureURL || '',
+                    digitalSignatureFileId: user.digitalSignatureFileId || '',
                     birthday: toDateInputValue(user.birthday),
                     newUsername: '',
                     newPassword: '',
                     confirmPassword: ''
-                  });
+                  }));
                   setEditError('');
                 }}
                 className={`flex-1 py-3 border ${darkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-stone-300 text-stone-700 hover:bg-stone-50'} rounded-xl font-semibold transition-all`}
@@ -5248,6 +5279,41 @@ const ProfilePage = ({
                 </div>
                 <Icon name="edit" className={`text-sm ${darkMode ? 'text-gray-600' : 'text-stone-300'}`} />
               </div>
+
+              <div className={`p-3 rounded-xl ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-50'} transition-all`}>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`w-10 h-10 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-stone-100'} flex items-center justify-center`}>
+                    <Icon name="draw" className={darkMode ? 'text-gray-300' : 'text-stone-600'} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>Digital Signature</p>
+                    <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-800'}`}>
+                      {user.digitalSignatureURL ? 'Saved signature on file' : 'No signature on file'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowSignaturePreview(prev => !prev)}
+                    className={`px-2 py-1 text-xs rounded-md border ${darkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-stone-300 text-stone-600 hover:bg-stone-100'}`}
+                  >
+                    {showSignaturePreview ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                {showSignaturePreview && (
+                  <div className={`rounded-xl border p-3 ${darkMode ? 'border-gray-600 bg-gray-800/50' : 'border-stone-200 bg-white'}`}>
+                    {user.digitalSignatureURL ? (
+                      <DriveImage
+                        src={user.digitalSignatureURL}
+                        alt="Digital signature"
+                        className="w-full h-auto object-contain"
+                        fallbackIcon={<Icon name="draw" className={darkMode ? 'text-gray-500' : 'text-stone-400'} />}
+                      />
+                    ) : (
+                      <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>No digital signature uploaded yet.</p>
+                    )}
+                  </div>
+                )}
+              </div>
               
               {/* Academic Info - read only */}
               <div className={`mt-4 pt-4 border-t ${darkMode ? 'border-gray-700' : 'border-stone-100'}`}>
@@ -5274,7 +5340,12 @@ const ProfilePage = ({
                 <div className="flex-1 min-w-0">
                   <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-stone-500'}`}>Member Since</p>
                   <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-stone-800'} truncate`}>
-                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '-'}
+                    {(() => {
+                      const memberSince = user.createdDate || user.createdAt;
+                      return memberSince
+                        ? new Date(memberSince).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                        : '-';
+                    })()}
                   </p>
                 </div>
               </div>
@@ -5293,6 +5364,7 @@ const ProfilePage = ({
                   <ThemeToggleButton darkMode={darkMode} setDarkMode={setDarkMode} />
                 </div>
               </div>
+              {notificationSettingsPanel}
               <button
                 onClick={onLogout}
                 className={`w-full py-3 ${darkMode ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50' : 'bg-red-50 text-red-600 hover:bg-red-100'} rounded-xl font-semibold transition-all flex items-center justify-center gap-2`}
@@ -5385,6 +5457,7 @@ type SessionBootstrapData = {
   semesterSchedules?: ClassSchedule[];
   courseCatalog?: Subject[];
   classmates?: Classmate[];
+  activeAnnouncement?: Announcement | null;
 };
 
 function normalizeSubjectsPayload(subjectsPayload: any[]) {
@@ -5431,7 +5504,8 @@ async function prefetchSessionBootstrapData(user: User): Promise<SessionBootstra
       semesterConfigResult,
       allSubjectsResult,
       courseCatalogResult,
-      classmatesResult
+      classmatesResult,
+      activeAnnouncementResult
     ] = await Promise.all([
       postJson(CLASS_SCHEDULE_GAS_URL, { action: 'getCurrentSemester' })
         .then(response => response.json())
@@ -5454,7 +5528,13 @@ async function prefetchSessionBootstrapData(user: User): Promise<SessionBootstra
           })
             .then(response => response.json())
             .catch(() => null)
-        : Promise.resolve(null)
+        : Promise.resolve(null),
+      postJson(CLASS_SCHEDULE_GAS_URL, {
+        action: 'getActiveAnnouncement',
+        userId: user.idNumber
+      })
+        .then(response => response.json())
+        .catch(() => null)
     ]);
 
     const writeTasks: Array<Promise<void>> = [];
@@ -5495,6 +5575,10 @@ async function prefetchSessionBootstrapData(user: User): Promise<SessionBootstra
       writeTasks.push(persistSessionAndPersistentCacheItem(getClassmatesCacheKey(user.idNumber), classmatesResult.classmates));
     } else if (user.section) {
       writeTasks.push(persistSessionAndPersistentCacheItem(getClassmatesCacheKey(user.idNumber), []));
+    }
+
+    if (activeAnnouncementResult?.success) {
+      bootstrap.activeAnnouncement = activeAnnouncementResult.announcement || null;
     }
 
     await Promise.all(writeTasks);
@@ -9190,7 +9274,6 @@ export const App = ({ routeRole }: AppProps) => {
   }, [view]);
   const [prefillExamDate, setPrefillExamDate] = useState<string | null>(null);
   const [showDateJump, setShowDateJump] = useState(false);
-  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<'default' | 'granted' | 'denied'>('default');
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -9484,6 +9567,21 @@ export const App = ({ routeRole }: AppProps) => {
               }
             } catch (err) {
               console.log('Could not refresh user profile, using cached data');
+            }
+            try {
+              const announcementResponse = await fetch(CLASS_SCHEDULE_GAS_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                  action: 'getActiveAnnouncement',
+                  userId: parsedUser.idNumber
+                })
+              });
+              const announcementData = await announcementResponse.json();
+              if (announcementData.success) {
+                setActiveAnnouncement(announcementData.announcement || null);
+              }
+            } catch (err) {
+              console.log('Could not load active announcement during init');
             }
           }
         } catch (e) {
@@ -10430,6 +10528,7 @@ export const App = ({ routeRole }: AppProps) => {
   const handleLogout = () => {
     sessionBootstrapRequestRef.current += 1;
     setUser(null);
+    setActiveAnnouncement(null);
     setClassmates([]);
     localStorage.removeItem(STORAGE_KEY_USER);
     clearSecureSessionCache();
@@ -10503,6 +10602,9 @@ export const App = ({ routeRole }: AppProps) => {
         setClassmates(prefetchedData.classmates);
       } else if (!authenticatedUser.section) {
         setClassmates([]);
+      }
+      if (prefetchedData.activeAnnouncement !== undefined) {
+        setActiveAnnouncement(prefetchedData.activeAnnouncement || null);
       }
     }).catch(error => {
       console.warn('Failed to hydrate post-login session data:', error);
@@ -10654,7 +10756,7 @@ export const App = ({ routeRole }: AppProps) => {
     const toastId = addToast('Publishing announcement...', 'loading');
     
     try {
-      const response = await fetch(GAS_URL, {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
         method: 'POST',
         body: JSON.stringify({
           action: 'createAnnouncement',
@@ -10703,7 +10805,7 @@ export const App = ({ routeRole }: AppProps) => {
     const toastId = addToast('Publishing announcement...', 'loading');
     
     try {
-      const response = await fetch(GAS_URL, {
+      const response = await fetch(CLASS_SCHEDULE_GAS_URL, {
         method: 'POST',
         body: JSON.stringify({
           action: 'createAnnouncement',
@@ -11671,6 +11773,40 @@ export const App = ({ routeRole }: AppProps) => {
     }
   };
 
+  const disablePushNotifications = async () => {
+    try {
+      console.log('🔕 Disabling notifications...');
+      localStorage.removeItem('cumlaude_fcm_token');
+      localStorage.removeItem('cumlaude_push_subscription');
+
+      setNotificationsEnabled(false);
+
+      const windowWithFirebase = window as any;
+      if (windowWithFirebase.firebase && windowWithFirebase.firebase.apps.length > 0) {
+        const messaging = windowWithFirebase.firebase.messaging();
+        await messaging.deleteToken();
+        console.log('✅ FCM token deleted');
+      }
+
+      addToast('Notifications disabled successfully.', 'success');
+    } catch (e) {
+      console.error('Error disabling notifications:', e);
+      localStorage.removeItem('cumlaude_fcm_token');
+      localStorage.removeItem('cumlaude_push_subscription');
+      setNotificationsEnabled(false);
+      addToast('Notifications disabled.', 'info');
+    }
+  };
+
+  const enablePushNotificationsFromProfile = async () => {
+    if (!user) {
+      addToast('Please login first to enable notifications.', 'error');
+      return;
+    }
+
+    await registerPush();
+  };
+
   useEffect(() => {
     // Pre-register service worker on app load for faster push notification setup
     if ('serviceWorker' in navigator) {
@@ -12235,6 +12371,10 @@ export const App = ({ routeRole }: AppProps) => {
             removeToast={removeToast}
             darkMode={darkMode}
             setDarkMode={setDarkMode}
+            notificationsEnabled={notificationsEnabled}
+            notificationPermission={notificationPermission}
+            onEnableNotifications={enablePushNotificationsFromProfile}
+            onDisableNotifications={disablePushNotifications}
           />
         )}
 
@@ -12397,7 +12537,7 @@ export const App = ({ routeRole }: AppProps) => {
                     if (activeAnnouncement.id && user?.idNumber) {
                       // Save dismissal to server (persists even if browser data cleared)
                       try {
-                        await fetch(GAS_URL, {
+                        await fetch(CLASS_SCHEDULE_GAS_URL, {
                           method: 'POST',
                           body: JSON.stringify({
                             action: 'dismissAnnouncement',
@@ -12561,15 +12701,6 @@ export const App = ({ routeRole }: AppProps) => {
                   <Icon name="analytics" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
                 </button>
               )}
-              {user && (
-                <button
-                  onClick={() => setShowNotificationSettings(true)}
-                  className={`p-2 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors`}
-                  title="Notification Settings"
-                >
-                  <Icon name="notifications" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
-                </button>
-              )}
               {user ? (
                 <button
                   onClick={() => setShowProfile(true)}
@@ -12709,16 +12840,6 @@ export const App = ({ routeRole }: AppProps) => {
                 
                 {user && (
                   <button
-                    onClick={() => { setShowNotificationSettings(true); setShowMobileMenu(false); }}
-                    className={`w-full flex items-center gap-3 p-3 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors text-left`}
-                  >
-                    <Icon name="notifications" className={darkMode ? 'text-stone-300' : 'text-stone-600'} />
-                    <span className={`font-medium ${darkMode ? 'text-stone-200' : 'text-stone-700'}`}>Notifications</span>
-                  </button>
-                )}
-                
-                {user && (
-                  <button
                     onClick={() => { navigateTo('ALL_RESOURCES'); setShowMobileMenu(false); }}
                     className={`w-full flex items-center gap-3 p-3 ${darkMode ? 'hover:bg-stone-700' : 'hover:bg-stone-100'} rounded-xl transition-colors text-left`}
                     >
@@ -12780,138 +12901,6 @@ export const App = ({ routeRole }: AppProps) => {
                   </button>
                 </div>
               )}
-            </div>
-          </div>
-        )}
-
-        {/* Notification Settings Modal */}
-        {showNotificationSettings && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl w-full max-w-md shadow-xl`}>
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-stone-800'}`}>Notification Settings</h2>
-                  <button onClick={() => setShowNotificationSettings(false)} className={`p-2 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-stone-100'} rounded-full`}>
-                    <Icon name="close" className={darkMode ? 'text-gray-400' : 'text-stone-500'} />
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                    <div className="flex items-center gap-3 mb-2">
-                      <Icon name="info" className="text-blue-600" />
-                      <h3 className="font-semibold text-blue-800">Push Notifications</h3>
-                    </div>
-                    <p className="text-sm text-blue-700 mb-3">
-                      Get notified about upcoming exams and deadlines even when the app is closed.
-                    </p>
-                    <p className="text-xs text-blue-600 mb-3">
-                      Current status:{' '}
-                      <strong className="inline-flex items-center gap-1">
-                        {notificationsEnabled ? (
-                          <>
-                            <Icon name="check_circle" className="text-sm" />
-                            Enabled
-                          </>
-                        ) : notificationPermission === 'denied' ? (
-                          <>
-                            <Icon name="cancel" className="text-sm" />
-                            Blocked
-                          </>
-                        ) : (
-                          <>
-                            <Icon name="radio_button_unchecked" className="text-sm" />
-                            Not enabled
-                          </>
-                        )}
-                      </strong>
-                    </p>
-                    {notificationsEnabled ? (
-                      <div className="space-y-2">
-                        <p className="text-sm text-green-700 inline-flex items-center gap-1">
-                          <Icon name="check_circle" className="text-sm" />
-                          Notifications are enabled.
-                        </p>
-                        <button
-                          onClick={async () => {
-                            try {
-                              console.log('🔕 Disabling notifications...');
-                              // Remove FCM token from localStorage
-                              localStorage.removeItem('cumlaude_fcm_token');
-                              localStorage.removeItem('cumlaude_push_subscription');
-                              
-                              // Update state
-                              setNotificationsEnabled(false);
-                              
-                              // Optional: Delete token from Firebase
-                              const windowWithFirebase = window as any;
-                              if (windowWithFirebase.firebase && windowWithFirebase.firebase.apps.length > 0) {
-                                const messaging = windowWithFirebase.firebase.messaging();
-                                await messaging.deleteToken();
-                                console.log('✅ FCM token deleted');
-                              }
-                              
-                              addToast('Notifications disabled successfully.', 'success');
-                            } catch (e) {
-                              console.error('Error disabling notifications:', e);
-                              // Still disable locally even if deletion fails
-                              localStorage.removeItem('cumlaude_fcm_token');
-                              localStorage.removeItem('cumlaude_push_subscription');
-                              setNotificationsEnabled(false);
-                              addToast('Notifications disabled.', 'info');
-                            }
-                          }}
-                          className="w-full py-2 px-4 bg-red-100 text-red-700 rounded-xl text-sm font-medium hover:bg-red-200 transition-colors"
-                        >
-                          Disable Notifications
-                        </button>
-                      </div>
-                    ) : notificationPermission === 'denied' ? (
-                      <div className="bg-red-100 border border-red-200 rounded-lg p-3">
-                        <p className="text-sm text-red-700 mb-2">Notifications are blocked in your browser settings.</p>
-                        <p className="text-xs text-red-600">To enable: Go to browser settings → Site settings → Notifications</p>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          if (!user) {
-                            addToast('Please login first to enable notifications.', 'error');
-                            return;
-                          }
-                          registerPush();
-                          // Close modal after a short delay
-                          setTimeout(() => {
-                            setShowNotificationSettings(false);
-                          }, 1500);
-                        }}
-                        className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <Icon name="notifications_active" />
-                        Enable Notifications
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Icon name="warning" className="text-amber-600 text-sm" />
-                      <p className="text-xs font-semibold text-amber-800">Note</p>
-                    </div>
-                    <p className="text-xs text-amber-700">
-                      Notification delivery requires an active internet connection and backend configuration (VAPID keys).
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 border-t border-stone-200">
-                <button
-                  onClick={() => setShowNotificationSettings(false)}
-                  className="w-full py-2 bg-stone-100 text-stone-700 rounded-xl font-medium hover:bg-stone-200 transition-colors"
-                >
-                  Close
-                </button>
-              </div>
             </div>
           </div>
         )}

@@ -272,6 +272,9 @@ function doGet(e) {
 
       case 'getObligations':
         return jsonResponse(getObligations(e.parameter.subject));
+
+      case 'getActiveAnnouncement':
+        return jsonResponse(getActiveAnnouncement(e.parameter.userId));
       
       default:
         return jsonResponse({ error: 'Unknown action: ' + action });
@@ -342,6 +345,18 @@ function doPost(e) {
 
       case 'deleteCourse':
         return jsonResponse(deleteCourse(data.courseCode, data.userId));
+
+      case 'createAnnouncement':
+        return jsonResponse(createAnnouncement(data));
+
+      case 'getActiveAnnouncement':
+        return jsonResponse(getActiveAnnouncement(data.userId));
+
+      case 'dismissAnnouncement':
+        return jsonResponse(dismissAnnouncement(data.announcementId, data.userId));
+
+      case 'deactivateAnnouncement':
+        return jsonResponse(deactivateAnnouncement(data.announcementId, data.userId));
       
       // ==================== Setup ====================
       case 'setupSheets':
@@ -355,6 +370,12 @@ function doPost(e) {
 
       case 'setupObligationsSheet':
         return jsonResponse(setupObligationsSheet());
+
+      case 'setupAnnouncementsSheet':
+        return jsonResponse(setupAnnouncementsSheet());
+
+      case 'setupAnnouncementDismissalsSheet':
+        return jsonResponse(setupAnnouncementDismissalsSheet());
       
       default:
         return jsonResponse({ error: 'Unknown action: ' + action });
@@ -387,6 +408,8 @@ function setupAllSheets() {
   results.push(setupSemesterConfigSheet());
   results.push(setupCourseCatalogSheet());
   results.push(setupObligationsSheet());
+  results.push(setupAnnouncementsSheet());
+  results.push(setupAnnouncementDismissalsSheet());
   
   return { 
     success: true, 
@@ -511,6 +534,59 @@ function setupObligationsSheet() {
   }
 
   return { success: true, message: 'Obligations sheet already exists' };
+}
+
+function setupAnnouncementsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Announcements');
+  const headers = [
+    'AnnouncementID',
+    'Type',
+    'Title',
+    'Message',
+    'Emoji',
+    'IsActive',
+    'CreatedBy',
+    'CreatedByName',
+    'CreatedAt',
+    'ExpiresAt'
+  ];
+
+  if (!sheet) {
+    sheet = ss.insertSheet('Announcements');
+    sheet.appendRow(headers);
+    sheet.setFrozenRows(1);
+
+    const headerRange = sheet.getRange(1, 1, 1, headers.length);
+    headerRange.setBackground('#9333ea');
+    headerRange.setFontColor('#ffffff');
+    headerRange.setFontWeight('bold');
+
+    return { success: true, message: 'Announcements sheet created' };
+  }
+
+  return { success: true, message: 'Announcements sheet already exists' };
+}
+
+function setupAnnouncementDismissalsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('AnnouncementDismissals');
+  const headers = ['UserID', 'AnnouncementID', 'DismissedAt'];
+
+  if (!sheet) {
+    sheet = ss.insertSheet('AnnouncementDismissals');
+    sheet.appendRow(headers);
+    sheet.setFrozenRows(1);
+
+    const headerRange = sheet.getRange(1, 1, 1, headers.length);
+    headerRange.setBackground('#7c3aed');
+    headerRange.setFontColor('#ffffff');
+    headerRange.setFontWeight('bold');
+
+    return { success: true, message: 'AnnouncementDismissals sheet created' };
+  }
+
+  return { success: true, message: 'AnnouncementDismissals sheet already exists' };
 }
 
 /**
@@ -2322,5 +2398,182 @@ function clearAllSchedules(userId, type) {
     
   } catch (error) {
     return { error: 'Failed to clear schedules: ' + error.message };
+  }
+}
+
+// =====================================================
+// ANNOUNCEMENTS
+// =====================================================
+
+function createAnnouncement(data) {
+  try {
+    if (String(data.userId || '') !== ADMIN_USER_ID) {
+      return { error: 'Unauthorized. Only admin can create announcements.' };
+    }
+
+    if (!String(data.title || '').trim() || !String(data.message || '').trim()) {
+      return { error: 'Title and message are required.' };
+    }
+
+    setupAnnouncementsSheet();
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Announcements');
+    const now = getManilaTimestamp();
+    const announcementId = 'ann_' + new Date().getTime();
+    const expiresAt = data.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    const existingData = sheet.getDataRange().getValues();
+    for (let i = 1; i < existingData.length; i++) {
+      const isActive = existingData[i][5] === true || String(existingData[i][5]).toLowerCase() === 'true';
+      if (isActive) {
+        sheet.getRange(i + 1, 6).setValue(false);
+      }
+    }
+
+    sheet.appendRow([
+      announcementId,
+      String(data.type || 'custom'),
+      String(data.title || '').trim(),
+      String(data.message || '').trim(),
+      String(data.emoji || '🎉'),
+      true,
+      String(data.userId || ''),
+      String(data.userName || 'Admin'),
+      now,
+      expiresAt
+    ]);
+
+    return {
+      success: true,
+      message: 'Announcement created',
+      announcement: {
+        id: announcementId,
+        type: String(data.type || 'custom'),
+        title: String(data.title || '').trim(),
+        message: String(data.message || '').trim(),
+        emoji: String(data.emoji || '🎉'),
+        isActive: true,
+        createdAt: now,
+        expiresAt: expiresAt
+      }
+    };
+  } catch (error) {
+    return { error: 'Failed to create announcement: ' + error.message };
+  }
+}
+
+function getActiveAnnouncement(userId) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Announcements');
+
+    if (!sheet) {
+      return { success: true, announcement: null };
+    }
+
+    const data = sheet.getDataRange().getValues();
+    const now = new Date();
+
+    for (let i = 1; i < data.length; i++) {
+      const isActive = data[i][5] === true || String(data[i][5]).toLowerCase() === 'true';
+      const expiresRaw = data[i][9];
+      const expiresAt = expiresRaw ? new Date(expiresRaw) : null;
+      const isNotExpired = !expiresAt || isNaN(expiresAt.getTime()) || expiresAt.getTime() > now.getTime();
+
+      if (!isActive || !isNotExpired) continue;
+
+      const announcementId = String(data[i][0] || '');
+      if (userId && hasUserDismissedAnnouncement(userId, announcementId)) {
+        return { success: true, announcement: null };
+      }
+
+      return {
+        success: true,
+        announcement: {
+          id: announcementId,
+          type: String(data[i][1] || 'custom'),
+          title: String(data[i][2] || ''),
+          message: String(data[i][3] || ''),
+          emoji: String(data[i][4] || '🎉'),
+          isActive: true,
+          createdBy: String(data[i][6] || ''),
+          createdByName: String(data[i][7] || ''),
+          createdAt: data[i][8] || '',
+          expiresAt: data[i][9] || ''
+        }
+      };
+    }
+
+    return { success: true, announcement: null };
+  } catch (error) {
+    return { success: false, announcement: null, error: error.message };
+  }
+}
+
+function hasUserDismissedAnnouncement(userId, announcementId) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('AnnouncementDismissals');
+    if (!sheet) return false;
+
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(userId) && String(data[i][1]) === String(announcementId)) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch (error) {
+    return false;
+  }
+}
+
+function deactivateAnnouncement(announcementId, userId) {
+  try {
+    if (String(userId || '') !== ADMIN_USER_ID) {
+      return { error: 'Unauthorized. Only admin can deactivate announcements.' };
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Announcements');
+    if (!sheet) return { error: 'Announcements sheet not found' };
+
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(announcementId)) {
+        sheet.getRange(i + 1, 6).setValue(false);
+        return { success: true, message: 'Announcement deactivated' };
+      }
+    }
+
+    return { error: 'Announcement not found' };
+  } catch (error) {
+    return { error: 'Failed to deactivate announcement: ' + error.message };
+  }
+}
+
+function dismissAnnouncement(announcementId, userId) {
+  try {
+    if (!announcementId || !userId) {
+      return { error: 'Missing announcementId or userId' };
+    }
+
+    setupAnnouncementDismissalsSheet();
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('AnnouncementDismissals');
+
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(userId) && String(data[i][1]) === String(announcementId)) {
+        return { success: true, message: 'Already dismissed' };
+      }
+    }
+
+    sheet.appendRow([String(userId), String(announcementId), getManilaTimestamp()]);
+    return { success: true, message: 'Dismissal recorded' };
+  } catch (error) {
+    return { error: 'Failed to record dismissal: ' + error.message };
   }
 }
